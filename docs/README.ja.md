@@ -10,9 +10,11 @@
 
 - [Getting started](getting-started.ja.md) — repositoryの準備、core lifecycle、最小構成のローカル例。
 - [MCP integration](mcp-integration.ja.md) — `@modelcontextprotocol/server` v2 のtool handlerへusage controlを組み込む方法。
+- [API reference](api-reference.ja.md) — current core / MCP / Redis public surfaceとdefault値。
 - [Architecture](architecture.ja.md) — invariant、renewable lease、settlement semantics、責務境界。
 - [Redis adapter](redis.ja.md) — atomic Lua、key model、expiry、idempotency、Redis Cluster上のtrade-off。
 - [Release policy](releasing.ja.md) — pre-1.0の互換性と公開方針。
+- [Changelog](../CHANGELOG.ja.md) — 主要変更とcurrent pre-alpha limitation。
 
 ## プロジェクトポリシー
 
@@ -21,6 +23,12 @@
 - [Code of Conduct](../CODE_OF_CONDUCT.ja.md)
 - [Support](../SUPPORT.ja.md)
 - [License](../LICENSE)
+
+## Package entry point
+
+- [`@mcp-usage-control/core`](../packages/core/README.md)
+- [`@mcp-usage-control/mcp`](../packages/mcp/README.md)
+- [`@mcp-usage-control/redis`](../packages/redis/README.md)
 
 ## ドキュメント運用ルール
 
