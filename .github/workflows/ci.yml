@@ -54,8 +54,9 @@ jobs:
             grep -qx 'package/dist/index.d.ts' <<<"$listing"
             grep -qx 'package/README.md' <<<"$listing"
             grep -qx 'package/LICENSE' <<<"$listing"
-            if grep -q '^package/src/' <<<"$listing"; then
-              echo "source files leaked into $archive" >&2
+            if grep -Eq '^package/(src/|dist/.*(\.test\.|\.integration\.test\.))' <<<"$listing"; then
+              echo "source or compiled test files leaked into $archive" >&2
+              printf '%s\n' "$listing" >&2
               exit 1
             fi
             if tar -xOf "$archive" package/package.json | grep -q 'workspace:'; then
