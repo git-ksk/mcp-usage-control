@@ -1,5 +1,7 @@
 # Architecture
 
+[English](architecture.md) | [日本語](architecture.ja.md)
+
 ## Scope
 
 `mcp-usage-control` owns the runtime boundary between an authenticated principal and a metered tool execution:
@@ -27,6 +29,8 @@ The MCP adapter enables a heartbeat by default and renews at approximately one t
 Applications that disable the MCP heartbeat are responsible for an equivalent renewal mechanism. The lease TTL should comfortably exceed temporary scheduler/event-loop stalls and expected storage latency; the heartbeat interval must remain well below the TTL.
 
 A sufficiently long storage/network partition can still outlive a distributed lease. A generic library cannot fence an arbitrary upstream API after lease loss, so production stores must fail closed for new admissions while storage is unavailable and must document their expiry/recovery policy. Provider-specific fencing, when available, belongs in the application or adapter.
+
+The built-in MCP heartbeat is a renewal convenience, not provider-specific fencing. Individual renewal failures do not automatically cancel an arbitrary upstream operation. Workloads that require immediate fencing after lease loss need an application/provider mechanism at the metered resource boundary.
 
 ## Why settlement is not rollback
 
