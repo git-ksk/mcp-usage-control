@@ -43,7 +43,8 @@ abstraction自体に必要でない限り、storage、protocol、billing、provi
 - active reservationはrenewable leaseとして扱い、初回TTLだけで正常な長時間workを回収しない。
 - ambiguous writeをblind retryしない。
 - storage errorを黙ってallowへ変換しない。
-- MCP adapterはSDK callbackの両形、no-input-schemaの `(ctx)` とinput schemaありの `(args, ctx)` をcoverする。
+- input schemaがないMCP toolではruntime `{}` から推測せず、明示的な `noInput: true` modeを要求する。SDKのpublic no-input callback typeと実dispatch behaviorの両方をprotocol testでcoverする。
+- input schemaがあるMCP toolではvalidated `(args, ctx)` behaviorを維持する。
 - MCP `{ isError: true }` をnormal successとして扱わない。
 - explicitなmulti-round suspend/resume accounting semanticsなしに `input_required` supportを追加しない。
 - Redis atomicityとdurability claimを分離する。
