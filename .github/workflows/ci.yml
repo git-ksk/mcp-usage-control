@@ -44,11 +44,12 @@ jobs:
           pnpm --dir packages/core pack --pack-destination /tmp/muc-packs
           pnpm --dir packages/mcp pack --pack-destination /tmp/muc-packs
           pnpm --dir packages/redis pack --pack-destination /tmp/muc-packs
+          pnpm --dir packages/cloudflare pack --pack-destination /tmp/muc-packs
       - name: Verify package contents
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 3
+          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 4
           for archive in /tmp/muc-packs/*.tgz; do
             listing="$(tar -tzf "$archive")"
             grep -qx 'package/dist/index.js' <<<"$listing"
@@ -65,6 +66,9 @@ jobs:
               exit 1
             fi
           done
+          cloudflare_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-cloudflare-0.1.0.tgz)"
+          grep -qx 'package/dist/worker.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/worker.d.ts' <<<"$cloudflare_listing"
       - name: Install tarballs in a clean consumer project
         shell: bash
         run: |
@@ -77,6 +81,7 @@ jobs:
             /tmp/muc-packs/mcp-usage-control-0.1.0.tgz \
             /tmp/muc-packs/mcp-usage-control-mcp-0.1.0.tgz \
             /tmp/muc-packs/mcp-usage-control-redis-0.1.0.tgz \
+            /tmp/muc-packs/mcp-usage-control-cloudflare-0.1.0.tgz \
             @modelcontextprotocol/server@2.0.0 \
             redis@6.2.0 \
             --ignore-scripts
@@ -84,7 +89,8 @@ jobs:
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
           import { protectTool } from 'mcp-usage-control-mcp';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
-          if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore].every(Boolean)) {
+          import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
+          if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore].every(Boolean)) {
             throw new Error('public package import smoke test failed');
           }
           NODE
