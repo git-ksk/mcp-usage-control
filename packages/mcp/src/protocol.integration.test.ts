@@ -1,8 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
+import * as z from 'zod/v4';
 import { MemoryUsageStore, UsageControl, type UsagePolicy } from '@mcp-usage-control/core';
 import { protectTool } from './index.js';
+
+type TextToolResult = {
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+};
 
 const openHandlers: Array<{ close(): Promise<void> }> = [];
 const openClients: Client[] = [];
@@ -45,7 +51,7 @@ describe('MCP protocol integration', () => {
       server.registerTool(
         'lookup',
         { description: 'Return an MCP tool error' },
-        protectTool(
+        protectTool<TextToolResult>(
           {
             control,
             tool: 'lookup',
@@ -62,11 +68,11 @@ describe('MCP protocol integration', () => {
               return 0;
             },
           },
-          async (args, ctx) => {
+          async (args, ctx): Promise<TextToolResult> => {
             expect(args).toBeUndefined();
             expect(ctx.mcpReq.method).toBe('tools/call');
             return {
-              content: [{ type: 'text' as const, text: 'not found' }],
+              content: [{ type: 'text', text: 'not found' }],
               isError: true,
             };
           },
@@ -87,6 +93,44 @@ describe('MCP protocol integration', () => {
     expect(next.allowed).toBe(true);
   });
 
+  it('passes validated args and context through the SDK input-schema (args, ctx) callback shape', async () => {
+    const policy: UsagePolicy = {
+      quote(request) {
+        expect(request.args).toEqual({ query: 'hello' });
+        return { decision: 'allow', units: 1, budget: { key: 'input-shape', limit: 2 } };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const client = await connect(server => {
+      server.registerTool(
+        'echo',
+        {
+          description: 'Echo a value',
+          inputSchema: z.object({ query: z.string() }),
+        },
+        protectTool<{ query: string }, TextToolResult>(
+          {
+            control,
+            tool: 'echo',
+            principal: ctx => {
+              expect(ctx.mcpReq.method).toBe('tools/call');
+              return { id: 'user-1' };
+            },
+            operationId: (args, ctx) => `${String(ctx.mcpReq.id)}:${args.query}`,
+          },
+          async (args, ctx): Promise<TextToolResult> => {
+            expect(args).toEqual({ query: 'hello' });
+            expect(ctx.mcpReq.method).toBe('tools/call');
+            return { content: [{ type: 'text', text: args.query }] };
+          },
+        ),
+      );
+    });
+
+    const result = await client.callTool({ name: 'echo', arguments: { query: 'hello' } });
+    expect(JSON.stringify(result.content)).toContain('hello');
+  });
+
   it('does not expose internal policy denial reasons through the SDK tool error', async () => {
     const policy: UsagePolicy = {
       quote() {
@@ -98,14 +142,16 @@ describe('MCP protocol integration', () => {
       server.registerTool(
         'blocked',
         { description: 'Always denied' },
-        protectTool(
+        protectTool<TextToolResult>(
           {
             control,
             tool: 'blocked',
             principal: () => ({ id: 'user-1' }),
             operationId: (_args, ctx) => String(ctx.mcpReq.id),
           },
-          async () => ({ content: [{ type: 'text' as const, text: 'should not run' }] }),
+          async (): Promise<TextToolResult> => ({
+            content: [{ type: 'text', text: 'should not run' }],
+          }),
         ),
       );
     });
@@ -128,14 +174,14 @@ describe('MCP protocol integration', () => {
       server.registerTool(
         'confirm',
         { description: 'Simulate a multi-round tool' },
-        protectTool(
+        protectTool<TextToolResult>(
           {
             control,
             tool: 'confirm',
             principal: () => ({ id: 'user-1' }),
             operationId: (_args, ctx) => String(ctx.mcpReq.id),
           },
-          async () =>
+          async (): Promise<TextToolResult> =>
             ({
               resultType: 'input_required',
               inputRequests: {},
