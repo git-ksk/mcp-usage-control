@@ -20,7 +20,8 @@
 - `MemoryUsageStore` reference implementation。
 - admission / settlement / expiry recovery / policy・store error向けprovider-neutral `UsageObserver` lifecycle hook。
 - explicit opt-in event metadata。tool arguments / raw exception messageは自動収集しない。
-- enforcement stateを変更しないbest-effort / non-blocking observer delivery。
+- enforcement outcomeの外側に置くbest-effort observer delivery。返されたPromiseはawaitせず、observer failureはenforcement stateを変更しない。
+- downstream analytics向けsettlement event replay / deduplication guidance。
 - `@modelcontextprotocol/server` v2 single-round tool向け `mcp-usage-control-mcp` adapter。
 - normal success、`{ isError: true }`、thrown errorを区別するMCP result classification。
 - classifier failure時のconservative settlementと `UsageClassificationError`。
@@ -55,7 +56,7 @@
 - Redis transactional stateは1つのconfigured Redis Cluster hash slotを利用。
 - Redis atomicityはfinancial-ledger durabilityを意味せず、persistence / HAはdeployment-specific。
 - generic lease renewalはlease loss後のprovider-specific fencingではない。
-- observabilityはbest-effort / non-durableで、transactional quota ledgerではない。vendor-specific telemetry adapterはcore packageの責務外。
+- observabilityはbest-effort / non-durable / not exactly-onceで、transactional quota ledgerではない。`onEvent()` はinlineで呼ばれ、返されたPromiseはawaitしない。vendor-specific telemetry adapterはcore packageの責務外。
 
 ### Compatibility
 
