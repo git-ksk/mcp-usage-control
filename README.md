@@ -41,9 +41,9 @@ A reservation starts `pending`. Immediately before metered execution, it becomes
 
 ## Packages
 
-- **`mcp-usage-control`** — core policy, atomic admission contract, renewable leases, settlement, idempotency, and the in-memory reference store.
+- **`mcp-usage-control`** — core policy, atomic admission contract, renewable leases, settlement, idempotency, provider-neutral observability hooks, and the in-memory reference store.
 - **`mcp-usage-control-mcp`** — adapter for `@modelcontextprotocol/server` v2 single-round tool handlers.
-- **`mcp-usage-control-redis`** — atomic Redis store using Lua and Redis server time.
+- **`mcp-usage-control-redis`** — atomic Redis store using Lua and Redis server time, with optional expiry-recovery observability.
 
 All three packages are ESM and require Node.js 20+.
 
@@ -87,6 +87,30 @@ Replay protection is scoped to the tuple:
 Use a stable `operationId` for retries of the same logical invocation. It is an idempotency input, not an authentication or authorization credential.
 
 Settled operations remain replay-protected for a bounded tombstone period. `MemoryUsageStore` and `RedisUsageStore` default to 24 hours (`idempotencyTtlMs`). Pending reservations that expire before becoming cost-liable release capacity and may be retried after recovery.
+
+## Provider-neutral observability
+
+Attach an optional observer to receive structured lifecycle events without coupling enforcement to a telemetry or billing vendor:
+
+```ts
+import { UsageControl, type UsageObserver } from 'mcp-usage-control';
+
+const observer: UsageObserver = {
+  onEvent(event) {
+    console.log(JSON.stringify(event));
+  },
+};
+
+const store = new RedisUsageStore(redis, { observer });
+const control = new UsageControl(store, policy, {
+  observer,
+  metadata: { service: 'my-mcp-server', environment: 'staging' },
+});
+```
+
+Events cover admission accepted/denied, settlement completed, expiry recovery, and policy/store errors. Observer delivery is **best-effort and non-blocking**: observer failures never change quota state. Tool arguments and raw exception messages are not captured automatically; custom metadata is explicit opt-in.
+
+Runtime IDs can be high-cardinality. Do not use unique principal, operation, reservation, or user-specific budget IDs as metric labels. See [Observability](docs/observability.md) for event fields, privacy guidance, Redis aggregate recovery behavior, and delivery guarantees.
 
 ## Direct core example
 
@@ -185,12 +209,14 @@ See [Redis adapter](docs/redis.md) before production use.
 11. Ambiguous settlement failures are surfaced and are not blindly retried.
 12. Storage failures do not turn into an allow decision.
 13. Redis lease/tombstone time comes from Redis, not the application clock.
+14. Observability is outside the enforcement transaction; observer failure cannot convert allow/deny/settlement state.
 
 ## Documentation
 
 - [Use from source / local tarballs](docs/using-from-source.md)
 - [Getting started](docs/getting-started.md)
 - [MCP SDK v2 integration](docs/mcp-integration.md)
+- [Observability](docs/observability.md)
 - [Architecture and invariants](docs/architecture.md)
 - [Redis adapter](docs/redis.md)
 - [API reference](docs/api-reference.md)
@@ -201,7 +227,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Scope after v0.1
 
-Tracked follow-up work includes provider-neutral observability hooks and real `input_required` suspend/resume accounting. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
+Tracked follow-up work includes real `input_required` suspend/resume accounting and optional vendor-specific telemetry adapters. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
 
 ## License
 
