@@ -1,11 +1,30 @@
 {
-  "name": "@mcp-usage-control/core",
-  "version": "0.0.0",
-  "private": true,
+  "name": "mcp-usage-control",
+  "version": "0.1.0",
+  "description": "Concurrency-safe usage enforcement primitives for MCP tool execution.",
   "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": "./dist/index.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
+  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
+  "keywords": ["mcp", "model-context-protocol", "usage", "quota", "entitlements", "credits"],
+  "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"
