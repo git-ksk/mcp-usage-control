@@ -1,4 +1,4 @@
-name: Bootstrap v0.1.0 tag
+name: Retract unpublished v0.1.0 tag
 
 on:
   push:
@@ -10,26 +10,22 @@ permissions:
   contents: write
 
 jobs:
-  tag:
+  retract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Tag the tested release commit exactly once
+      - name: Remove the unpublished tag if present
         env:
-          TARGET: 1c34e6960ffc99cfc9325f97a4d72ba2f344eb15
           TAG: v0.1.0
         shell: bash
         run: |
           set -euo pipefail
           git fetch --tags --force
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            existing="$(git rev-list -n 1 "$TAG")"
-            test "$existing" = "$TARGET"
-            echo "$TAG already points to $TARGET"
-            exit 0
+            git push origin ":refs/tags/$TAG"
+            echo "Removed unpublished tag $TAG"
+          else
+            echo "$TAG is already absent"
           fi
-          git cat-file -e "$TARGET^{commit}"
-          git tag "$TAG" "$TARGET"
-          git push origin "refs/tags/$TAG"
