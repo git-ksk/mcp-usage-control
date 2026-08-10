@@ -143,6 +143,15 @@ describe('CloudflareUsageStore transport boundary', () => {
   });
 });
 
+describe('RemoteCloudflareUsageStore endpoint validation', () => {
+  it('requires HTTPS except for explicit local HTTP test endpoints', () => {
+    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'ftp://localhost/v1/usage-store' })).toThrow(/HTTPS/);
+    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'http://usage.example.test/v1/usage-store' })).toThrow(/HTTPS/);
+    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'https://user:pass@usage.example.test/v1/usage-store' })).toThrow(/credentials/);
+    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'http://127.0.0.1:8799/v1/usage-store' })).not.toThrow();
+  });
+});
+
 describe('RemoteCloudflareUsageStore', () => {
   it('sends only hashed accounting identifiers over HTTP', async () => {
     let body = '';

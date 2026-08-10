@@ -253,8 +253,14 @@ export class RemoteCloudflareUsageStore implements UsageStore {
 
   constructor(private readonly options: RemoteCloudflareUsageStoreOptions) {
     this.endpoint = new URL(options.endpoint);
-    if (this.endpoint.protocol !== 'https:' && this.endpoint.hostname !== '127.0.0.1' && this.endpoint.hostname !== 'localhost') {
-      throw new RangeError('Cloudflare usage store endpoint must use HTTPS');
+    const isLocalHttp =
+      this.endpoint.protocol === 'http:' &&
+      (this.endpoint.hostname === '127.0.0.1' || this.endpoint.hostname === 'localhost');
+    if (this.endpoint.protocol !== 'https:' && !isLocalHttp) {
+      throw new RangeError('Cloudflare usage store endpoint must use HTTPS (local HTTP is test-only)');
+    }
+    if (this.endpoint.username || this.endpoint.password) {
+      throw new RangeError('Cloudflare usage store endpoint must not embed credentials');
     }
     this.fetchImpl = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 10_000;

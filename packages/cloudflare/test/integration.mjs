@@ -40,6 +40,32 @@ const concurrent = await Promise.all(
 const acceptedConcurrent = concurrent.filter(result => result.accepted);
 assert.equal(acceptedConcurrent.length, 1, 'exactly one of 100 calls must reserve the final unit');
 
+// Multi-budget denial is all-or-nothing: a denied shared budget must not consume the other budget.
+const fillShared = await store.reserve({
+  request: makeRequest('multibudget-fill'),
+  units: 1,
+  budgets: [{ key: `${nonce}:multibudget-shared`, limit: 1 }],
+  ttlMs: 5_000,
+});
+assert.equal(fillShared.accepted, true);
+const deniedMulti = await store.reserve({
+  request: makeRequest('multibudget-denied'),
+  units: 1,
+  budgets: [
+    { key: `${nonce}:multibudget-free`, limit: 1 },
+    { key: `${nonce}:multibudget-shared`, limit: 1 },
+  ],
+  ttlMs: 5_000,
+});
+assert.equal(deniedMulti.accepted, false);
+const freeBudgetStillAvailable = await store.reserve({
+  request: makeRequest('multibudget-free-check'),
+  units: 1,
+  budgets: [{ key: `${nonce}:multibudget-free`, limit: 1 }],
+  ttlMs: 5_000,
+});
+assert.equal(freeBudgetStillAvailable.accepted, true, 'denied multi-budget reserve must not partially consume another budget');
+
 // Duplicate operation identity is blocked without a second reservation.
 const firstDuplicate = await reserve(store, 'duplicate', 'duplicate-budget', 10);
 assert.equal(firstDuplicate.accepted, true);
