@@ -51,9 +51,9 @@ export type UsageEvent =
       })
   | (UsageEventBase & {
       type: 'reservation.recovered';
-      store: 'memory' | 'redis';
+      store: 'memory' | 'redis' | 'cloudflare';
       recovery: 'pending_released' | 'liable_retained';
-      /** Redis recovery IDs are opaque hashes; memory-store IDs are local reference IDs. */
+      /** Distributed-store recovery IDs are opaque hashes; memory-store IDs are local reference IDs. */
       reservationId?: string;
       principalId?: string;
       tenantId?: string;
