@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ServerContext } from '@modelcontextprotocol/server';
 import {
   MemoryUsageStore,
@@ -25,6 +25,10 @@ class FailingSettlementStore extends MemoryUsageStore {
     throw new Error('ambiguous Redis timeout');
   }
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('protectTool', () => {
   it('charges the full reservation on an unclassified error', async () => {
@@ -122,5 +126,46 @@ describe('protectTool', () => {
     expect(caught).toBeInstanceOf(UsageSettlementError);
     expect((caught as UsageSettlementError).executionError).toBe(executionError);
     expect(store.settleCalls).toBe(1);
+  });
+
+  it('renews the reservation while a protected handler runs past its initial TTL', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+
+    const expiringPolicy: UsagePolicy = {
+      quote() {
+        return {
+          decision: 'allow',
+          units: 1,
+          budget: { key: 'monthly:user-1', limit: 1 },
+          reservationTtlMs: 30,
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), expiringPolicy);
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'slow_tool',
+        principal: () => ({ id: 'user-1' }),
+        operationId: () => 'op-a',
+        successUnits: () => 0,
+      },
+      () => new Promise<string>(resolve => setTimeout(() => resolve('done'), 100)),
+    );
+
+    const running = protectedHandler({}, ctx);
+    await vi.advanceTimersByTimeAsync(40);
+
+    const concurrent = await control.reserve({
+      operationId: 'op-b',
+      principal: { id: 'user-1' },
+      tool: 'slow_tool',
+      args: {},
+    });
+    expect(concurrent).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+
+    await vi.advanceTimersByTimeAsync(60);
+    await expect(running).resolves.toBe('done');
   });
 });
