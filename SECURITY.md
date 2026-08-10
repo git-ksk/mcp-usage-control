@@ -4,9 +4,9 @@
 
 ## Supported versions
 
-This project is currently pre-alpha. Until the first tagged release, only the latest `main` branch is supported.
+Before the first public registry/GitHub release completes, only the latest `main` branch is supported. Release-candidate tags may exist during publication preparation and do not by themselves expand the support matrix.
 
-After tagged releases begin, supported versions will be listed here explicitly.
+After public releases begin, supported versions will be listed here explicitly.
 
 ## Reporting a vulnerability
 
@@ -32,7 +32,8 @@ Changes touching the following areas require tests that demonstrate the invarian
 - Redis atomicity and transaction-domain assumptions;
 - ambiguous acknowledgement handling;
 - storage failure behavior;
-- user/model-visible denial messages.
+- user/model-visible denial messages;
+- observability hooks and metadata redaction boundaries.
 
 Production stores must not implement quota enforcement as separate `check` and `record` operations. Ambiguous storage failures should fail closed for new admission unless the application explicitly chooses and documents a different availability policy.
 
@@ -54,9 +55,19 @@ Cost-classification hooks are not trusted enforcement state. If `successUnits`, 
 
 The built-in MCP lease heartbeat is not provider-specific fencing. Applications that require immediate cancellation after lease loss must implement fencing/cancellation at the metered resource boundary.
 
+## Observability boundary
+
+`UsageObserver` is operational telemetry, not trusted enforcement state and not a durable financial ledger. Observer success/failure must never decide admission, release quota, or alter settlement.
+
+Tool arguments and raw exception messages are not captured automatically. `operation.error.errorName` uses a bounded constructor class name rather than mutable `Error.name` or the exception message. Custom `metadata` is explicit opt-in and may receive the usage request; applications are responsible for not copying secrets, tokens, raw tool arguments, provider payloads, or unrestricted user content into it.
+
+Runtime events can contain principal, tenant, operation, reservation, tool, and budget identifiers. Treat them as potentially sensitive/high-cardinality data. Do not use unique principal/operation/reservation/user-specific budget identifiers as metrics labels/tags. Apply retention/access controls appropriate to structured logs and traces.
+
+Redis lazy recovery intentionally does not persist raw request identities solely to improve telemetry; its recovery events can therefore be aggregate-only. Observability loss must not be treated as evidence that enforcement did not occur.
+
 ## MCP multi-round flows
 
-The pre-alpha MCP adapter does not support v2 `input_required` multi-round tool flows. It rejects them explicitly. Do not work around this by generating a new operation ID for every round or by reusing a settled operation ID; either approach can defeat intended accounting semantics. Dedicated suspend/resume support must preserve idempotency and liability across rounds.
+The v0.1 MCP adapter does not support v2 `input_required` multi-round tool flows. It rejects them explicitly. Do not work around this by generating a new operation ID for every round or by reusing a settled operation ID; either approach can defeat intended accounting semantics. Dedicated suspend/resume support must preserve idempotency and liability across rounds.
 
 ## Redis durability boundary
 
@@ -68,7 +79,7 @@ Operators must choose Redis HA/persistence appropriate to their risk tolerance. 
 
 The project should never require contributors to commit secrets. Examples, tests, logs, issue templates, and documentation must use placeholders or synthetic identifiers.
 
-Redis keys intentionally hash principal/operation/budget identifiers, but hashing is not encryption. Do not place secrets in identifiers or settlement outcome values.
+Redis keys intentionally hash principal/operation/budget identifiers, but hashing is not encryption. Do not place secrets in identifiers, event metadata, or settlement outcome values.
 
 ## Disclosure
 
