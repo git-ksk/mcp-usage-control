@@ -43,6 +43,11 @@ export interface RenewInput {
   ttlMs: number;
 }
 
+export interface RenewResult {
+  reservationId: string;
+  expiresAt: number;
+}
+
 export interface SettleInput {
   reservationId: string;
   actualUnits: number;
@@ -64,7 +69,7 @@ export interface UsageStore {
     budget: Budget;
     ttlMs: number;
   }): Promise<StoreReserveResult>;
-  renew(input: RenewInput): Promise<ReservationRecord>;
+  renew(input: RenewInput): Promise<RenewResult>;
   settle(input: SettleInput): Promise<SettlementResult>;
 }
 
@@ -97,11 +102,11 @@ export class UsageLease {
     return this.reservation.reservedUnits;
   }
 
-  async renew(ttlMs = this.ttlMs): Promise<ReservationRecord> {
+  async renew(ttlMs = this.ttlMs): Promise<RenewResult> {
     assertPositiveInteger(ttlMs, 'ttlMs');
     const renewed = await this.store.renew({ reservationId: this.reservation.id, ttlMs });
     this.reservation.expiresAt = renewed.expiresAt;
-    return this.reservation;
+    return renewed;
   }
 
   settle(actualUnits: number, outcome: string): Promise<SettlementResult> {
@@ -192,7 +197,7 @@ export class MemoryUsageStore implements UsageStore {
     return { accepted: true, reservation, remaining: remaining - input.units };
   }
 
-  async renew(input: RenewInput): Promise<ReservationRecord> {
+  async renew(input: RenewInput): Promise<RenewResult> {
     assertPositiveInteger(input.ttlMs, 'ttlMs');
     const now = Date.now();
     this.releaseExpired(now);
@@ -203,7 +208,7 @@ export class MemoryUsageStore implements UsageStore {
     }
 
     reservation.expiresAt = now + input.ttlMs;
-    return reservation;
+    return { reservationId: reservation.id, expiresAt: reservation.expiresAt };
   }
 
   async settle(input: SettleInput): Promise<SettlementResult> {
