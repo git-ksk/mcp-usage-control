@@ -8,7 +8,7 @@ import {
   type SettleInput,
   type SettlementResult,
   type UsagePolicy,
-} from '@mcp-usage-control/core';
+} from 'mcp-usage-control';
 import {
   protectTool,
   UnsupportedMcpUsageFlowError,
