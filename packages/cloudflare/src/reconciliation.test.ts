@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { UsageStateError } from 'mcp-usage-control';
-import { CloudflareUsageTransportError } from './index.js';
 import { reconcileRemoteCloudflareReserve } from './reconciliation.js';
 
 const request = {
@@ -177,6 +176,6 @@ describe('remote Cloudflare reserve reconciliation', () => {
         },
         { request, units: 1, budgets },
       ),
-    ).rejects.toMatchObject<Partial<CloudflareUsageTransportError>>({ code: 'remote' });
+    ).rejects.toMatchObject({ code: 'remote' });
   });
 });
