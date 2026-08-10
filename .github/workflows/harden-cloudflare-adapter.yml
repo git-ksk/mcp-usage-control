@@ -1,0 +1,58 @@
+name: Apply final Cloudflare adapter hardening
+
+on:
+  push:
+    branches: [feat/cloudflare-durable-objects]
+    paths:
+      - '.github/workflows/harden-cloudflare-adapter.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/cloudflare-durable-objects
+      - name: Apply deterministic hardening patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          index = Path('packages/cloudflare/src/index.ts')
+          text = index.read_text()
+          old = """    this.endpoint = new URL(options.endpoint);\n    if (this.endpoint.protocol !== 'https:' && this.endpoint.hostname !== '127.0.0.1' && this.endpoint.hostname !== 'localhost') {\n      throw new RangeError('Cloudflare usage store endpoint must use HTTPS');\n    }\n"""
+          new = """    this.endpoint = new URL(options.endpoint);\n    const isLocalHttp =\n      this.endpoint.protocol === 'http:' &&\n      (this.endpoint.hostname === '127.0.0.1' || this.endpoint.hostname === 'localhost');\n    if (this.endpoint.protocol !== 'https:' && !isLocalHttp) {\n      throw new RangeError('Cloudflare usage store endpoint must use HTTPS (local HTTP is test-only)');\n    }\n    if (this.endpoint.username || this.endpoint.password) {\n      throw new RangeError('Cloudflare usage store endpoint must not embed credentials');\n    }\n"""
+          if old not in text:
+              raise SystemExit('endpoint validation block not found')
+          index.write_text(text.replace(old, new))
+
+          test = Path('packages/cloudflare/src/index.test.ts')
+          text = test.read_text()
+          marker = """describe('RemoteCloudflareUsageStore', () => {\n"""
+          insertion = """describe('RemoteCloudflareUsageStore endpoint validation', () => {\n  it('requires HTTPS except for explicit local HTTP test endpoints', () => {\n    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'ftp://localhost/v1/usage-store' })).toThrow(/HTTPS/);\n    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'http://usage.example.test/v1/usage-store' })).toThrow(/HTTPS/);\n    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'https://user:pass@usage.example.test/v1/usage-store' })).toThrow(/credentials/);\n    expect(() => new RemoteCloudflareUsageStore({ endpoint: 'http://127.0.0.1:8799/v1/usage-store' })).not.toThrow();\n  });\n});\n\n"""
+          if marker not in text:
+              raise SystemExit('remote test marker not found')
+          test.write_text(text.replace(marker, insertion + marker, 1))
+
+          integration = Path('packages/cloudflare/test/integration.mjs')
+          text = integration.read_text()
+          marker = """// Duplicate operation identity is blocked without a second reservation.\n"""
+          insertion = """// Multi-budget denial is all-or-nothing: a denied shared budget must not consume the other budget.\nconst fillShared = await store.reserve({\n  request: makeRequest('multibudget-fill'),\n  units: 1,\n  budgets: [{ key: `${nonce}:multibudget-shared`, limit: 1 }],\n  ttlMs: 5_000,\n});\nassert.equal(fillShared.accepted, true);\nconst deniedMulti = await store.reserve({\n  request: makeRequest('multibudget-denied'),\n  units: 1,\n  budgets: [\n    { key: `${nonce}:multibudget-free`, limit: 1 },\n    { key: `${nonce}:multibudget-shared`, limit: 1 },\n  ],\n  ttlMs: 5_000,\n});\nassert.equal(deniedMulti.accepted, false);\nconst freeBudgetStillAvailable = await store.reserve({\n  request: makeRequest('multibudget-free-check'),\n  units: 1,\n  budgets: [{ key: `${nonce}:multibudget-free`, limit: 1 }],\n  ttlMs: 5_000,\n});\nassert.equal(freeBudgetStillAvailable.accepted, true, 'denied multi-budget reserve must not partially consume another budget');\n\n"""
+          if marker not in text:
+              raise SystemExit('integration insertion marker not found')
+          integration.write_text(text.replace(marker, insertion + marker, 1))
+          PY
+      - name: Commit hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name git-ksk
+          git config user.email 108925270+git-ksk@users.noreply.github.com
+          git add packages/cloudflare/src/index.ts packages/cloudflare/src/index.test.ts packages/cloudflare/test/integration.mjs
+          git commit -m "fix(cloudflare): harden remote endpoint and multi-budget regression coverage"
+          git push origin HEAD:feat/cloudflare-durable-objects
