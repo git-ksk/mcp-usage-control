@@ -11,6 +11,15 @@ type MaybePromise<T> = T | Promise<T>;
 export interface ProtectToolOptions<TArgs, TResult> {
   control: UsageControl;
   tool: string;
+  /**
+   * Set to true when the MCP tool has no input schema.
+   *
+   * The SDK's TypeScript callback type is `(ctx)` for no-input tools, while
+   * some server dispatch paths invoke the callback at runtime as `({}, ctx)`.
+   * An empty object is indistinguishable from valid args for an empty input
+   * schema, so this adapter requires an explicit mode instead of guessing.
+   */
+  noInput?: boolean;
   principal(ctx: ServerContext): MaybePromise<Principal>;
   operationId(args: TArgs, ctx: ServerContext): MaybePromise<string>;
   /** Disable only when the application renews the lease itself. Defaults to true. */
@@ -35,16 +44,19 @@ export interface ProtectToolOptions<TArgs, TResult> {
   }): MaybePromise<number>;
 }
 
-/**
- * The MCP SDK v2 invokes callbacks as `(ctx)` when a tool has no input schema
- * and as `(args, ctx)` when an input schema exists. The protected handler
- * accepts both invocation shapes and normalizes the no-input form to
- * `args === undefined` for usage policy/hooks and the wrapped application handler.
- */
-export interface ProtectedToolHandler<TArgs, TResult> {
-  (ctx: ServerContext): Promise<TResult>;
-  (args: TArgs, ctx: ServerContext): Promise<TResult>;
-}
+export type NoInputProtectToolOptions<TResult> = ProtectToolOptions<undefined, TResult> & {
+  noInput: true;
+};
+
+export type InputProtectToolOptions<TArgs, TResult> = ProtectToolOptions<TArgs, TResult> & {
+  noInput?: false;
+};
+
+export type NoInputProtectedToolHandler<TResult> = (ctx: ServerContext) => Promise<TResult>;
+export type InputProtectedToolHandler<TArgs, TResult> = (
+  args: TArgs,
+  ctx: ServerContext,
+) => Promise<TResult>;
 
 export class UsageSettlementError extends Error {
   constructor(
@@ -75,21 +87,17 @@ export class UnsupportedMcpUsageFlowError extends Error {
   }
 }
 
-/**
- * No-input-schema overload. Keeping this overload first lets TypeScript infer
- * the concrete MCP result type from a zero-argument/two-ignored-argument
- * application handler instead of widening it to `unknown`.
- */
+/** No-input-schema overload. `noInput: true` is required. */
 export function protectTool<TResult>(
-  options: ProtectToolOptions<undefined, TResult>,
+  options: NoInputProtectToolOptions<TResult>,
   handler: (args: undefined, ctx: ServerContext) => MaybePromise<TResult>,
-): ProtectedToolHandler<undefined, TResult>;
+): NoInputProtectedToolHandler<TResult>;
 
-/** Input-schema overload. */
+/** Input-schema overload. `noInput` must be omitted or false. */
 export function protectTool<TArgs, TResult>(
-  options: ProtectToolOptions<TArgs, TResult>,
+  options: InputProtectToolOptions<TArgs, TResult>,
   handler: (args: TArgs, ctx: ServerContext) => MaybePromise<TResult>,
-): ProtectedToolHandler<TArgs, TResult>;
+): InputProtectedToolHandler<TArgs, TResult>;
 
 /**
  * Wrap an MCP v2 single-round tool handler with usage admission and settlement.
@@ -109,23 +117,33 @@ export function protectTool<TArgs, TResult>(
  * this pre-alpha adapter because correct suspend/resume accounting requires a
  * dedicated reservation-resume contract. The reservation is conservatively
  * settled before the unsupported-flow error is surfaced.
- *
- * The returned callback supports both MCP SDK v2 handler shapes: `(ctx)` for a
- * no-input-schema tool and `(args, ctx)` for a tool with an input schema. In the
- * no-input form, this adapter passes `undefined` as `args` to the configured
- * operation-id/cost hooks and to the wrapped application handler.
  */
 export function protectTool<TArgs, TResult>(
   options: ProtectToolOptions<TArgs, TResult>,
   handler: (args: TArgs, ctx: ServerContext) => MaybePromise<TResult>,
-): ProtectedToolHandler<TArgs, TResult> {
+): NoInputProtectedToolHandler<TResult> | InputProtectedToolHandler<TArgs, TResult> {
   const protectedHandler = async (
     argsOrCtx: TArgs | ServerContext,
     maybeCtx?: ServerContext,
   ): Promise<TResult> => {
-    const noInputSchemaInvocation = maybeCtx === undefined;
-    const args = (noInputSchemaInvocation ? undefined : argsOrCtx) as TArgs;
-    const ctx = (noInputSchemaInvocation ? argsOrCtx : maybeCtx) as ServerContext;
+    let args: TArgs;
+    let ctx: ServerContext;
+
+    if (options.noInput === true) {
+      // The public SDK type models a no-input callback as `(ctx)`, but current
+      // dispatch paths may call it as `({}, ctx)`. Explicit noInput mode lets us
+      // normalize both forms without confusing `{}` with a real empty-schema arg.
+      args = undefined as TArgs;
+      ctx = (maybeCtx ?? argsOrCtx) as ServerContext;
+    } else {
+      if (maybeCtx === undefined) {
+        throw new TypeError(
+          'protectTool expected an (args, ctx) invocation; set noInput: true for a tool without an input schema',
+        );
+      }
+      args = argsOrCtx as TArgs;
+      ctx = maybeCtx;
+    }
 
     const principal = await options.principal(ctx);
     const operationId = await options.operationId(args, ctx);
@@ -212,7 +230,9 @@ export function protectTool<TArgs, TResult>(
     return result;
   };
 
-  return protectedHandler as ProtectedToolHandler<TArgs, TResult>;
+  return protectedHandler as
+    | NoInputProtectedToolHandler<TResult>
+    | InputProtectedToolHandler<TArgs, TResult>;
 }
 
 interface LeaseHeartbeat {
