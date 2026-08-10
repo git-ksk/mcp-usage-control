@@ -45,7 +45,7 @@ The v0.1 contract requires `actualUnits <= reservedUnits`. Dynamic-cost tools sh
 
 `operationId` is supplied by the application. The store scopes it to the principal and rejects a duplicate reservation. This protects against concurrent retry and accidental duplicate dispatch.
 
-The in-memory reference store keeps settled operation IDs for the process lifetime. The production Redis design will separate reservation lease TTL from a longer idempotency tombstone policy.
+The in-memory reference store keeps settled operation IDs for the process lifetime. The Redis store keeps settled operation IDs behind a longer, configurable idempotency tombstone retention period that is separate from the renewable reservation lease TTL.
 
 Settlement itself is idempotent when the same `actualUnits` and `outcome` are repeated. A conflicting second settlement is rejected.
 
@@ -63,7 +63,7 @@ A production store must provide:
 - bounded idempotency retention;
 - no fail-open behavior on ambiguous storage failures by default.
 
-The Redis adapter will implement those state transitions with Redis-side scripting/functions rather than client-side read/modify/write sequences.
+`@mcp-usage-control/redis` implements these transitions with Redis-side Lua rather than client-side read/modify/write sequences. All transactional keys share one configurable Redis Cluster hash slot so the scripts remain atomic. See [Redis adapter](redis.md) for the key model and scaling trade-off.
 
 ## MCP adapter
 
