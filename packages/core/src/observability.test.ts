@@ -29,7 +29,11 @@ const policy: UsagePolicy = {
 };
 
 function collector(events: UsageEvent[]): UsageObserver {
-  return { onEvent: event => events.push(event) };
+  return {
+    onEvent(event) {
+      events.push(event);
+    },
+  };
 }
 
 afterEach(() => {
