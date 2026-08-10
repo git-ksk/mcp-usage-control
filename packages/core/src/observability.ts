@@ -3,12 +3,9 @@ export type UsageEventMetadataValue = string | number | boolean | null;
 /** Explicit opt-in metadata. Tool arguments and secrets are never captured automatically. */
 export type UsageEventMetadata = Readonly<Record<string, UsageEventMetadataValue>>;
 
-export interface UsageObserverHandler {
+export interface UsageObserver {
   onEvent(event: UsageEvent): void | Promise<void>;
 }
-
-/** Observer configuration may be omitted without weakening exact optional property checks. */
-export type UsageObserver = UsageObserverHandler | undefined;
 
 interface UsageEventBase {
   timestamp: number;
@@ -74,10 +71,12 @@ export type UsageEvent =
       });
 
 /**
- * Best-effort, non-blocking observer delivery. Observer failures never change
- * admission/settlement state and are intentionally swallowed.
+ * Best-effort observer delivery outside the enforcement outcome. The callback
+ * is invoked inline, but returned promises are not awaited. Keep synchronous
+ * observer work lightweight and offload network/durable I/O yourself.
+ * Observer failures never change admission/settlement state.
  */
-export function emitUsageEvent(observer: UsageObserver, event: UsageEvent): void {
+export function emitUsageEvent(observer: UsageObserver | undefined, event: UsageEvent): void {
   if (!observer) return;
   try {
     const result = observer.onEvent(event);
