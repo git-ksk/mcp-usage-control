@@ -12,7 +12,7 @@ import {
   type StoreReserveResult,
   type UsageRequest,
   type UsageStore,
-} from '@mcp-usage-control/core';
+} from 'mcp-usage-control';
 import { MARK_LIABLE_SCRIPT, RENEW_SCRIPT, RESERVE_SCRIPT, SETTLE_SCRIPT } from './scripts.js';
 
 export interface RedisEvalClient {
