@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   UsageStateError,
+  emitUsageEvent,
   type Budget,
   type BudgetRemaining,
   type MarkLiableInput,
@@ -10,6 +11,7 @@ import {
   type SettleInput,
   type SettlementResult,
   type StoreReserveResult,
+  type UsageObserver,
   type UsageRequest,
   type UsageStore,
 } from 'mcp-usage-control';
@@ -31,6 +33,8 @@ export interface RedisUsageStoreOptions {
   cleanupBatchSize?: number;
   /** How long a settled operation remains protected from replay. Defaults to 24 hours. */
   idempotencyTtlMs?: number;
+  /** Optional best-effort observer for Redis expiry/recovery events. */
+  observer?: UsageObserver;
 }
 
 interface RedisKeys {
@@ -41,6 +45,13 @@ interface RedisKeys {
   tombstones: string;
 }
 
+interface RedisRecoverySummary {
+  pendingCount: number;
+  pendingUnits: number;
+  liableCount: number;
+  liableUnits: number;
+}
+
 const RESERVATION_ID_PATTERN = /^r2\.([a-f0-9]{64})$/;
 
 export class RedisUsageStore implements UsageStore {
@@ -48,6 +59,7 @@ export class RedisUsageStore implements UsageStore {
   private readonly hashTag: string;
   private readonly cleanupBatchSize: number;
   private readonly idempotencyTtlMs: number;
+  private readonly observer?: UsageObserver;
 
   constructor(
     private readonly client: RedisEvalClient,
@@ -57,6 +69,7 @@ export class RedisUsageStore implements UsageStore {
     this.hashTag = options.hashTag ?? 'usage';
     this.cleanupBatchSize = options.cleanupBatchSize ?? 256;
     this.idempotencyTtlMs = options.idempotencyTtlMs ?? 86_400_000;
+    this.observer = options.observer;
 
     if (this.prefix.includes('{') || this.prefix.includes('}')) {
       throw new RangeError('prefix must not contain Redis hash-tag braces');
@@ -96,7 +109,7 @@ export class RedisUsageStore implements UsageStore {
       return { hash, limit: budget.limit };
     });
 
-    const reply = parseReply(
+    const parsed = parseReply(
       await this.client.eval(RESERVE_SCRIPT, {
         keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
         arguments: [
@@ -110,6 +123,8 @@ export class RedisUsageStore implements UsageStore {
         ],
       }),
     );
+    const { payload: reply, recovery } = extractRecovery(parsed);
+    this.emitRecoverySummary(recovery);
 
     switch (reply[0]) {
       case 'accepted': {
@@ -140,6 +155,9 @@ export class RedisUsageStore implements UsageStore {
             ...(input.request.principal.tenantId === undefined
               ? {}
               : { tenantId: input.request.principal.tenantId }),
+            ...(input.request.principal.plan === undefined
+              ? {}
+              : { plan: input.request.principal.plan }),
             tool: input.request.tool,
             budgetKeys: budgets.map(budget => budget.key),
             reservedUnits: input.units,
@@ -186,7 +204,11 @@ export class RedisUsageStore implements UsageStore {
         expiresAt: parseInteger(reply[1], 'expiresAt'),
       };
     }
-    if (reply[0] === 'expired' || reply[0] === 'not_found' || reply[0] === 'not_pending') {
+    if (reply[0] === 'expired') {
+      this.emitDirectExpiry(reply, input.reservationId);
+      throw new UsageStateError('Active reservation not found or expired');
+    }
+    if (reply[0] === 'not_found' || reply[0] === 'not_pending') {
       throw new UsageStateError('Active reservation not found or expired');
     }
     throw new UsageStateError(`Unexpected Redis mark-liable reply: ${reply[0] ?? '<empty>'}`);
@@ -211,7 +233,11 @@ export class RedisUsageStore implements UsageStore {
       };
     }
 
-    if (reply[0] === 'expired' || reply[0] === 'not_found' || reply[0] === 'not_pending') {
+    if (reply[0] === 'expired') {
+      this.emitDirectExpiry(reply, input.reservationId);
+      throw new UsageStateError('Active reservation not found or expired');
+    }
+    if (reply[0] === 'not_found' || reply[0] === 'not_pending') {
       throw new UsageStateError('Active reservation not found or expired');
     }
 
@@ -251,11 +277,53 @@ export class RedisUsageStore implements UsageStore {
     if (reply[0] === 'invalid_units') {
       throw new UsageStateError('actualUnits cannot exceed reservedUnits');
     }
-    if (reply[0] === 'expired' || reply[0] === 'not_found' || reply[0] === 'not_pending') {
+    if (reply[0] === 'expired') {
+      this.emitDirectExpiry(reply, input.reservationId);
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    if (reply[0] === 'not_found' || reply[0] === 'not_pending') {
       throw new UsageStateError('Reservation not found, expired, or no longer active');
     }
 
     throw new UsageStateError(`Unexpected Redis settle reply: ${reply[0] ?? '<empty>'}`);
+  }
+
+  private emitRecoverySummary(recovery: RedisRecoverySummary): void {
+    if (recovery.pendingCount > 0) {
+      emitUsageEvent(this.observer, {
+        type: 'reservation.recovered',
+        timestamp: Date.now(),
+        store: 'redis',
+        recovery: 'pending_released',
+        reservedUnits: recovery.pendingUnits,
+        count: recovery.pendingCount,
+      });
+    }
+    if (recovery.liableCount > 0) {
+      emitUsageEvent(this.observer, {
+        type: 'reservation.recovered',
+        timestamp: Date.now(),
+        store: 'redis',
+        recovery: 'liable_retained',
+        reservedUnits: recovery.liableUnits,
+        count: recovery.liableCount,
+      });
+    }
+  }
+
+  private emitDirectExpiry(reply: string[], reservationId: string): void {
+    const state = reply[1];
+    const reservedUnits = parseInteger(reply[2], 'expired reservedUnits');
+    if (state !== 'pending' && state !== 'liable') return;
+    emitUsageEvent(this.observer, {
+      type: 'reservation.recovered',
+      timestamp: Date.now(),
+      store: 'redis',
+      recovery: state === 'pending' ? 'pending_released' : 'liable_retained',
+      reservationId,
+      reservedUnits,
+      count: 1,
+    });
   }
 
   private keys(): RedisKeys {
@@ -312,6 +380,31 @@ function parseReply(value: unknown): string[] {
     if (part instanceof Uint8Array) return Buffer.from(part).toString('utf8');
     throw new UsageStateError('Redis script returned an unsupported reply value');
   });
+}
+
+function extractRecovery(reply: string[]): {
+  payload: string[];
+  recovery: RedisRecoverySummary;
+} {
+  const marker = reply.lastIndexOf('recovery');
+  if (marker < 0) {
+    return {
+      payload: reply,
+      recovery: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
+    };
+  }
+  if (reply.length !== marker + 5) {
+    throw new UsageStateError('Redis reserve reply contained an invalid recovery summary');
+  }
+  return {
+    payload: reply.slice(0, marker),
+    recovery: {
+      pendingCount: parseInteger(reply[marker + 1], 'recovered pending count'),
+      pendingUnits: parseInteger(reply[marker + 2], 'recovered pending units'),
+      liableCount: parseInteger(reply[marker + 3], 'recovered liable count'),
+      liableUnits: parseInteger(reply[marker + 4], 'recovered liable units'),
+    },
+  };
 }
 
 function parseInteger(value: string | undefined, name: string): number {
