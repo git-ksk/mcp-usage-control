@@ -1,0 +1,144 @@
+name: Publish npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub release tag to publish (for example v0.1.0)
+        required: true
+        type: string
+      confirm:
+        description: Explicitly authorize npm publication
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: ${{ inputs.confirm == true }}
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 10
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag='${{ inputs.tag }}'
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid release tag: $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use npm CLI with Trusted Publishing support
+        run: npm install --global npm@11.15.0
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+      - name: Verify GitHub Release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: gh release view "$TAG" >/dev/null
+
+      - name: Verify package versions match tag
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for dir in packages/core packages/mcp packages/redis packages/cloudflare; do
+            actual="$(node -p "require('./${dir}/package.json').version")"
+            test "$actual" = "$VERSION"
+          done
+
+      - name: Pack packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/muc-packs
+          mkdir -p /tmp/muc-packs
+          for dir in core mcp redis cloudflare; do
+            (cd "packages/$dir" && npm pack --pack-destination /tmp/muc-packs)
+          done
+          git diff --exit-code -- \
+            packages/core/package.json \
+            packages/mcp/package.json \
+            packages/redis/package.json \
+            packages/cloudflare/package.json
+          for archive in /tmp/muc-packs/*.tgz; do
+            manifest="$(tar -xOf "$archive" package/package.json)"
+            ! grep -q 'workspace:' <<<"$manifest"
+            ! grep -q 'pack-workspace-deps' <<<"$manifest"
+          done
+
+      - name: Publish packages in dependency order
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${NPM_TOKEN:-}" ]]; then
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          else
+            unset NODE_AUTH_TOKEN || true
+          fi
+
+          publish_one() {
+            local name="$1"
+            local archive="$2"
+            if npm view "${name}@${VERSION}" version --json >/dev/null 2>&1; then
+              echo "${name}@${VERSION} is already published; skipping"
+              return 0
+            fi
+            npm publish "$archive" --access public --provenance
+          }
+
+          publish_one mcp-usage-control "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz"
+          publish_one mcp-usage-control-mcp "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz"
+          publish_one mcp-usage-control-redis "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz"
+          publish_one mcp-usage-control-cloudflare "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz"
+
+      - name: Verify registry versions
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for name in mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis mcp-usage-control-cloudflare; do
+            test "$(npm view "${name}@${VERSION}" version)" = "$VERSION"
+          done
