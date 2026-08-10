@@ -31,7 +31,8 @@ pre-1.0 minorでもbreaking changeはrelease notesで明示します。
 - pending -> cost-liable -> settledのcrash semanticsをtest済み。
 - MCP success、`isError`、thrown error、classifier failure、settlement ambiguityをdirect testと公式SDK pathの両方でcover。
 - `input_required` にv0.1の明示的support boundaryがある。
-- provider-neutral observabilityがbest-effort / non-blocking / secret-consciousで、enforcement stateから隔離されている。
+- provider-neutral observabilityがbest-effortで、返されたPromiseをawaitせず、secret-consciousかつenforcement stateから隔離されている。
+- observerの同期処理がinline / lightweightであることとreplay deduplication semanticsをdocument済み。
 - Memory / Redis expiry recovery observabilityとhigh-cardinality guidanceをdocument / test済み。
 - Redis server-time behavior / durability limitationをdocument済み。
 - package name / exports / filesを確認済み。
