@@ -10,9 +10,11 @@ This directory contains the maintained documentation for `mcp-usage-control`.
 
 - [Getting started](getting-started.md) — repository setup, the core lifecycle, and a minimal local example.
 - [MCP integration](mcp-integration.md) — wrapping `@modelcontextprotocol/server` v2 tool handlers with usage control.
+- [API reference](api-reference.md) — current core, MCP, and Redis public surface and defaults.
 - [Architecture](architecture.md) — invariants, renewable leases, settlement semantics, and design boundaries.
 - [Redis adapter](redis.md) — atomic Lua transitions, key model, expiry, idempotency, and Redis Cluster trade-offs.
 - [Release policy](releasing.md) — pre-1.0 compatibility and publication expectations.
+- [Changelog](../CHANGELOG.md) — notable changes and current pre-alpha limitations.
 
 ## Project policies
 
@@ -21,6 +23,12 @@ This directory contains the maintained documentation for `mcp-usage-control`.
 - [Code of Conduct](../CODE_OF_CONDUCT.md)
 - [Support](../SUPPORT.md)
 - [License](../LICENSE)
+
+## Package entry points
+
+- [`@mcp-usage-control/core`](../packages/core/README.md)
+- [`@mcp-usage-control/mcp`](../packages/mcp/README.md)
+- [`@mcp-usage-control/redis`](../packages/redis/README.md)
 
 ## Documentation rules
 
