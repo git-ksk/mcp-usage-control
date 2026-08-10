@@ -108,9 +108,11 @@ const control = new UsageControl(store, policy, {
 });
 ```
 
-Events cover admission accepted/denied, settlement completed, expiry recovery, and policy/store errors. Observer delivery is **best-effort and non-blocking**: observer failures never change quota state. Tool arguments and raw exception messages are not captured automatically; custom metadata is explicit opt-in.
+Events cover admission accepted/denied, settlement completed, expiry recovery, and policy/store errors. Observer delivery is **best-effort and outside the enforcement outcome**: returned promises are not awaited and observer failures never change quota state. `onEvent()` itself is invoked inline, so keep synchronous work lightweight and offload network/durable I/O. Tool arguments and raw exception messages are not captured automatically; custom metadata is explicit opt-in.
 
-Runtime IDs can be high-cardinality. Do not use unique principal, operation, reservation, or user-specific budget IDs as metric labels. See [Observability](docs/observability.md) for event fields, privacy guidance, Redis aggregate recovery behavior, and delivery guarantees.
+Identical idempotent settlement replay can emit another identical `settlement.completed` event. Downstream analytics that require de-duplication should use a stable key such as `(reservationId, actualUnits, outcome)`; the event stream is not the transactional ledger.
+
+Runtime IDs can be high-cardinality. Do not use unique principal, operation, reservation, or user-specific budget IDs as metric labels. See [Observability](docs/observability.md) for event fields, privacy guidance, Redis aggregate recovery behavior, replay guidance, and delivery guarantees.
 
 ## Direct core example
 
