@@ -7,12 +7,13 @@ Maintained documentation for `mcp-usage-control` v0.1.
 ## Start here
 
 - [Use from source / local tarballs](using-from-source.md) — **current installation path while npm publication is pending**; clone, verify, pack, install into another project, and smoke-test imports.
-- [Getting started](getting-started.md) — multi-budget policy, core lifecycle, Redis and MCP examples.
+- [Getting started](getting-started.md) — multi-budget policy, core lifecycle, distributed stores, and MCP examples.
 - [MCP integration](mcp-integration.md) — `@modelcontextprotocol/server` v2 single-round usage control and the `input_required` support boundary.
-- [Observability](observability.md) — provider-neutral lifecycle events, privacy/cardinality guidance, best-effort delivery semantics, and Redis recovery telemetry.
-- [API reference](api-reference.md) — v0.1 core, MCP, and Redis public surface/defaults.
+- [Observability](observability.md) — provider-neutral lifecycle events, privacy/cardinality guidance, best-effort delivery semantics, and distributed-store recovery telemetry.
+- [API reference](api-reference.md) — v0.1 core, MCP, Redis, and Cloudflare public surface/defaults.
 - [Architecture](architecture.md) — safety invariants, multi-budget atomicity, liability, idempotency, settlement, trust boundaries.
 - [Redis adapter](redis.md) — v0.1 Lua transaction model, key layout, expiry, replay, Redis Cluster and durability trade-offs.
+- [Cloudflare adapter](cloudflare.md) — Durable Objects + SQLite transaction domain, Worker-local/remote use, privacy, ACK ambiguity, cleanup and cost behavior.
 - [Release policy](releasing.md) — package/version/release procedure and pre-1.0 compatibility policy.
 - [Changelog](../CHANGELOG.md) — released features, safety behavior, compatibility and known limitations.
 
@@ -29,6 +30,7 @@ Maintained documentation for `mcp-usage-control` v0.1.
 - [`mcp-usage-control`](../packages/core/README.md)
 - [`mcp-usage-control-mcp`](../packages/mcp/README.md)
 - [`mcp-usage-control-redis`](../packages/redis/README.md)
+- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md)
 
 ## Documentation rules
 

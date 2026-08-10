@@ -1,0 +1,51 @@
+{
+  "name": "mcp-usage-control-cloudflare",
+  "version": "0.1.0",
+  "description": "Cloudflare Durable Objects usage store for mcp-usage-control.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "import": "./dist/worker.js",
+      "default": "./dist/worker.js"
+    }
+  },
+  "files": [
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/worker.js",
+    "dist/worker.js.map",
+    "dist/worker.d.ts",
+    "dist/worker.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
+    "directory": "packages/cloudflare"
+  },
+  "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
+  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
+  "keywords": ["mcp", "cloudflare", "durable-objects", "usage", "quota", "credits", "atomic"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "mcp-usage-control": "workspace:^"
+  }
+}

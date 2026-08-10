@@ -133,6 +133,10 @@ Prometheus、Cloud Monitoring、Datadog、OpenTelemetry metrics backend等での
 
 必要に応じてreplay deduplicationを適用してください。これらのcounterをtransactional quota balanceとして使わないでください。enforcement eventから作る運用ビューです。
 
+## Cloudflare recovery telemetry
+
+`CloudflareUsageStore` / `RemoteCloudflareUsageStore` は `store: 'cloudflare'` の `reservation.recovered` を発火できます。lazy cleanupはaggregate count / units、直接指定されたexpiryではopaque hashed reservation IDだけを含められます。recovery telemetryのためだけにraw principal / tenant / tool / operation / budget / tool-argument値をCloudflare backendへ永続化しません。
+
 ## Vendor adapter
 
 core runtimeはOpenTelemetry、OpenMeter、Datadog、Cloud Monitoring、GA4、billing providerへ依存しません。必要な連携はapplication codeまたは将来のoptional adapterで追加します。

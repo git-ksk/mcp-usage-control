@@ -7,12 +7,13 @@
 ## はじめに読むもの
 
 - [Source / local tarballから使う](using-from-source.ja.md) — **npm公開待ちの現在のinstall手順**。clone、検証、pack、別projectへのinstall、import smoke testまで。
-- [Getting started](getting-started.ja.md) — multi-budget policy、core lifecycle、Redis / MCP例。
+- [Getting started](getting-started.ja.md) — multi-budget policy、core lifecycle、distributed store、MCP例。
 - [MCP integration](mcp-integration.ja.md) — `@modelcontextprotocol/server` v2 single-round usage controlと `input_required` support boundary。
-- [Observability](observability.ja.md) — provider-neutral lifecycle event、privacy / cardinality指針、best-effort delivery semantics、Redis recovery telemetry。
-- [API reference](api-reference.ja.md) — v0.1 core / MCP / Redis public surfaceとdefault。
+- [Observability](observability.ja.md) — provider-neutral lifecycle event、privacy / cardinality指針、best-effort delivery semantics、distributed-store recovery telemetry。
+- [API reference](api-reference.ja.md) — v0.1 core / MCP / Redis / Cloudflare public surfaceとdefault。
 - [Architecture](architecture.ja.md) — safety invariant、multi-budget atomicity、liability、idempotency、settlement、trust boundary。
 - [Redis adapter](redis.ja.md) — v0.1 Lua transaction model、key layout、expiry、replay、Redis Cluster / durability trade-off。
+- [Cloudflare adapter](cloudflare.ja.md) — Durable Objects + SQLite transaction domain、Worker-local / remote利用、privacy、ACK ambiguity、cleanup / cost behavior。
 - [Release policy](releasing.ja.md) — package / version / release procedure、pre-1.0 compatibility policy。
 - [Changelog](../CHANGELOG.ja.md) — released feature、safety behavior、compatibility、known limitation。
 
@@ -29,6 +30,7 @@
 - [`mcp-usage-control`](../packages/core/README.md)
 - [`mcp-usage-control-mcp`](../packages/mcp/README.md)
 - [`mcp-usage-control-redis`](../packages/redis/README.md)
+- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md)
 
 ## ドキュメント運用ルール
 

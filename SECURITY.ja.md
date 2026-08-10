@@ -69,6 +69,12 @@ Redis lazy recoveryはtelemetry改善のためだけにraw request identityを�
 
 v0.1 MCP adapterはv2 `input_required` multi-round tool flowをまだsupportしません。明示的にrejectします。roundごとに新しいoperation IDを生成したり、settled operation IDを再利用して回避しないでください。どちらも意図したaccounting semanticsを壊す可能性があります。dedicated suspend/resume supportではround間のidempotencyとliabilityを維持する必要があります。
 
+## Cloudflare remote-store boundary
+
+Cloudflare adapterのpublic HTTP gatewayはapplication-defined authorization callbackを必須とし、unauthenticated defaultを持ちません。local以外のremote clientはHTTPS必須で、URLへ埋め込んだcredentialもrejectします。timeout / lost ACKはambiguousなのでblind automatic retryで隠してはいけません。
+
+operation / budget / settlement-outcome identifierはCloudflare backend boundary前にhash化し、tool argumentsは送りません。hashingはencryptionではなく、secretを含むidentifierを安全にするものではありません。
+
 ## Redis durability boundary
 
 Redis Luaはatomic transitionを提供しますがfinancial-ledger durabilityを保証するものではありません。persistence、replication、failover設定によってacknowledged accounting stateがinfrastructure failure後も残るかが変わります。

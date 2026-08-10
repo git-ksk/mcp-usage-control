@@ -288,6 +288,26 @@ Luaはlease / tombstone判定にRedis server `TIME` を使います。multi-budg
 
 詳細は [Redis adapter](redis.ja.md) と [Observability](observability.ja.md) を参照してください。
 
+## `mcp-usage-control-cloudflare`
+
+### `CloudflareUsageStore`
+
+Durable Object namespaceを使うWorker-local `UsageStore`。optionは `domainName`、`cleanupBatchSize`、`idempotencyTtlMs`、`observer`。1 `domainName` が1 atomic transaction domainです。
+
+### `RemoteCloudflareUsageStore`
+
+Cloudflare外のapplication向けHTTP `UsageStore`。`endpoint` は必須で、local以外はHTTPSのみ許可します。request headerは直接またはcallbackで指定できます。timeout / network failureは `CloudflareUsageTransportError` として表面化し、自動retryしません。
+
+### `createCloudflareUsageStoreGateway()`
+
+remote store向けWorker HTTP handlerを作成します。application-defined `authorize(request)` callbackが必須です。gatewayはadapterが生成するhashed accounting protocolだけを受け取り、raw Durable Object exceptionを返しません。
+
+### `UsageControlDurableObject`
+
+`mcp-usage-control-cloudflare/worker` からexportします。SQLite transactionでatomic multi-budget reserve、liability、renewal、settlement、replay protection、expiry recoveryを処理します。
+
+詳細は [Cloudflare adapter](cloudflare.ja.md) を参照してください。
+
 ## Numeric validation
 
 - units / limits: non-negative JavaScript safe integer。

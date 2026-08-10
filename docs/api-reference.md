@@ -288,6 +288,26 @@ When `observer` is configured, lazy cleanup emits aggregate `reservation.recover
 
 See [Redis adapter](redis.md) and [Observability](observability.md) for durability, Redis Cluster, privacy, and telemetry constraints.
 
+## `mcp-usage-control-cloudflare`
+
+### `CloudflareUsageStore`
+
+Worker-local `UsageStore` backed by a Durable Object namespace. Options include `domainName`, `cleanupBatchSize`, `idempotencyTtlMs`, and `observer`. One `domainName` is one atomic transaction domain.
+
+### `RemoteCloudflareUsageStore`
+
+HTTP `UsageStore` for applications outside Cloudflare. `endpoint` is required; non-local endpoints must use HTTPS. Optional request headers can be supplied directly or by callback. Timeout/network failures surface as `CloudflareUsageTransportError` and are not automatically retried.
+
+### `createCloudflareUsageStoreGateway()`
+
+Creates the Worker HTTP handler used by the remote store. An application-defined `authorize(request)` callback is mandatory. The gateway accepts only the hashed accounting protocol produced by the adapter and returns generic failures rather than raw Durable Object exceptions.
+
+### `UsageControlDurableObject`
+
+Exported from `mcp-usage-control-cloudflare/worker`. Uses SQLite transactions for atomic multi-budget reserve, liability, renewal, settlement, replay protection, and expiry recovery.
+
+See [Cloudflare adapter](cloudflare.md) for deployment and trust-boundary details.
+
 ## Numeric validation
 
 - units and limits: non-negative JavaScript safe integers;
