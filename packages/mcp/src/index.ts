@@ -35,6 +35,17 @@ export interface ProtectToolOptions<TArgs, TResult> {
   }): MaybePromise<number>;
 }
 
+/**
+ * The MCP SDK v2 invokes callbacks as `(ctx)` when a tool has no input schema
+ * and as `(args, ctx)` when an input schema exists. The protected handler
+ * accepts both invocation shapes and normalizes the no-input form to
+ * `args === undefined` for usage policy/hooks and the wrapped application handler.
+ */
+export interface ProtectedToolHandler<TArgs, TResult> {
+  (ctx: ServerContext): Promise<TResult>;
+  (args: TArgs, ctx: ServerContext): Promise<TResult>;
+}
+
 export class UsageSettlementError extends Error {
   constructor(
     message: string,
@@ -82,12 +93,24 @@ export class UnsupportedMcpUsageFlowError extends Error {
  * this pre-alpha adapter because correct suspend/resume accounting requires a
  * dedicated reservation-resume contract. The reservation is conservatively
  * settled before the unsupported-flow error is surfaced.
+ *
+ * The returned callback supports both MCP SDK v2 handler shapes: `(ctx)` for a
+ * no-input-schema tool and `(args, ctx)` for a tool with an input schema. In the
+ * no-input form, this adapter passes `undefined` as `args` to the configured
+ * operation-id/cost hooks and to the wrapped application handler.
  */
 export function protectTool<TArgs, TResult>(
   options: ProtectToolOptions<TArgs, TResult>,
   handler: (args: TArgs, ctx: ServerContext) => MaybePromise<TResult>,
-): (args: TArgs, ctx: ServerContext) => Promise<TResult> {
-  return async (args, ctx) => {
+): ProtectedToolHandler<TArgs, TResult> {
+  const protectedHandler = async (
+    argsOrCtx: TArgs | ServerContext,
+    maybeCtx?: ServerContext,
+  ): Promise<TResult> => {
+    const noInputSchemaInvocation = maybeCtx === undefined;
+    const args = (noInputSchemaInvocation ? undefined : argsOrCtx) as TArgs;
+    const ctx = (noInputSchemaInvocation ? argsOrCtx : maybeCtx) as ServerContext;
+
     const principal = await options.principal(ctx);
     const operationId = await options.operationId(args, ctx);
     const admission = await options.control.reserve({
@@ -175,6 +198,8 @@ export function protectTool<TArgs, TResult>(
     }
     return result;
   };
+
+  return protectedHandler as ProtectedToolHandler<TArgs, TResult>;
 }
 
 interface LeaseHeartbeat {
