@@ -5,7 +5,7 @@ on:
     branches: [feat/v0.1-release]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -20,8 +20,14 @@ jobs:
           node-version: 22
           package-manager-cache: false
       - run: pnpm install --lockfile-only --no-frozen-lockfile
-      - name: Print lockfile for review
+      - name: Commit lockfile when it changed
         run: |
-          echo '__LOCKFILE_BEGIN__'
-          cat pnpm-lock.yaml
-          echo '__LOCKFILE_END__'
+          if git diff --quiet -- pnpm-lock.yaml && git ls-files --error-unmatch pnpm-lock.yaml >/dev/null 2>&1; then
+            echo "pnpm-lock.yaml is already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pnpm-lock.yaml
+          git commit -m "chore: commit pnpm lockfile"
+          git push origin HEAD:feat/v0.1-release
