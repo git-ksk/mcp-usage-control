@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-> Pre-alpha: this reference describes the current `main`-bound development API. Names and signatures may change before v0.1.
+> Pre-alpha: this reference describes the current development API. Names and signatures may change before v0.1.
 
 ## `@mcp-usage-control/core`
 
@@ -180,6 +180,21 @@ interface ProtectToolOptions<TArgs, TResult> {
   }): number | Promise<number>;
 }
 ```
+
+The wrapped application handler uses the adapter-level shape `(args, ctx)`. For an SDK tool with no input schema, `protectTool()` normalizes the SDK's native `(ctx)` invocation and passes `undefined` as `args` to the operation-ID hook, cost hooks, policy request, and wrapped handler.
+
+### `ProtectedToolHandler<TArgs, TResult>`
+
+The function returned by `protectTool()` accepts both MCP SDK v2 callback forms:
+
+```ts
+interface ProtectedToolHandler<TArgs, TResult> {
+  (ctx: ServerContext): Promise<TResult>;
+  (args: TArgs, ctx: ServerContext): Promise<TResult>;
+}
+```
+
+This exists because the SDK invokes no-input-schema tools as `(ctx)` and tools with an input schema as `(args, ctx)`.
 
 Behavior:
 
