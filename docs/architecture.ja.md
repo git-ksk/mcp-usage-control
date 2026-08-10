@@ -1,106 +1,143 @@
-# Architecture
+# Architecture — v0.1
 
 [English](architecture.md) | [日本語](architecture.ja.md)
 
 ## Scope
 
-`mcp-usage-control` が担当するのは、認証済みprincipalとmetered tool executionの間にあるruntime boundaryです。
+`mcp-usage-control` が担当するのは、trustedなaccounting principalとmetered tool executionの間にあるenforcement boundaryです。
 
 ```text
-identity -> entitlement/policy -> quote -> reserve -> mark liable -> execute -> settle
-                                                   ^                 |
-                                                   |------ renew -----|
+identity -> entitlement/policy -> quote -> atomic reserve -> mark liable -> execute -> settle
+                                                          ^                 |
+                                                          |------ renew -----|
 ```
 
-authentication、subscription billing、payment collection、dashboard、upstream API pricing自体は責務に含めません。
+authentication、subscription billing、payment collection、dashboard、generic rate limiting、upstream pricingは責務外です。
 
-## なぜ実行前にreserveするのか
+## なぜexecution前にreserveするのか
 
-`check -> execute -> record` という設計にはtime-of-check/time-of-use raceがあります。複数のagent tool callが並列に到着すると、各requestが同じremaining balanceを確認し、どのusageも記録される前にすべて実行開始できてしまいます。
+`check -> execute -> record` にはtime-of-check/time-of-use raceがあります。並列agent callが同じremaining balanceを確認し、どのcallもusageを記録する前にすべて実行開始できるためです。
 
-そのためstoreは単一の `reserve()` operationを公開します。production storeではquota比較、duplicate operation検出、reservation作成をatomicに実行する必要があります。
+そのため `UsageStore.reserve()` はduplicate検出、quota比較、reservation作成を1つのatomic store operationとして実行します。
+
+## Multi-budget admission
+
+1 invocationへ複数budgetを適用できます。例:
+
+```text
+user daily
+user monthly
+tenant monthly
+```
+
+v0.1ではinvocationに1つのunit quoteを決め、そのamountを**参加する全budgetへatomicにreserve**します。どれか1 budgetでもdenyする場合、他budgetだけがpartial reservationされた状態を残してはいけません。
+
+budget keyはadmission前にcanonicalizeします。empty list / duplicate budget keyはrejectします。1 budget用の `budget` quote formは内部で1要素listとして扱います。
+
+burst rate limit / concurrency capはv0.1では別concernです。applicationがusage budgetとして明示的にmodelする場合を除きcoreは混同しません。
 
 ## Pendingとcost-liable lease
 
-reservationは最初 **pending** stateです。pendingはcapacityを確保したものの、metered execution boundaryにはまだ入っていない状態を表します。pending leaseがexpireした場合、metered workをcost-liableと宣言していないためreserved unitsを解放できます。
+reservationは **pending** から開始します。capacityは確保済みですが、まだmetered execution boundaryへ入っていません。
 
-metered execution開始前に、callerは `UsageLease.markLiable()` でleaseを **cost-liable** に遷移させます。MCP adapterはapplication handlerへ入る直前にこれを実行します。cost-liableになった後のexpiryは保守的に扱い、full reservationを消費済みとして維持し、operationを `lease_expired_after_execution_started` でsettledにします。
+metered work開始直前に `UsageLease.markLiable()` を呼びます。MCP adapterはapplication handler entry直前に実行します。
 
-これによりcrash-after-costの穴を塞ぎます。このstateがなければ、upstream APIを呼んだ後にprocessが消え、settlement前にworkerが失われた場合でも、後から「何も実行されなかった」ようにquotaがrefundされてしまいます。
+expiry behaviorはstate-dependentです。
 
-generic MCP wrapperはprovider-specificな「実コスト発生点」を知らないため、handler entryをcost-liable boundaryとして扱います。そのため、handlerへ入った直後で実upstream cost発生前にcrashすると保守的にover-accountする可能性はありますが、既定ではunder-accountingを避けます。より遅く正確なcost-liability boundaryが必要なapplicationはcore lifecycleを直接利用するかprovider-specific adapterを用意してください。
+- **pending expiry** — 参加する全budgetからreservationを解放し、abandoned operationのactive replay protectionを除去する。
+- **cost-liable expiry** — 参加する全budgetでfull reservationを維持し、`lease_expired_after_execution_started` としてsettled化し、idempotency tombstone期間replay protectionを残す。
 
-## Reservationはrenewable lease
+これによりcrash-after-cost refundを防ぎます。generic MCP wrapperはprovider-specificなcost発生点を知らないためhandler entryをliability boundaryにします。このためhandler entry後・実upstream cost前のcrashは保守的にover-accountする可能性があります。より正確なboundaryが必要ならcore lifecycleを直接利用してください。
 
-reservation expiryはworker消失後にcapacityを回収するために必要ですが、固定TTLだけでは正常な長時間toolに対して危険です。active toolがTTLを超えて実行中に別admissionがreservationを回収すると、2つのoperationが同じbudgetを消費できます。
+## Renewable lease
 
-`UsageStore.renew()` はactive reservationのexpiryをatomicに延長します。MCP adapterは既定でheartbeatを有効化し、handler実行中はlease TTLのおよそ3分の1間隔でrenewします。最終settlement前にはheartbeatを停止し、in-flight renewalの完了を待つことでrenewとsettleの通常raceを避けます。
+固定TTLだけではlong-running workに危険です。実行中reservationをreclaimすると別operationが同じbudget capacityを再利用できてしまいます。
 
-十分長いstorage/network partitionはdistributed leaseの有効期間を超える可能性があります。built-in heartbeatはrenewal convenienceでありprovider-specific fencingではありません。renewal errorだけを理由に任意のupstream workを自動cancelしません。ただしleaseは既にcost-liableなので、expiry時にはrefundせず保守的にfull reservationを維持します。ownershipを失った場合は最終settlementでexpired/lost leaseが表面化します。
+`UsageStore.renew()` はactive leaseをatomicに延長します。`mcp-usage-control-mcp` はwrapped handler実行中defaultでheartbeatを行い、settlement前にheartbeatを止め、in-flight renewalの完了を待ちます。
 
-lease loss直後に処理を停止する必要があるworkloadは、metered resource boundaryでapplication側のfencing/cancellationを実装してください。
+storage/network partitionがleaseより長く続く可能性はあります。renewalはprovider-specific fencingではありません。lease loss直後にupstream workを止める必要があるapplicationはmetered resource boundaryでfencing / cancellationを実装してください。
 
-## なぜsettlementはrollbackではないのか
+## Settlementでありrollbackではない
 
-toolはupstream resourceを消費した後で失敗することがあります。すべてのexceptionを自動refundすると、post-cost failureを繰り返すことでusageを回避できるabuse pathになります。
+toolはmetered resource消費後に失敗する可能性があります。すべてのerrorをautomatic refundするとabuse pathになります。
 
-runtimeでは明示的なsettlementを使います。
+v0.1のsettlement rule:
 
-- success: 通常はactual consumed unitsをsettleする。
-- pre-cost failure: metered resource未消費を証明できる場合に0をsettleできる。
-- post-cost failure: すでに発生したunitsをsettleする。
-- unclassified failure: MCP adapterはfull reservationを既定値とする。
-- cost-classification failure: MCP adapterはfull reservationをsettleしたうえで `UsageClassificationError` を表面化する。
+- success -> actual consumed unitsをsettle。
+- proven pre-cost failure -> 0を許可。
+- post-cost failure -> incurred unitsをsettle。
+- unclassified MCP failure -> defaultはfull reservation。
+- cost classifier failure -> full reservationをsettleしてから `UsageClassificationError` を表面化。
 
-現在のcontractでは `actualUnits <= reservedUnits` が必要です。dynamic-cost toolは実行前に安全な最大値をreserveし、settlement時に未使用分をreleaseします。
+`actualUnits` はnon-negative safe integerかつ `reservedUnits` 以下です。dynamic-cost toolはsafe maximumをreserveし、settlement時にunused分をreleaseします。
 
-## MCP tool-result semantics
+settlementはreservationに参加した全budgetへ同じactual unit countを適用します。
 
-MCPには複数のfailure/result shapeがあります。adapterは明示的な `{ isError: true }` tool resultをsuccessではなくtool errorとして扱います。`toolErrorUnits` hookでactual costを分類でき、未指定時は保守的にfull reservationを消費します。
+## Idempotency / replay protection
 
-MCP v2には、clientが入力を集めてfresh requestでhandlerへ再入場する `input_required` もあります。これを正しくaccountingするにはroundを跨ぐsuspend/resume semanticsが必要です。そのためpre-alphaの `protectTool()` は **まだ `input_required` をサポートしません**。wrapped handlerが返した場合は、silentな二重課金やduplicate operation deadlockを避けるためreservationを保守的にsettleし、`UnsupportedMcpUsageFlowError` を返します。
+v0.1のlogical operation scope:
 
-multi-round reservation resumeはv0.1向けの別設計項目として追跡します。
+```text
+(tenantId, principal.id, tool, operationId)
+```
 
-## Idempotency
+`operationId` はapplicationが指定し、同じlogical invocationのretryではstableである必要があります。authentication proofではありません。
 
-`operationId` はapplicationが指定します。現在のstoreはprincipal単位でscopeし、duplicate reservationを拒否します。内部operation keyはstorage/hash化の前に曖昧性のないtuple encodingを使うため、delimiterを含むidentifier同士でもcollisionしません。
+identifierはstorage/hash化前に曖昧性のないtupleとしてencodeするためdelimiter入りvalueでもcollisionしません。
 
-in-memory reference storeはprocess lifetime中、settled operation IDを保持します。Redis storeではrenewable lease TTLとは別に、configurable idempotency tombstone retentionを使います。
+active operationへのduplicate reserveはrejectします。settled operationはbounded tombstone期間replay protectionされ、Memory / Redis storeのdefaultは24時間です。tombstone expiry後は同scopeでも同じoperation IDを再利用できます。
 
-同一の `actualUnits` と `outcome` を持つsettlement replayはidempotentです。異なる2回目のsettlementは拒否します。
-
-principal / tenant / toolをどこまでoperation scopeへ含めるかはv0.1前に引き続き確定します。`operationId` はidempotency inputであり、authentication proofではありません。
+settlement replayもidempotentです。同じ `actualUnits` + `outcome` はprevious settlementを返し、conflicting replayはfailします。
 
 ## Store contract
 
-`UsageStore` はMCPやstorage vendorから独立しています。in-memory implementationはtest / local development向けです。
+coreはMCP / storage vendorから独立です。production `UsageStore` には次が必要です。
 
-production storeには次が必要です。
+- all-or-nothing atomic multi-budget reserve。
+- atomic pending -> cost-liable transition。
+- atomic active-lease renewal。
+- 全budgetに対するatomic settlement / release。
+- 1 reservationが複数budgetへ影響してもexactly-once-styleでexpiry recoveryすること。
+- scoped duplicate-operation protection。
+- bounded settled replay retention。
+- ambiguous storage failureで保守的に動作すること。
 
-- atomic reserve
-- atomic pending -> cost-liable transition
-- active reservationに対するatomic lease renewal
-- atomic settlementとunused-unit release
-- state-dependent expiry recovery
-- duplicate operation protection
-- bounded idempotency retention
-- ambiguous storage failure時に既定でfail openしないこと
+`MemoryUsageStore` はreference semanticsでありdistributed production storeではありません。
 
-`@mcp-usage-control/redis` はclient-side read/modify/writeではなくRedis-side Luaでこれらのtransitionを実装します。transactional keyは1つのconfigurable Redis Cluster hash slotを共有し、scriptのatomicityを保ちます。lease timestampはLua内のRedis server timeから計算するため、application hostのclock skewがexpiry判定へ影響しません。
+`mcp-usage-control-redis` は1つのconfigurable Redis Cluster hash slot内でRedis-side Luaによりcontractを実装します。lease / tombstone判定にはRedis server `TIME` を使い、application hostのclock skewがaccountingを変えないようにします。
 
-ただしatomicityとdurabilityは別です。Redis persistence、replication、failover、acknowledged write lossのwindowはdeployment側の保証です。必要なaccounting guaranteeに合わせてRedis構成を選ぶ必要があります。詳しくは [Redis adapter](redis.ja.md) を参照してください。
+## Redis atomicityとdurability
 
-## MCP adapter
+LuaはRedis内部のatomic transitionを提供しますが、あらゆるcrash / failover / acknowledged-write-loss windowでのpersistenceを単独では保証しません。productionでは許容accounting lossに合わせてpersistence、replication、failover、backup、recoveryを構成してください。
 
-`@mcp-usage-control/mcp` はpublic `@modelcontextprotocol/server` v2 APIのsingle-round tool handlerを対象にします。core packageはMCP SDKをimportしないため、protocol / SDK changeをadapter packageへ隔離できます。
+より強いfinancial ledgerが必要ならRedisをenforcement stateとして使い、別のdurable ledger / event systemへreconcileします。
 
-adapterはexecution error、classification error、settlement errorを区別します。storage writeが適用済みなのにACKだけ失われた可能性があるため、ambiguous settlementを盲目的にretryしません。
+## MCP result semantics
 
-repositoryではdirect wrapper testに加え、公式SDKの `Client + createMcpHandler` in-process pathでもadapterを実行し、SDK側のerror/result変換まで含めてtestします。
+`mcp-usage-control-mcp` は `@modelcontextprotocol/server` v2 **single-round** tool handlerを対象にし、coreはSDK非依存です。
 
-## Future multi-budget admission
+adapterは次を区別します。
 
-production SaaSではuser monthly credits、daily credits、tenant monthly credits、burst/concurrency controlなど複数constraintを同時に扱うことがあります。
+- normal result。
+- `{ isError: true }` tool result。
+- thrown execution error。
+- cost-classification error。
+- settlement error。
 
-現在のpre-alpha storeは1 reservationにつき1 budgetです。v0.1までにmulti-budget atomic admissionを実装し、すべてのapplicable budgetが1 transactionとして成功または失敗する設計を予定しています。
+ambiguous settlementはblind retryしません。store writeがcommit済みでACKだけ失った可能性があるためです。
+
+repositoryではdirect wrapper testと公式SDK `Client + createMcpHandler` pathの両方をtestします。
+
+### `input_required`
+
+MCP v2 `input_required` はrequest boundaryを跨ぎます。正しいaccountingにはround間のreservation suspend/resume、replay identity、abandonment recovery、client-carried stateのintegrity ruleが必要です。
+
+そのためv0.1ではsupport boundaryを明示します。`protectTool()` は **`input_required` 未対応**です。wrapped handlerが返した場合はcurrent reservationを保守的にsettleし `UnsupportedMcpUsageFlowError` を返します。real suspend/resume supportはIssue #14で追跡します。
+
+## Trust boundary
+
+- principal / tenant identityはtrustedなserver-side authentication/application contextから取得する。
+- `clientInfo`、tool args、request-state blob、operation IDをauthorization proofにしない。
+- policy denial detailへmodel/end userに出したくないsecretを入れない。
+- log / metricへ出すbudget key / outcomeはlow-cardinality / non-sensitiveにする。
+- Redis key nameのhashingはidentifier exposureを減らすだけでencryptionではない。
