@@ -69,7 +69,7 @@ export type UsageEvent =
         phase: 'quote' | 'reserve' | 'mark_liable' | 'renew' | 'settle';
         source: 'policy' | 'store' | 'runtime';
         reservationId?: string;
-        /** Error class/name only. Raw exception messages are intentionally omitted. */
+        /** Bounded constructor class name only. Raw exception messages/names are omitted. */
         errorName: string;
       });
 
@@ -90,6 +90,13 @@ export function emitUsageEvent(observer: UsageObserver, event: UsageEvent): void
 }
 
 export function usageErrorName(error: unknown): string {
-  if (error instanceof Error && error.name) return error.name;
+  if (!(error instanceof Error)) return 'UnknownError';
+  const constructorName = error.constructor?.name;
+  if (
+    typeof constructorName === 'string' &&
+    /^[A-Za-z][A-Za-z0-9_$]{0,63}$/.test(constructorName)
+  ) {
+    return constructorName;
+  }
   return 'UnknownError';
 }
