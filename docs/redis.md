@@ -1,123 +1,171 @@
-# Redis adapter
+# Redis adapter — v0.1
 
 [English](redis.md) | [日本語](redis.ja.md)
 
-`@mcp-usage-control/redis` is the first production-store adapter for `mcp-usage-control`.
+`mcp-usage-control-redis` is the distributed production-store adapter for `mcp-usage-control`.
 
-The current pre-alpha implementation is tested in CI with Redis 7 and Node.js 20/22. It uses the public `eval(script, { keys, arguments })` shape provided by node-redis; the workspace currently tests against `redis` 6.2.x.
+```console
+npm install mcp-usage-control-redis redis
+```
 
-## Atomicity model
+v0.1 is tested with Redis 7, node-redis 6.2.x, and Node.js 20/22.
 
-Admission is not implemented as `GET -> compare -> SET`. Redis-side Lua performs the state transition atomically:
+## Atomic multi-budget model
 
-1. reclaim a bounded batch of expired reservations for the target budget;
-2. clean a bounded batch of expired idempotency tombstones;
-3. reject a duplicate principal/operation ID;
-4. compare current usage with the budget limit;
-5. reserve units and create a pending lease.
+Admission is not `GET -> compare -> SET`, and multi-budget admission is not a client-side loop.
 
-`markLiable`, renewal and settlement are separate atomic Lua transitions. Settlement is idempotent for an identical replay and rejects a conflicting replay.
+One Lua script:
 
-## Pending and cost-liable expiry
+1. reclaims a bounded batch of expired leases exactly once per reservation;
+2. cleans a bounded batch of expired settled tombstones;
+3. rejects duplicate `(tenant, principal, tool, operation)` identity;
+4. reads every participating budget;
+5. returns denial without writes if any budget cannot admit;
+6. otherwise increments every budget and creates one pending reservation atomically.
 
-A new reservation is `pending`. If it expires before being marked cost-liable, Redis releases its reserved units and removes the operation record.
+`markLiable`, renewal, settlement, and expiry recovery also operate on the whole reservation, including every participating budget.
 
-Once `markLiable()` succeeds, expiry is conservative. Redis keeps the full reserved units charged, converts the record to settled with outcome `lease_expired_after_execution_started`, and retains replay protection through the normal tombstone mechanism.
+This prevents partial reservation/release when an operation participates in daily, monthly, tenant, or other shared budgets.
 
-This means a process crash after entering the metered execution boundary does not become an automatic refund. It also means the generic MCP adapter can over-account if the process dies after handler entry but before real provider cost occurs; that is the deliberate safe default.
+## v0.1 key model
+
+All transactional keys share one configurable Redis Cluster hash tag. With defaults:
+
+```text
+muc:{usage}:used          HASH budgetHash -> used units
+muc:{usage}:leases        ZSET reservationId -> active lease expiry
+muc:{usage}:reservations  HASH reservationId -> reservation record
+muc:{usage}:operations    HASH operationHash -> reservationId
+muc:{usage}:tombstones    ZSET operationHash -> settled replay expiry
+```
+
+A single global lease index means an expired multi-budget reservation is recovered once instead of being independently discovered through several budget indexes.
+
+Raw principal, tenant, operation, tool, and budget identifiers are not embedded directly into Redis key names. The logical operation tuple is encoded unambiguously and SHA-256 hashed; budget keys are hashed separately. Hashing reduces identifier exposure in key names but is not encryption.
+
+## Redis Cluster transaction domain
+
+All keys above intentionally use one hash slot so every Lua transition is valid on Redis Cluster without `CROSSSLOT` behavior.
+
+Correctness is prioritized over horizontal write distribution in v0.1. A future sharding design may provide several independent usage domains, but all budgets participating in one atomic admission must remain in one transaction domain.
+
+## Pending vs cost-liable expiry
+
+A reservation starts `pending`.
+
+- If it expires before `markLiable()`, Redis releases its reserved units from **every budget**, removes the active operation mapping, and allows the logical operation to be retried after recovery.
+- After `markLiable()`, expiry is conservative: every budget keeps the full reserved units, the reservation becomes settled with `lease_expired_after_execution_started`, and replay protection continues through the tombstone period.
+
+This prevents a process crash after entering the metered execution boundary from becoming a refund.
 
 ## Redis server time
 
-Lease creation, renewal, expiry checks and tombstone expiry use Redis server time from the Lua script itself. The adapter does not use application `Date.now()` for those transitions.
+Reserve, `markLiable`, renew, settle expiry checks, and tombstone expiry use Redis server `TIME` inside Lua. Application `Date.now()` is not used for those decisions.
 
-This avoids changing accounting behavior because two application instances have clock skew or because a request spends significant time in the network before Redis executes the script.
+This avoids accounting differences caused by application-instance clock skew or network delay between application-time capture and script execution.
 
-## Redis Cluster hash slot
+## Idempotency
 
-All transactional keys deliberately share one configurable hash tag. With the defaults, keys contain `{usage}`.
-
-This keeps reserve/mark-liable/renew/settle scripts valid on Redis Cluster and leaves room for future multi-budget transactions without `CROSSSLOT` failures. The trade-off is that the current design concentrates usage-control writes in one Redis Cluster slot.
-
-Correctness is the default. A future sharding strategy may allow multiple usage-control shards, but every budget participating in one atomic admission still needs a common transaction domain.
-
-## Key model
-
-Raw principal IDs, operation IDs, and budget keys are not embedded into Redis key names. Principal and operation IDs are first encoded as an unambiguous tuple and then SHA-256 hashed; budget keys are hashed separately.
-
-Conceptually, the state is:
+The logical operation scope is:
 
 ```text
-<prefix>:{<hashTag>}:budget:<budgetHash>:used
-<prefix>:{<hashTag>}:budget:<budgetHash>:pending
-<prefix>:{<hashTag>}:reservations
-<prefix>:{<hashTag>}:operations
-<prefix>:{<hashTag>}:tombstones
+(tenantId, principal.id, tool, operationId)
 ```
 
-Reservation records contain hashed operation identifiers, unit counts, lease expiry, state, and settlement outcome. Keep `outcome` values low-cardinality and non-sensitive.
+The tuple is hashed into the Redis operation key. Settled operations stay replay-protected for `idempotencyTtlMs`, default 24 hours.
 
-## Lease heartbeat and partitions
+Identical settlement replay is idempotent. A different actual-unit/outcome replay conflicts.
 
-The MCP adapter renews active leases by default while a single-round tool handler is running. Applications using core/Redis directly must renew long-running reservations themselves.
+Tombstone cleanup is lazy and bounded. Expired tombstones may remain longer if no admissions occur; that can delay reuse but does not create extra quota.
 
-A network partition can still outlive a distributed lease. While Redis is unavailable, adapter calls propagate the storage error rather than failing open for new admission. The generic heartbeat does not fence arbitrary upstream resources. Because execution-started leases are cost-liable, expiry charges conservatively instead of refunding them.
+## Lease heartbeat and network partitions
 
-## Idempotency tombstones
+The MCP adapter renews a wrapped active lease by default. Core/Redis direct users must renew long-running work themselves.
 
-Settled operation IDs remain protected from replay for `idempotencyTtlMs` (24 hours by default). Cleanup is lazy and batch-limited, so expired state may remain longer when no new admissions arrive. That is safe: stale state can delay reuse but does not grant extra quota.
+A network partition can outlive the distributed lease. Redis errors propagate rather than fail open. The generic heartbeat is not upstream-resource fencing. Once the lease is cost-liable, expiry is intentionally conservative.
+
+Applications that must halt work immediately when lease ownership is uncertain need provider-specific cancellation/fencing.
 
 ## Lazy cleanup backlog
 
-`cleanupBatchSize` bounds the amount of expiry/tombstone work done by one admission. If a budget accumulates more expired reservations than one cleanup batch, stale reserved units can temporarily cause a conservative denial until later admissions drain the backlog.
+`cleanupBatchSize` bounds expired lease/tombstone work per new admission. If stale state exceeds one batch, some stale reservations may survive until later admissions invoke cleanup.
 
-This is an availability trade-off, not a quota-bypass path. Operators with unusually high crash/expiry volume should size `cleanupBatchSize` appropriately and monitor stale-state pressure. A future implementation may add dedicated maintenance/reconciliation without weakening atomic admission.
+Because v0.1 uses a global lease index, cleanup backlog can conservatively delay capacity recovery across the usage domain. This is an availability trade-off, not a quota bypass.
 
-## Budget key lifecycle
+Operators with high crash/abandonment volume should monitor stale-state pressure and tune `cleanupBatchSize`. Dedicated reconciliation is a possible future addition.
 
-The adapter does **not** guess when a budget window should reset. The policy should use window-qualified keys, for example:
+## Budget windows and retention
+
+The adapter does not infer reset dates. Use window-qualified budget keys:
 
 ```text
-month:user-123:2026-08
-day:user-123:2026-08-10
+day:user-42:2026-08-10
+month:user-42:2026-08
+month:tenant-org-7:2026-08
 ```
 
-Changing the budget key starts a new accounting window. Old `used` keys are intentionally not given a potentially unsafe automatic TTL by the adapter. Operators with many historical windows should apply a retention policy appropriate to their own budget-key scheme.
+Changing the key starts a new accounting bucket. v0.1 does not automatically TTL `used` budget fields because a generic retention policy could erase still-valid accounting state. Applications should implement retention only when their own window lifecycle makes deletion safe.
 
 ## Atomicity is not durability
 
-The Lua scripts provide atomic state transitions inside Redis. They do **not** by themselves guarantee that an acknowledged write survives every process crash, host failure, failover, or persistence configuration.
+Lua gives atomic Redis transitions. It does **not** mean an acknowledged write survives every crash/failover configuration.
 
-For production enforcement, choose Redis persistence and HA settings that match the application's tolerance for lost accounting state. In particular, evaluate:
+For production enforcement, explicitly review:
 
-- whether persistence is enabled;
-- RDB/AOF policy and acceptable loss window;
-- replication and failover behavior;
+- persistence enabled/disabled;
+- AOF/RDB configuration and acceptable loss window;
+- replication/failover behavior;
 - backup/recovery procedures;
-- whether the chosen Redis service can lose an acknowledged write during failover.
+- acknowledged-write-loss behavior of the managed Redis service.
 
-If the business requires a stronger durable financial ledger, treat Redis usage state as the enforcement layer and reconcile to a separate durable ledger/event system. Do not infer financial-grade durability merely from Lua atomicity.
+For financial-grade durable accounting, use Redis as the enforcement layer and reconcile usage to a separate durable ledger/event stream.
 
-## Failure behavior
+## Acknowledgement ambiguity
 
-Redis errors are propagated rather than converted to an allow decision. An admission or mark-liable write can succeed even if the client loses the acknowledgement; retrying the same logical invocation with the same operation ID prevents a second reservation, and a mark-liable ambiguity remains conservative on expiry.
+A Redis write can commit while the client loses its acknowledgement.
 
-Settlement has the same acknowledgement ambiguity. Identical settlement replay is idempotent; a replay with different actual units or outcome is rejected as a conflict.
+v0.1 behavior is conservative:
 
-CI fault-injection tests exercise real Redis behavior for 100-way concurrent admission, pending expiry recovery, liable crash recovery, renewal, settlement replay/conflict, tombstone expiry, lost acknowledgements after writes, and independence from the application clock.
+- admission ACK loss -> retrying the same logical operation is blocked as duplicate; a different operation observes the reserved capacity;
+- `markLiable` ACK loss -> if the write committed, later expiry remains cost-liable and charges conservatively;
+- settlement ACK loss -> identical settlement replay is idempotent; conflicting replay fails.
+
+CI fault-injection tests cover these cases against real Redis.
 
 ## Configuration
 
-- `prefix`: key prefix for usage-control state. Redis hash-tag braces are rejected.
-- `hashTag`: the hash tag used to keep transactional keys in one Redis Cluster slot.
-- `cleanupBatchSize`: maximum expired reservation/tombstone cleanup work performed by one reserve call.
-- `idempotencyTtlMs`: retention period for settled operation replay protection.
+```ts
+interface RedisUsageStoreOptions {
+  prefix?: string;             // default "muc"
+  hashTag?: string;            // default "usage"
+  cleanupBatchSize?: number;   // default 256
+  idempotencyTtlMs?: number;   // default 86_400_000 (24h)
+}
+```
 
-Processes participating in the same logical usage domain must use compatible prefix/hash-tag settings. Different settings create separate accounting state.
+Processes participating in one logical usage domain must use the same compatible prefix/hash-tag configuration.
+
+## Tested invariants
+
+CI uses real Redis 7 for:
+
+- 100 concurrent callers with one remaining unit -> exactly one admission;
+- 100 different users sharing one tenant budget -> exactly one admission;
+- multi-budget denial leaves no partial reservation;
+- unused settlement releases all participating budgets;
+- pending/liable expiry across all budgets;
+- lease renewal;
+- scoped replay protection and tombstone expiry;
+- settlement replay/conflict;
+- lost admission / mark-liable / settlement acknowledgements;
+- Redis server-time independence from the application clock;
+- Redis unavailable -> fail closed for admission.
 
 ## Current limits
 
-- one budget per reservation; atomic multi-budget admission is tracked separately;
-- settlement requires `actualUnits <= reservedUnits`;
-- cleanup is lazy and bounded per admission;
-- Redis durability policy is deployment-specific, not enforced by the adapter;
+- `actualUnits <= reservedUnits`;
+- all budgets in one reservation consume the same quoted/actual unit count;
+- one Redis hash slot per configured usage-control transaction domain;
+- cleanup is lazy/bounded;
+- Redis durability policy remains deployment-specific;
 - no built-in billing, payment, authentication, or analytics backend.
