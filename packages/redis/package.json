@@ -14,7 +14,18 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/scripts.js",
+    "dist/scripts.js.map",
+    "dist/scripts.d.ts",
+    "dist/scripts.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": { "node": ">=20" },
   "repository": {
     "type": "git",

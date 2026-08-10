@@ -100,9 +100,42 @@ jobs:
             grep -qx 'package/dist/index.d.ts' <<<"$listing"
             grep -qx 'package/README.md' <<<"$listing"
             grep -qx 'package/LICENSE' <<<"$listing"
-            ! grep -q '^package/src/' <<<"$listing"
-            ! tar -xOf "$archive" package/package.json | grep -q 'workspace:'
+            if grep -Eq '^package/(src/|dist/.*(\.test\.|\.integration\.test\.))' <<<"$listing"; then
+              echo "source or compiled test files leaked into $archive" >&2
+              printf '%s\n' "$listing" >&2
+              exit 1
+            fi
+            if tar -xOf "$archive" package/package.json | grep -q 'workspace:'; then
+              echo "workspace protocol leaked into $archive" >&2
+              exit 1
+            fi
           done
+
+      - name: Install tarballs in a clean consumer project
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/muc-consumer
+          mkdir -p /tmp/muc-consumer
+          cd /tmp/muc-consumer
+          npm init -y >/dev/null
+          npm install \
+            "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz" \
+            "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz" \
+            "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz" \
+            @modelcontextprotocol/server@2.0.0 \
+            redis@6.2.0 \
+            --ignore-scripts
+          node --input-type=module <<'NODE'
+          import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
+          import { protectTool } from 'mcp-usage-control-mcp';
+          import { RedisUsageStore } from 'mcp-usage-control-redis';
+          if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore].every(Boolean)) {
+            throw new Error('public package import smoke test failed');
+          }
+          NODE
 
       - name: Publish packages in dependency order
         shell: bash
@@ -111,11 +144,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # A brand-new npm package cannot have a Trusted Publisher configured
-          # before it exists. If an NPM_TOKEN repository secret is present, use
-          # it only as the bootstrap credential. Otherwise leave NODE_AUTH_TOKEN
-          # unset so npm can authenticate through GitHub OIDC for packages whose
-          # Trusted Publisher is already configured.
           if [[ -n "${NPM_TOKEN:-}" ]]; then
             export NODE_AUTH_TOKEN="$NPM_TOKEN"
           else
@@ -129,9 +157,6 @@ jobs:
               echo "${name}@${VERSION} is already published; skipping"
               return 0
             fi
-            # Provenance also works for the one-time token bootstrap from this
-            # public GitHub-hosted workflow; OIDC Trusted Publishing adds it
-            # automatically on later releases.
             npm publish "$archive" --access public --provenance
           }
 
