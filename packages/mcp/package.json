@@ -1,0 +1,22 @@
+{
+  "name": "@mcp-usage-control/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcp-usage-control/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/server": "^2.0.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server": "^2.0.0"
+  }
+}
