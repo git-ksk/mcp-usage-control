@@ -1,5 +1,10 @@
 import type { DurableObjectState } from 'cloudflare:workers';
 import {
+  pruneCloudflareBudgets,
+  type CloudflarePruneBudgetsCommand,
+  type CloudflarePruneBudgetsReply,
+} from './maintenance-protocol.js';
+import {
   lookupCloudflareReservation,
   type CloudflareLookupCommand,
   type CloudflareLookupReply,
@@ -21,5 +26,12 @@ export class UsageControlDurableObject extends BaseUsageControlDurableObject {
   /** Read-only lookup for explicit lost-reserve-ACK reconciliation. */
   async lookup(command: CloudflareLookupCommand): Promise<CloudflareLookupReply> {
     return lookupCloudflareReservation(this.ctx.storage, command);
+  }
+
+  /** Explicit bounded historical budget maintenance; never infers window age. */
+  async pruneBudgets(
+    command: CloudflarePruneBudgetsCommand,
+  ): Promise<CloudflarePruneBudgetsReply> {
+    return pruneCloudflareBudgets(this.ctx.storage, command);
   }
 }

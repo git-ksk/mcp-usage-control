@@ -85,6 +85,9 @@ jobs:
           grep -qx 'package/dist/reconciliation.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/reconciliation.d.ts' <<<"$cloudflare_listing"
           grep -qx 'package/dist/reconciliation-protocol.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/maintenance.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/maintenance.d.ts' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/maintenance-protocol.js' <<<"$cloudflare_listing"
       - name: Install tarballs in a clean consumer project
         shell: bash
         run: |
@@ -110,6 +113,10 @@ jobs:
             createReconciliableCloudflareUsageStoreGateway,
             reconcileRemoteCloudflareReserve,
           } from 'mcp-usage-control-cloudflare/reconciliation';
+          import {
+            createCloudflareBudgetMaintenanceGateway,
+            pruneRemoteCloudflareHistoricalBudgets,
+          } from 'mcp-usage-control-cloudflare/maintenance';
           if (![
             MemoryUsageStore,
             UsageControl,
@@ -119,6 +126,8 @@ jobs:
             RemoteCloudflareUsageStore,
             createReconciliableCloudflareUsageStoreGateway,
             reconcileRemoteCloudflareReserve,
+            createCloudflareBudgetMaintenanceGateway,
+            pruneRemoteCloudflareHistoricalBudgets,
           ].every(Boolean)) {
             throw new Error('public package import smoke test failed');
           }

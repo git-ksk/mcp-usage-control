@@ -22,6 +22,11 @@
       "types": "./dist/reconciliation.d.ts",
       "import": "./dist/reconciliation.js",
       "default": "./dist/reconciliation.js"
+    },
+    "./maintenance": {
+      "types": "./dist/maintenance.d.ts",
+      "import": "./dist/maintenance.js",
+      "default": "./dist/maintenance.js"
     }
   },
   "files": [
@@ -49,6 +54,14 @@
     "dist/reconciliation-protocol.js.map",
     "dist/reconciliation-protocol.d.ts",
     "dist/reconciliation-protocol.d.ts.map",
+    "dist/maintenance.js",
+    "dist/maintenance.js.map",
+    "dist/maintenance.d.ts",
+    "dist/maintenance.d.ts.map",
+    "dist/maintenance-protocol.js",
+    "dist/maintenance-protocol.js.map",
+    "dist/maintenance-protocol.d.ts",
+    "dist/maintenance-protocol.d.ts.map",
     "README.md",
     "LICENSE"
   ],

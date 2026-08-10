@@ -27,12 +27,15 @@ The HTTP gateway has no allow-all authentication mode: callers must provide an a
 
 For applications that need to recover an ambiguous `reserve()` after a timeout/network failure, the optional `mcp-usage-control-cloudflare/reconciliation` subpath provides an authenticated read-only lookup. Use `createReconciliableCloudflareUsageStoreGateway()` and `reconcileRemoteCloudflareReserve()` explicitly; do not hide ambiguous reserve results behind generic retry middleware.
 
+Historical window cleanup is also explicit. The optional `mcp-usage-control-cloudflare/maintenance` subpath exposes a separate authenticated endpoint that prunes only application-selected historical budget keys in bounded batches. Protected/current keys and budgets referenced by active reservations are not deleted.
+
 ### Cost behavior
 
 The adapter does not schedule alarms or intentionally keep a Durable Object active. Expiry/tombstone cleanup is lazy and bounded on subsequent operations. This minimizes background activity but means a large stale-state backlog can conservatively delay capacity recovery.
 
 - [Cloudflare adapter guide](../../docs/cloudflare.md)
 - [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.md)
+- [Historical budget pruning](../../docs/cloudflare-budget-pruning.md)
 - [SQLite schema migrations](../../docs/cloudflare-schema-migrations.md)
 - [Observability](../../docs/observability.md)
 - [Architecture](../../docs/architecture.md)
@@ -61,12 +64,15 @@ HTTP gatewayにallow-all authentication defaultはありません。application�
 
 `reserve()` のtimeout / network failure後にambiguous resultを復元する必要があるapplication向けに、optionalな `mcp-usage-control-cloudflare/reconciliation` subpathがauthenticated read-only lookupを提供します。`createReconciliableCloudflareUsageStoreGateway()` と `reconcileRemoteCloudflareReserve()` を明示的に利用し、ambiguous reserveをgeneric retry middlewareで隠さないでください。
 
+historical window cleanupも明示操作です。optionalな `mcp-usage-control-cloudflare/maintenance` subpathは、applicationがhistoricalとして選択したbudget keyだけをbounded batchでpruneする別authenticated endpointを提供します。protected/current keyとactive reservationが参照中のbudgetは削除しません。
+
 ### Cost behavior
 
 adapterはalarmをscheduleせず、Durable Objectを意図的に常駐させません。expiry / tombstone cleanupは後続operation時のlazy / bounded cleanupです。background activityを抑える代わりに、大量のstale stateがある場合はcapacity recoveryが保守的に遅れる可能性があります。
 
 - [Cloudflare adapter guide](../../docs/cloudflare.ja.md)
 - [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.ja.md)
+- [Historical budget pruning](../../docs/cloudflare-budget-pruning.ja.md)
 - [SQLite schema migration](../../docs/cloudflare-schema-migrations.ja.md)
 - [Observability](../../docs/observability.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
