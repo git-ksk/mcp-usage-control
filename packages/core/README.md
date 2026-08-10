@@ -1,12 +1,14 @@
-# @mcp-usage-control/core
+# mcp-usage-control
 
-> Pre-alpha. This workspace package is currently private and not published to npm.
+Core package for concurrency-safe MCP usage enforcement. MCP and storage vendor independent.
+
+```console
+npm install mcp-usage-control
+```
 
 ## English
 
-Provider- and MCP-independent usage-control primitives: policy quoting, atomic reservation contracts, pending -> cost-liable transitions, renewable leases, outcome-aware settlement, idempotency, and the in-memory reference store.
-
-The intended lifecycle is:
+The v0.1 core provides policy quoting, **atomic multi-budget admission**, pending -> cost-liable transitions, renewable leases, explicit settlement, scoped idempotency, and `MemoryUsageStore` as the reference implementation.
 
 ```text
 reserve -> markLiable -> execute -> settle
@@ -14,19 +16,19 @@ reserve -> markLiable -> execute -> settle
              |--- renew ---|
 ```
 
-Pending expiry may release capacity; cost-liable expiry is conservative and retains the full reservation so a crash after execution starts cannot become a refund.
+A quote can apply several budgets to one invocation. Every budget reserves atomically or none does. Replay protection is scoped by `(tenantId, principal.id, tool, operationId)` and settled tombstones default to 24 hours in the reference store.
+
+Pending expiry releases every participating budget. Cost-liable expiry conservatively keeps the full charge so a crash after execution starts cannot become a refund.
 
 - [Getting started](../../docs/getting-started.md)
 - [API reference](../../docs/api-reference.md)
 - [Architecture](../../docs/architecture.md)
 
-Keep authentication, billing providers, MCP SDKs, and storage-specific implementation details outside this package.
+Authentication, payments/billing, MCP SDK integration, and production storage belong outside this package.
 
 ## 日本語
 
-provider / MCP非依存のusage-control primitiveを提供します。policy quote、atomic reservation contract、pending -> cost-liable transition、renewable lease、outcome-aware settlement、idempotency、in-memory reference storeを含みます。
-
-基本lifecycle:
+v0.1 coreはpolicy quote、**atomic multi-budget admission**、pending -> cost-liable transition、renewable lease、explicit settlement、scoped idempotency、reference implementationの `MemoryUsageStore` を提供します。
 
 ```text
 reserve -> markLiable -> execute -> settle
@@ -34,10 +36,12 @@ reserve -> markLiable -> execute -> settle
              |--- renew ---|
 ```
 
-pending expiryはcapacityを解放できますが、cost-liable expiryはfull reservationを保守的に維持し、execution開始後のcrashがrefundになることを防ぎます。
+1 invocationへ複数budgetを適用でき、全budgetをatomicにreserveするか、どれもreserveしません。replay protectionは `(tenantId, principal.id, tool, operationId)` 単位で、reference storeのsettled tombstone defaultは24時間です。
+
+pending expiryは全budgetを解放し、cost-liable expiryはexecution開始後crashがrefundにならないようfull chargeを保守的に維持します。
 
 - [Getting started](../../docs/getting-started.ja.md)
 - [API reference](../../docs/api-reference.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 
-authentication、billing provider、MCP SDK、storage-specific implementation detailはこのpackageの責務外です。
+authentication、payment / billing、MCP SDK integration、production storageはこのpackageの責務外です。
