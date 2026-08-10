@@ -149,14 +149,13 @@ Reference implementation for tests and local development. It supports pending/co
 
 ## `@mcp-usage-control/mcp`
 
-### `protectTool(options, handler)`
-
-Wraps a **single-round** `@modelcontextprotocol/server` v2 tool handler with reserve, cost-liable activation, heartbeat, execution classification, and settlement.
+### `ProtectToolOptions<TArgs, TResult>`
 
 ```ts
 interface ProtectToolOptions<TArgs, TResult> {
   control: UsageControl;
   tool: string;
+  noInput?: boolean;
   principal(ctx: ServerContext): Principal | Promise<Principal>;
   operationId(args: TArgs, ctx: ServerContext): string | Promise<string>;
   leaseHeartbeat?: boolean;
@@ -181,20 +180,31 @@ interface ProtectToolOptions<TArgs, TResult> {
 }
 ```
 
-The wrapped application handler uses the adapter-level shape `(args, ctx)`. For an SDK tool with no input schema, `protectTool()` normalizes the SDK's native `(ctx)` invocation and passes `undefined` as `args` to the operation-ID hook, cost hooks, policy request, and wrapped handler.
+For a tool with no input schema, use `noInput: true`. For a tool with an input schema, omit `noInput` or set it to false.
 
-### `ProtectedToolHandler<TArgs, TResult>`
+The explicit flag is intentional: the SDK's public type models no-input callbacks as `(ctx)`, but current dispatch paths may invoke them at runtime as `({}, ctx)`. `{}` is also valid real input for an empty object schema, so the adapter does not guess from runtime values.
 
-The function returned by `protectTool()` accepts both MCP SDK v2 callback forms:
+In `noInput: true` mode, the policy request, hooks, operation-ID callback, and wrapped application handler receive `args === undefined` and the real `ServerContext`.
+
+### `protectTool(options, handler)`
+
+Wraps a **single-round** `@modelcontextprotocol/server` v2 tool handler with reserve, cost-liable activation, heartbeat, execution classification, and settlement.
+
+The public overloads are conceptually:
 
 ```ts
-interface ProtectedToolHandler<TArgs, TResult> {
-  (ctx: ServerContext): Promise<TResult>;
-  (args: TArgs, ctx: ServerContext): Promise<TResult>;
-}
+protectTool<TResult>(
+  options: ProtectToolOptions<undefined, TResult> & { noInput: true },
+  handler: (args: undefined, ctx: ServerContext) => TResult | Promise<TResult>,
+): (ctx: ServerContext) => Promise<TResult>;
+
+protectTool<TArgs, TResult>(
+  options: ProtectToolOptions<TArgs, TResult> & { noInput?: false },
+  handler: (args: TArgs, ctx: ServerContext) => TResult | Promise<TResult>,
+): (args: TArgs, ctx: ServerContext) => Promise<TResult>;
 ```
 
-This exists because the SDK invokes no-input-schema tools as `(ctx)` and tools with an input schema as `(args, ctx)`.
+At runtime the no-input overload also tolerates the SDK dispatch form `({}, ctx)` and normalizes it internally.
 
 Behavior:
 
