@@ -100,8 +100,15 @@ jobs:
             grep -qx 'package/dist/index.d.ts' <<<"$listing"
             grep -qx 'package/README.md' <<<"$listing"
             grep -qx 'package/LICENSE' <<<"$listing"
-            ! grep -q '^package/src/' <<<"$listing"
-            ! tar -xOf "$archive" package/package.json | grep -q 'workspace:'
+            if grep -Eq '^package/(src/|dist/.*(\.test\.|\.integration\.test\.))' <<<"$listing"; then
+              echo "source or compiled test files leaked into $archive" >&2
+              printf '%s\n' "$listing" >&2
+              exit 1
+            fi
+            if tar -xOf "$archive" package/package.json | grep -q 'workspace:'; then
+              echo "workspace protocol leaked into $archive" >&2
+              exit 1
+            fi
           done
 
       - name: Publish packages in dependency order
@@ -129,9 +136,6 @@ jobs:
               echo "${name}@${VERSION} is already published; skipping"
               return 0
             fi
-            # Provenance also works for the one-time token bootstrap from this
-            # public GitHub-hosted workflow; OIDC Trusted Publishing adds it
-            # automatically on later releases.
             npm publish "$archive" --access public --provenance
           }
 
