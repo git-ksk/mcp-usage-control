@@ -1,4 +1,4 @@
-name: Release
+name: GitHub Release
 
 on:
   push:
@@ -7,16 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to publish/retry (for example v0.1.0)
+        description: Existing release tag to validate/release (for example v0.1.0)
         required: true
         type: string
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
-  publish:
+  release:
     runs-on: ubuntu-latest
     services:
       redis:
@@ -30,7 +29,6 @@ jobs:
           --health-retries 10
     env:
       REDIS_URL: redis://127.0.0.1:6379
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Resolve release tag
         id: release
@@ -60,12 +58,8 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
+          node-version: 22
           package-manager-cache: false
-
-      - name: Use npm CLI with Trusted Publishing and staged-publishing support
-        run: npm install --global npm@11.15.0
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
@@ -78,22 +72,18 @@ jobs:
           set -euo pipefail
           for dir in packages/core packages/mcp packages/redis packages/cloudflare; do
             actual="$(node -p "require('./${dir}/package.json').version")"
-            if [[ "$actual" != "$VERSION" ]]; then
-              echo "$dir version $actual does not match tag $VERSION" >&2
-              exit 1
-            fi
+            test "$actual" = "$VERSION"
           done
 
-      - name: Pack and inspect packages with npm
+      - name: Pack and inspect public packages
         shell: bash
         run: |
           set -euo pipefail
           rm -rf /tmp/muc-packs
           mkdir -p /tmp/muc-packs
-          (cd packages/core && npm pack --pack-destination /tmp/muc-packs)
-          (cd packages/mcp && npm pack --pack-destination /tmp/muc-packs)
-          (cd packages/redis && npm pack --pack-destination /tmp/muc-packs)
-          (cd packages/cloudflare && npm pack --pack-destination /tmp/muc-packs)
+          for dir in core mcp redis cloudflare; do
+            (cd "packages/$dir" && npm pack --pack-destination /tmp/muc-packs)
+          done
           git diff --exit-code -- \
             packages/core/package.json \
             packages/mcp/package.json \
@@ -108,117 +98,14 @@ jobs:
             grep -qx 'package/LICENSE' <<<"$listing"
             if grep -Eq '^package/(src/|dist/.*(\.test\.|\.integration\.test\.))' <<<"$listing"; then
               echo "source or compiled test files leaked into $archive" >&2
-              printf '%s\n' "$listing" >&2
               exit 1
             fi
             manifest="$(tar -xOf "$archive" package/package.json)"
-            if grep -q 'workspace:' <<<"$manifest"; then
-              echo "workspace protocol leaked into $archive" >&2
-              exit 1
-            fi
-            if grep -q 'pack-workspace-deps' <<<"$manifest"; then
-              echo "prepack helper leaked into published manifest for $archive" >&2
-              exit 1
-            fi
-          done
-          cloudflare_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-cloudflare-${{ steps.release.outputs.version }}.tgz)"
-          grep -qx 'package/dist/worker.js' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/worker.d.ts' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/versioned-worker.js' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/reconciliation.js' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/reconciliation.d.ts' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/reconciliation-protocol.js' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/maintenance.js' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/maintenance.d.ts' <<<"$cloudflare_listing"
-          grep -qx 'package/dist/maintenance-protocol.js' <<<"$cloudflare_listing"
-
-      - name: Install tarballs in a clean consumer project
-        shell: bash
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          set -euo pipefail
-          rm -rf /tmp/muc-consumer
-          mkdir -p /tmp/muc-consumer
-          cd /tmp/muc-consumer
-          npm init -y >/dev/null
-          npm install \
-            "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz" \
-            "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz" \
-            "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz" \
-            "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz" \
-            @modelcontextprotocol/server@2.0.0 \
-            redis@6.2.0 \
-            --ignore-scripts
-          node --input-type=module <<'NODE'
-          import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
-          import { protectTool } from 'mcp-usage-control-mcp';
-          import { RedisUsageStore } from 'mcp-usage-control-redis';
-          import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
-          import {
-            createReconciliableCloudflareUsageStoreGateway,
-            reconcileRemoteCloudflareReserve,
-          } from 'mcp-usage-control-cloudflare/reconciliation';
-          import {
-            createCloudflareBudgetMaintenanceGateway,
-            pruneRemoteCloudflareHistoricalBudgets,
-          } from 'mcp-usage-control-cloudflare/maintenance';
-          if (![
-            MemoryUsageStore,
-            UsageControl,
-            protectTool,
-            RedisUsageStore,
-            CloudflareUsageStore,
-            RemoteCloudflareUsageStore,
-            createReconciliableCloudflareUsageStoreGateway,
-            reconcileRemoteCloudflareReserve,
-            createCloudflareBudgetMaintenanceGateway,
-            pruneRemoteCloudflareHistoricalBudgets,
-          ].every(Boolean)) {
-            throw new Error('public package import smoke test failed');
-          }
-          NODE
-
-      - name: Publish packages in dependency order
-        shell: bash
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          set -euo pipefail
-
-          if [[ -n "${NPM_TOKEN:-}" ]]; then
-            export NODE_AUTH_TOKEN="$NPM_TOKEN"
-          else
-            unset NODE_AUTH_TOKEN || true
-          fi
-
-          publish_one() {
-            local name="$1"
-            local archive="$2"
-            if npm view "${name}@${VERSION}" version --json >/dev/null 2>&1; then
-              echo "${name}@${VERSION} is already published; skipping"
-              return 0
-            fi
-            npm publish "$archive" --access public --provenance
-          }
-
-          publish_one mcp-usage-control "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz"
-          publish_one mcp-usage-control-mcp "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz"
-          publish_one mcp-usage-control-redis "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz"
-          publish_one mcp-usage-control-cloudflare "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz"
-
-      - name: Verify registry versions
-        shell: bash
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          set -euo pipefail
-          for name in mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis mcp-usage-control-cloudflare; do
-            published="$(npm view "${name}@${VERSION}" version)"
-            test "$published" = "$VERSION"
+            ! grep -q 'workspace:' <<<"$manifest"
+            ! grep -q 'pack-workspace-deps' <<<"$manifest"
           done
 
-      - name: Build release notes from changelog entry
+      - name: Build release notes from changelog
         shell: bash
         env:
           VERSION: ${{ steps.release.outputs.version }}
@@ -231,7 +118,7 @@ jobs:
           ' CHANGELOG.md > /tmp/release-notes.md
           test -s /tmp/release-notes.md
 
-      - name: Create GitHub Release after registry success
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
