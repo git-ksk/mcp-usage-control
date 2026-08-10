@@ -3,11 +3,18 @@ import type { ServerContext } from '@modelcontextprotocol/server';
 import {
   MemoryUsageStore,
   UsageControl,
+  type MarkLiableInput,
+  type MarkLiableResult,
   type SettleInput,
   type SettlementResult,
   type UsagePolicy,
 } from '@mcp-usage-control/core';
-import { protectTool, UsageSettlementError } from './index.js';
+import {
+  protectTool,
+  UnsupportedMcpUsageFlowError,
+  UsageClassificationError,
+  UsageSettlementError,
+} from './index.js';
 
 const ctx = {} as ServerContext;
 
@@ -26,12 +33,18 @@ class FailingSettlementStore extends MemoryUsageStore {
   }
 }
 
+class FailingMarkLiableStore extends MemoryUsageStore {
+  override async markLiable(_input: MarkLiableInput): Promise<MarkLiableResult> {
+    throw new Error('mark-liable unavailable');
+  }
+}
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe('protectTool', () => {
-  it('charges the full reservation on an unclassified error', async () => {
+  it('charges the full reservation on an unclassified thrown error', async () => {
     const control = new UsageControl(new MemoryUsageStore(), policy);
     const protectedHandler = protectTool(
       {
@@ -78,6 +91,122 @@ describe('protectTool', () => {
       args: {},
     });
     expect(next.allowed).toBe(true);
+  });
+
+  it('treats MCP isError results as tool errors, not success', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const toolErrorUnits = vi.fn(() => 0);
+    const successUnits = vi.fn(() => 1);
+    const result = { content: [{ type: 'text', text: 'not found' }], isError: true };
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'read_item',
+        principal: () => ({ id: 'user-1' }),
+        operationId: () => 'op-a',
+        toolErrorUnits,
+        successUnits,
+      },
+      async () => result,
+    );
+
+    await expect(protectedHandler({}, ctx)).resolves.toBe(result);
+    expect(toolErrorUnits).toHaveBeenCalledOnce();
+    expect(successUnits).not.toHaveBeenCalled();
+    const next = await control.reserve({
+      operationId: 'op-b',
+      principal: { id: 'user-1' },
+      tool: 'read_item',
+      args: {},
+    });
+    expect(next.allowed).toBe(true);
+  });
+
+  it('charges the full reservation if success cost classification throws', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        principal: () => ({ id: 'user-1' }),
+        operationId: () => 'op-a',
+        successUnits: () => {
+          throw new Error('classifier bug');
+        },
+      },
+      async () => 'ok',
+    );
+
+    await expect(protectedHandler({}, ctx)).rejects.toBeInstanceOf(UsageClassificationError);
+    const next = await control.reserve({
+      operationId: 'op-b',
+      principal: { id: 'user-1' },
+      tool: 'expensive_tool',
+      args: {},
+    });
+    expect(next).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+  });
+
+  it('charges the full reservation if a classifier returns invalid units', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        principal: () => ({ id: 'user-1' }),
+        operationId: () => 'op-a',
+        successUnits: () => -1,
+      },
+      async () => 'ok',
+    );
+
+    await expect(protectedHandler({}, ctx)).rejects.toBeInstanceOf(UsageClassificationError);
+    const next = await control.reserve({
+      operationId: 'op-b',
+      principal: { id: 'user-1' },
+      tool: 'expensive_tool',
+      args: {},
+    });
+    expect(next).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+  });
+
+  it('rejects input_required multi-round results instead of mis-accounting them', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'confirm_then_write',
+        principal: () => ({ id: 'user-1' }),
+        operationId: () => 'op-a',
+      },
+      async () => ({ resultType: 'input_required', inputRequests: {} }),
+    );
+
+    await expect(protectedHandler({}, ctx)).rejects.toBeInstanceOf(UnsupportedMcpUsageFlowError);
+    const next = await control.reserve({
+      operationId: 'op-b',
+      principal: { id: 'user-1' },
+      tool: 'confirm_then_write',
+      args: {},
+    });
+    expect(next).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+  });
+
+  it('does not enter the handler if marking the reservation cost-liable fails', async () => {
+    const control = new UsageControl(new FailingMarkLiableStore(), policy);
+    const handler = vi.fn(async () => 'ok');
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        principal: () => ({ id: 'user-1' }),
+        operationId: () => 'op-a',
+      },
+      handler,
+    );
+
+    await expect(protectedHandler({}, ctx)).rejects.toThrow('mark-liable unavailable');
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('does not reclassify or retry an ambiguous settlement failure', async () => {
