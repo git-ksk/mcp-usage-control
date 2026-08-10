@@ -4,9 +4,7 @@
 
 `mcp-usage-control-mcp` adapts the core lifecycle to **single-round** tool handlers from `@modelcontextprotocol/server` v2.
 
-```console
-npm install mcp-usage-control-mcp @modelcontextprotocol/server
-```
+> **Current distribution status:** the adapter is not published to npm yet. Build/install the local core + MCP tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `@modelcontextprotocol/server@2.0.0`.
 
 The adapter does not authenticate callers or decide subscriptions. The application must derive a trusted `Principal` and a suitable logical `operationId`.
 
@@ -71,6 +69,12 @@ reserve -> markLiable -> heartbeat -> handler -> stop heartbeat -> classify -> s
 ```
 
 The liability boundary is immediately before application handler entry. The generic adapter cannot know a provider-specific point where cost actually begins, so it chooses a conservative boundary. Use the core lifecycle directly if the application needs a later, provider-aware `markLiable()` point.
+
+## Observability
+
+The MCP adapter does not define a second telemetry system. Configure a provider-neutral `UsageObserver` on the `UsageControl` used by `protectTool()`; reserve/denial/settlement/error events then follow the same lifecycle as direct core calls. If the store is Redis, pass the same observer to `RedisUsageStore` to include expiry-recovery events.
+
+Tool arguments are not copied into usage events automatically. See [Observability](observability.md) for privacy, cardinality, metadata, and delivery semantics.
 
 ## Principal trust
 

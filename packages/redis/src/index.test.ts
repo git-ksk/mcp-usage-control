@@ -194,10 +194,16 @@ integration('RedisUsageStore', () => {
     });
   });
 
-  it('does not use the application clock for lease expiry calculations', async () => {
+  it('does not use the application clock for Redis lease expiry calculations', async () => {
     const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => { throw new Error('application clock must not be used by RedisUsageStore'); });
-    const control = new UsageControl(new RedisUsageStore(client), policy(1, 200));
-    expect((await control.reserve(request('op-a'))).allowed).toBe(true);
+    const store = new RedisUsageStore(client);
+    const result = await store.reserve({
+      request: request('op-a'),
+      units: 1,
+      budgets: [{ key: 'month:user-1:2026-08', limit: 1 }],
+      ttlMs: 200,
+    });
+    expect(result.accepted).toBe(true);
     expect(dateNow).not.toHaveBeenCalled();
   });
 

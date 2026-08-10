@@ -41,9 +41,9 @@ reservationは最初 `pending` です。metered execution直前に `cost-liable`
 
 ## Packages
 
-- **`mcp-usage-control`** — core policy、atomic admission contract、renewable lease、settlement、idempotency、in-memory reference store。
+- **`mcp-usage-control`** — core policy、atomic admission contract、renewable lease、settlement、idempotency、provider-neutral observability hook、in-memory reference store。
 - **`mcp-usage-control-mcp`** — `@modelcontextprotocol/server` v2 single-round tool handler adapter。
-- **`mcp-usage-control-redis`** — LuaとRedis server timeを使うatomic Redis store。
+- **`mcp-usage-control-redis`** — LuaとRedis server timeを使うatomic Redis store。optionalなexpiry-recovery observabilityにも対応。
 
 3 packageともESM / Node.js 20+です。
 
@@ -87,6 +87,32 @@ replay protectionは次のtuple単位です。
 同じlogical invocationのretryではstableな `operationId` を使ってください。これはidempotency inputであり、authentication / authorization credentialではありません。
 
 settled operationは有限期間tombstoneとしてreplay protectionされます。`MemoryUsageStore` / `RedisUsageStore` のdefault `idempotencyTtlMs` は24時間です。cost-liableになる前のpending reservationがexpireした場合はcapacityを解放し、recovery後にoperation IDを再利用できます。
+
+## Provider-neutral observability
+
+optional observerを付けると、telemetry / billing vendorへcoreを結合せずstructured lifecycle eventを受け取れます。
+
+```ts
+import { UsageControl, type UsageObserver } from 'mcp-usage-control';
+
+const observer: UsageObserver = {
+  onEvent(event) {
+    console.log(JSON.stringify(event));
+  },
+};
+
+const store = new RedisUsageStore(redis, { observer });
+const control = new UsageControl(store, policy, {
+  observer,
+  metadata: { service: 'my-mcp-server', environment: 'staging' },
+});
+```
+
+eventはadmission accepted / denied、settlement completed、expiry recovery、policy / store errorを扱います。observer deliveryは **best-effortでenforcement outcomeの外側** です。返されたPromiseはawaitせず、observer failureがquota stateを変更することはありません。`onEvent()` 自体はinlineで呼ばれるため、同期処理は軽量にしnetwork / durable I/Oはoffloadしてください。tool argumentsとraw exception messageは自動収集せず、custom metadataは明示opt-inです。
+
+同一内容のidempotent settlement replayでも同じ `settlement.completed` eventが再発火する場合があります。二重計上を避けたいanalyticsは `(reservationId, actualUnits, outcome)` 等のstable keyでdedupeしてください。event stream自体はtransactional ledgerではありません。
+
+runtime IDはhigh-cardinalityになり得ます。unique principal / operation / reservation / user-specific budget IDをmetric labelへ使わないでください。event field、privacy指針、Redis aggregate recovery、replay guidance、delivery guaranteeは [Observability](docs/observability.ja.md) を参照してください。
 
 ## Coreを直接使う例
 
@@ -184,12 +210,14 @@ production利用前に [Redis adapter](docs/redis.ja.md) を確認してくだ�
 11. ambiguous settlement failureをblind retryしません。
 12. storage failureをadmissionのallowへ変換しません。
 13. Redis lease / tombstone時刻はapplication hostではなくRedisから取得します。
+14. observabilityはenforcement transactionの外側で、observer failureがallow / deny / settlement stateを変えません。
 
 ## Documentation
 
 - [Source / local tarballから使う](docs/using-from-source.ja.md)
 - [Getting started](docs/getting-started.ja.md)
 - [MCP SDK v2 integration](docs/mcp-integration.ja.md)
+- [Observability](docs/observability.ja.md)
 - [Architecture / invariant](docs/architecture.ja.md)
 - [Redis adapter](docs/redis.ja.md)
 - [API reference](docs/api-reference.ja.md)
@@ -200,7 +228,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## v0.1以降のscope
 
-provider-neutral observability hookと、本物の `input_required` suspend/resume accountingはfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
+本物の `input_required` suspend/resume accountingとoptionalなvendor-specific telemetry adapterをfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
 
 ## License
 

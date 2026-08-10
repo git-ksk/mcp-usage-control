@@ -4,9 +4,7 @@
 
 `mcp-usage-control-redis` は `mcp-usage-control` のdistributed production-store adapterです。
 
-```console
-npm install mcp-usage-control-redis redis
-```
+> **現在の配布状況:** packageはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) に従ってlocal core + Redis tarballをinstallし、`redis@6.2.0` を組み合わせてください。
 
 v0.1はRedis 7、node-redis 6.2.x、Node.js 20 / 22でtestします。
 
@@ -60,9 +58,9 @@ reservationは `pending` から開始します。
 
 ## Redis server time
 
-reserve、`markLiable`、renew、settle時のexpiry check、tombstone expiryはLua内のRedis server `TIME` を使います。これらの判定にapplication `Date.now()` は使いません。
+reserve、`markLiable`、renew、settle時のexpiry check、tombstone expiryはLua内のRedis server `TIME` を使います。これらのenforcement判定にapplication `Date.now()` は使いません。
 
-複数application instanceのclock skewや、application time取得後にnetwork delayが発生してもexpiry accountingを変えません。
+複数application instanceのclock skewや、application time取得後にnetwork delayが発生してもexpiry accountingを変えません。operational event timestampはtelemetryでありlease判定には使いません。
 
 ## Idempotency
 
@@ -85,6 +83,20 @@ MCP adapterはwrapped active leaseをdefaultでrenewします。core / Redisを�
 network partitionがdistributed leaseを超える場合はあります。Redis errorはfail openせずpropagateします。generic heartbeatはupstream-resource fencingではありません。leaseがcost-liableならexpiryは保守的にchargeします。
 
 lease ownershipが不明になった時点で即座にworkを止める必要がある場合はprovider-specific cancellation / fencingを実装してください。
+
+## Recovery observability
+
+optional `UsageObserver` を `RedisUsageStore` へ渡すとexpiry recovery telemetryを受け取れます。admission / settlement / error lifecycle eventも必要なら同じobserverを `UsageControl` にも渡します。
+
+lazy cleanupでは1回のLua executionで複数expired reservationをrecoveryできます。Redis adapterは次を持つaggregate `reservation.recovered` eventとして通知します。
+
+- `recovery: 'pending_released' | 'liable_retained'`
+- `count`
+- aggregate `reservedUnits`
+
+Redisはcleanup telemetryを詳しくするためだけにraw principal / tenant / tool / budget stringを永続化しません。expired reservationを `renew` / `markLiable` / `settle` で直接触った場合はopaqueなhashed reservation IDをeventへ含む場合があります。
+
+observer deliveryはbest-effortでRedis transactionの外側です。telemetry欠損はrecovery / enforcementが起きなかったことを意味せず、observer failureはRedis stateを変更しません。詳しくは [Observability](observability.ja.md) を参照してください。
 
 ## Lazy cleanup backlog
 
@@ -140,10 +152,11 @@ interface RedisUsageStoreOptions {
   hashTag?: string;            // default "usage"
   cleanupBatchSize?: number;   // default 256
   idempotencyTtlMs?: number;   // default 86_400_000 (24h)
+  observer?: UsageObserver;    // optional best-effort recovery telemetry
 }
 ```
 
-同じlogical usage domainに参加するprocessは同じcompatibleなprefix / hashTag設定を利用してください。
+同じlogical usage domainに参加するprocessは同じcompatibleなprefix / hashTag設定を利用してください。observer configurationはRedis transaction identityに参加しません。
 
 ## Tested invariants
 
@@ -154,11 +167,12 @@ CIの実Redis 7 test:
 - multi-budget denialでpartial reservationなし。
 - unused settlementで全budgetをrelease。
 - 全budgetに対するpending / liable expiry。
+- aggregate pending / liable recovery observabilityとopaque direct-expiry telemetry。
 - lease renewal。
 - scoped replay protection / tombstone expiry。
 - settlement replay / conflict。
 - admission / mark-liable / settlementのlost ACK。
-- application clockから独立したRedis server time。
+- lease判定でapplication clockから独立したRedis server time。
 - Redis unavailable -> admission fail closed。
 
 ## Current limits
@@ -168,4 +182,5 @@ CIの実Redis 7 test:
 - configured usage-control transaction domainにつきRedis hash slot 1つ。
 - cleanupはlazy / bounded。
 - Redis durability policyはdeployment-specific。
+- observabilityはbest-effort / non-durableでquota ledgerではない。
 - billing、payment、authentication、analytics backendは内蔵しません。

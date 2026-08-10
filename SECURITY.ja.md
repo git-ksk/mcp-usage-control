@@ -4,9 +4,9 @@
 
 ## Supported versions
 
-現在はpre-alphaです。最初のtagged releaseまではlatest `main` のみをsupport対象とします。
+最初のpublic registry / GitHub releaseが完了するまではlatest `main` のみをsupport対象とします。publication準備中にrelease-candidate tagが存在する場合がありますが、tagだけでsupport matrixが広がるわけではありません。
 
-tagged release開始後はsupport versionをここへ明示します。
+public release開始後はsupport versionをここへ明示します。
 
 ## 脆弱性の報告
 
@@ -33,6 +33,7 @@ production credential、user data、access token、cookie、secretは含めな�
 - ambiguous acknowledgement handling
 - storage failure behavior
 - user/model-visible denial message
+- observability hook / metadata redaction boundary
 
 production storeでquota enforcementを分離した `check` と `record` として実装してはいけません。ambiguous storage failureでは、applicationが明示的に別availability policyを選択・documentしない限り新規admissionをfail closedにします。
 
@@ -54,9 +55,19 @@ generic MCP adapterはhandler entry直前にleaseをcost-liableへ遷移させ�
 
 built-in MCP lease heartbeatはprovider-specific fencingではありません。lease loss直後に処理停止が必要なapplicationはmetered resource boundaryでfencing / cancellationを実装してください。
 
+## Observability boundary
+
+`UsageObserver` はoperational telemetryであり、trusted enforcement stateでもdurable financial ledgerでもありません。observerの成功/失敗によってadmission、quota release、settlementを決めてはいけません。
+
+tool argumentsとraw exception messageは自動収集しません。`operation.error.errorName` はmutableな `Error.name` やexception messageではなく、boundedなconstructor class名を使います。custom `metadata` は明示opt-inでusage requestを受け取れるため、secret、token、raw tool arguments、provider payload、無制限なuser contentをコピーしない責任はapplication側にあります。
+
+runtime eventにはprincipal、tenant、operation、reservation、tool、budget identifierが含まれる場合があります。potentially sensitive / high-cardinality dataとして扱ってください。unique principal / operation / reservation / user-specific budget identifierをmetric label/tagへ使わず、structured log / traceには適切なretention / access controlを適用してください。
+
+Redis lazy recoveryはtelemetry改善のためだけにraw request identityを永続化しません。そのためrecovery eventはaggregate-onlyになる場合があります。observability lossを「enforcementが起きなかった証拠」として扱わないでください。
+
 ## MCP multi-round flow
 
-pre-alpha MCP adapterはv2 `input_required` multi-round tool flowをまだsupportしません。明示的にrejectします。roundごとに新しいoperation IDを生成したり、settled operation IDを再利用して回避しないでください。どちらも意図したaccounting semanticsを壊す可能性があります。dedicated suspend/resume supportではround間のidempotencyとliabilityを維持する必要があります。
+v0.1 MCP adapterはv2 `input_required` multi-round tool flowをまだsupportしません。明示的にrejectします。roundごとに新しいoperation IDを生成したり、settled operation IDを再利用して回避しないでください。どちらも意図したaccounting semanticsを壊す可能性があります。dedicated suspend/resume supportではround間のidempotencyとliabilityを維持する必要があります。
 
 ## Redis durability boundary
 
@@ -68,7 +79,7 @@ operatorはrisk toleranceに合ったRedis HA / persistenceを選定してくだ
 
 contributorがsecretをcommitする必要はありません。example、test、log、Issue template、documentationはplaceholder / synthetic identifierを使います。
 
-Redis keyではprincipal / operation / budget identifierをhash化しますが、hashはencryptionではありません。identifierやsettlement outcomeにsecretを入れないでください。
+Redis keyではprincipal / operation / budget identifierをhash化しますが、hashはencryptionではありません。identifier、event metadata、settlement outcomeにsecretを入れないでください。
 
 ## Disclosure
 

@@ -84,15 +84,46 @@ interface UsageStore {
 
 Production implementations must make multi-budget admission all-or-nothing and preserve the lifecycle/failure invariants in [Architecture](architecture.md).
 
+### `UsageObserver` / `UsageEvent`
+
+```ts
+interface UsageObserverHandler {
+  onEvent(event: UsageEvent): void | Promise<void>;
+}
+
+type UsageObserver = UsageObserverHandler | undefined;
+```
+
+The v0.1 event union contains:
+
+- `reserve.accepted`
+- `reserve.denied`
+- `settlement.completed`
+- `reservation.recovered`
+- `operation.error`
+
+Observer delivery is best-effort and outside the enforcement outcome. `onEvent()` is invoked inline, but a returned promise is not awaited. Keep synchronous callback work lightweight and offload network/durable I/O. Synchronous observer throws and asynchronous promise rejections are swallowed and never change admission/settlement state. Tool arguments and raw exception messages are not captured automatically.
+
+`UsageEventMetadata` is an explicit opt-in `Record<string, string | number | boolean | null>`.
+
+See [Observability](observability.md) for event fields, privacy/cardinality guidance, replay deduplication, Redis aggregate recovery behavior, and delivery guarantees.
+
 ### `UsageControl`
 
 ```ts
 new UsageControl(store, policy, defaultReservationTtlMs?);
+
+new UsageControl(store, policy, {
+  defaultReservationTtlMs?: number;
+  observer?: UsageObserver;
+  metadata?: UsageEventMetadata |
+    ((request: UsageRequest) => UsageEventMetadata | undefined);
+});
 ```
 
-Default reservation TTL: `60_000` ms.
+Default reservation TTL: `60_000` ms. The numeric third-argument form remains source-compatible.
 
-`reserve(request)` evaluates policy, validates/canonicalizes budgets, and calls the store for atomic admission.
+`reserve(request)` evaluates policy, validates/canonicalizes budgets, calls the store for atomic admission, and emits configured runtime lifecycle events. A metadata callback is explicit opt-in and its failure is ignored rather than affecting enforcement.
 
 ### `AdmissionResult`
 
@@ -107,7 +138,7 @@ type AdmissionResult =
     };
 ```
 
-Store denial reasons are `quota_exceeded` and `duplicate_operation`. `quota_exceeded` can identify the limiting budget and its remaining units. Policy denials use the policy-provided reason.
+Store denial reasons are `quota_exceeded` and `duplicate_operation`. `quota_exceeded` can identify the limiting budget and its remaining units. Policy denials use the policy-provided reason. Because policy denial reasons can be emitted to observers, applications should use bounded non-secret reason codes rather than free-form diagnostic text.
 
 ### `ReservationRecord`
 
@@ -117,6 +148,7 @@ interface ReservationRecord {
   operationId: string;
   principalId: string;
   tenantId?: string;
+  plan?: string;
   tool: string;
   budgetKeys: string[];
   reservedUnits: number;
@@ -139,6 +171,8 @@ await lease.settle(actualUnits, outcome)
 
 `renew()` extends an active lease. `settle()` finalizes the same actual unit count across all budgets participating in the reservation. v0.1 requires `actualUnits <= reservedUnits`.
 
+When configured through `UsageControl`, lease errors and successful settlement emit observer events. Observer failure never changes the lease result.
+
 ### `SettlementResult`
 
 ```ts
@@ -151,17 +185,20 @@ interface SettlementResult {
 }
 ```
 
-Identical settlement replay is idempotent during tombstone retention. A conflicting actual-unit/outcome replay fails.
+Identical settlement replay is idempotent during tombstone retention. A conflicting actual-unit/outcome replay fails. Calling an identical idempotent settlement again can emit another identical `settlement.completed` event; downstream consumers that require de-duplication can key on `(reservationId, actualUnits, outcome)`. Observability is not a durable ledger.
 
 ### `MemoryUsageStore`
 
 ```ts
-new MemoryUsageStore({ idempotencyTtlMs? })
+new MemoryUsageStore({
+  idempotencyTtlMs?,
+  observer?,
+})
 ```
 
 Process-local reference store for tests and development. Default settled replay tombstone retention: `86_400_000` ms (24 hours).
 
-Pending expired operations release all participating budgets and become reusable. Cost-liable expiry consumes the full reservation and leaves a bounded settled tombstone.
+Pending expired operations release all participating budgets and become reusable. Cost-liable expiry consumes the full reservation and leaves a bounded settled tombstone. With an observer, the memory store emits per-reservation `reservation.recovered` events.
 
 ### Core errors
 
@@ -232,6 +269,7 @@ interface RedisUsageStoreOptions {
   hashTag?: string;
   cleanupBatchSize?: number;
   idempotencyTtlMs?: number;
+  observer?: UsageObserver;
 }
 ```
 
@@ -246,7 +284,9 @@ The v0.1 Redis store uses one transaction domain containing a used-budget hash, 
 
 Lua obtains Redis server `TIME` for lease and tombstone decisions. Multi-budget reserve, release, expiry recovery, renew and settlement do not loop single-budget operations client-side.
 
-See [Redis adapter](redis.md) for durability and Redis Cluster constraints.
+When `observer` is configured, lazy cleanup emits aggregate `reservation.recovered` events for pending-release and liable-retention recovery. It does not persist raw principal, tenant, tool, or budget strings solely for telemetry. Directly touching an expired reservation can emit its opaque hashed reservation ID.
+
+See [Redis adapter](redis.md) and [Observability](observability.md) for durability, Redis Cluster, privacy, and telemetry constraints.
 
 ## Numeric validation
 

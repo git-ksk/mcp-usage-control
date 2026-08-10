@@ -2,15 +2,15 @@
 
 [English](releasing.md) | [日本語](releasing.ja.md)
 
-## Published packages
+## Release packages
 
-v0.1 release lineでは3つのpublic npm packageを使います。
+v0.1 release lineでは、最初のregistry publishが承認された時点で3つのpublic npm packageを公開できるよう準備します。
 
 - `mcp-usage-control`
 - `mcp-usage-control-mcp`
 - `mcp-usage-control-redis`
 
-v0.1.xでは3 packageを同じversionでreleaseします。
+公開完了までは [Source / local tarballから使う](using-from-source.ja.md) のrepository checkout / local tarball手順を使います。v0.1.xでは3 packageを同じversionでreleaseします。
 
 ## Versioning
 
@@ -31,6 +31,9 @@ pre-1.0 minorでもbreaking changeはrelease notesで明示します。
 - pending -> cost-liable -> settledのcrash semanticsをtest済み。
 - MCP success、`isError`、thrown error、classifier failure、settlement ambiguityをdirect testと公式SDK pathの両方でcover。
 - `input_required` にv0.1の明示的support boundaryがある。
+- provider-neutral observabilityがbest-effortで、返されたPromiseをawaitせず、secret-consciousかつenforcement stateから隔離されている。
+- observerの同期処理がinline / lightweightであることとreplay deduplication semanticsをdocument済み。
+- Memory / Redis expiry recovery observabilityとhigh-cardinality guidanceをdocument / test済み。
 - Redis server-time behavior / durability limitationをdocument済み。
 - package name / exports / filesを確認済み。
 - `pnpm-lock.yaml` commit済み、CIは `--frozen-lockfile`。
@@ -69,4 +72,4 @@ Redis storage layoutはimplementation detailですが、既存enforcement state�
 
 ## Security fixes
 
-quota bypass、double spending、unauthorized entitlement access、cross-tenant replay、crash-after-cost refund、inconsistent settlementにつながる脆弱性は [SECURITY.ja.md](../SECURITY.ja.md) に従い、exploit detail公開前にdisclosureを調整します。
+quota bypass、double spending、unauthorized entitlement access、cross-tenant replay、crash-after-cost refund、inconsistent settlement、sensitive observability leakageにつながる脆弱性は [SECURITY.ja.md](../SECURITY.ja.md) に従い、exploit detail公開前にdisclosureを調整します。

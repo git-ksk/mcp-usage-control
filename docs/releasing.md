@@ -2,15 +2,15 @@
 
 [English](releasing.md) | [日本語](releasing.ja.md)
 
-## Published packages
+## Release packages
 
-The v0.1 release line uses three public npm packages:
+The v0.1 release line is prepared to publish three public npm packages once the first registry publication is authorized:
 
 - `mcp-usage-control`
 - `mcp-usage-control-mcp`
 - `mcp-usage-control-redis`
 
-All packages use the same release version in v0.1.x.
+Until that publication completes, use the repository checkout or local tarballs documented in [Use from source / local tarballs](using-from-source.md). All packages use the same release version in v0.1.x.
 
 ## Versioning
 
@@ -31,6 +31,9 @@ The first release is considered ready only when:
 - pending -> cost-liable -> settled crash semantics are tested;
 - MCP success, `isError`, thrown errors, classifier failure, and settlement ambiguity are tested directly and through the official SDK path;
 - `input_required` has an explicit v0.1 support boundary;
+- provider-neutral observability is best-effort, not awaited for returned promises, secret-conscious, and isolated from enforcement state;
+- synchronous observer work is documented as inline/lightweight and replay de-duplication semantics are explicit;
+- Memory/Redis expiry recovery observability and high-cardinality guidance are documented/tested;
 - Redis server-time behavior and durability limitations are documented;
 - package names/exports/files are verified;
 - `pnpm-lock.yaml` is committed and CI uses `--frozen-lockfile`;
@@ -69,4 +72,4 @@ The Redis storage layout is an implementation detail but changes can affect depl
 
 ## Security fixes
 
-Vulnerabilities enabling quota bypass, double spending, unauthorized entitlement access, cross-tenant replay, crash-after-cost refunds, or inconsistent settlement follow [SECURITY.md](../SECURITY.md). Coordinate disclosure before publishing exploit details.
+Vulnerabilities enabling quota bypass, double spending, unauthorized entitlement access, cross-tenant replay, crash-after-cost refunds, inconsistent settlement, or sensitive observability leakage follow [SECURITY.md](../SECURITY.md). Coordinate disclosure before publishing exploit details.

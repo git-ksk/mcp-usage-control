@@ -84,15 +84,46 @@ interface UsageStore {
 
 production implementationはmulti-budget admissionをall-or-nothingにし、[Architecture](architecture.ja.md) のlifecycle / failure invariantを維持する必要があります。
 
+### `UsageObserver` / `UsageEvent`
+
+```ts
+interface UsageObserverHandler {
+  onEvent(event: UsageEvent): void | Promise<void>;
+}
+
+type UsageObserver = UsageObserverHandler | undefined;
+```
+
+v0.1のevent union:
+
+- `reserve.accepted`
+- `reserve.denied`
+- `settlement.completed`
+- `reservation.recovered`
+- `operation.error`
+
+observer deliveryはbest-effortでenforcement outcomeの外側です。`onEvent()` 自体はinlineで呼びますが、返されたPromiseはawaitしません。同期callbackは軽量にし、network / durable I/Oはoffloadしてください。observerのsync throw / async promise rejectionは握りつぶし、admission / settlement stateを変更しません。tool argumentsやraw exception messageは自動収集しません。
+
+`UsageEventMetadata` は明示opt-inの `Record<string, string | number | boolean | null>` です。
+
+event field、privacy / cardinality指針、replay deduplication、Redis aggregate recovery、delivery guaranteeは [Observability](observability.ja.md) を参照してください。
+
 ### `UsageControl`
 
 ```ts
 new UsageControl(store, policy, defaultReservationTtlMs?);
+
+new UsageControl(store, policy, {
+  defaultReservationTtlMs?: number;
+  observer?: UsageObserver;
+  metadata?: UsageEventMetadata |
+    ((request: UsageRequest) => UsageEventMetadata | undefined);
+});
 ```
 
-default reservation TTLは `60_000` msです。
+default reservation TTLは `60_000` msです。従来のnumber形式の第3引数もsource-compatibleです。
 
-`reserve(request)` はpolicy評価、budget validation/canonicalization、storeのatomic admissionを行います。
+`reserve(request)` はpolicy評価、budget validation/canonicalization、storeのatomic admissionを行い、設定されていればruntime lifecycle eventを発火します。metadata callbackは明示opt-inで、callback failureはenforcementへ影響させず無視します。
 
 ### `AdmissionResult`
 
@@ -107,7 +138,7 @@ type AdmissionResult =
     };
 ```
 
-store denial reasonは `quota_exceeded` / `duplicate_operation` です。`quota_exceeded` はlimiting budgetとremaining unitsを含む場合があります。policy denialはpolicy側reasonを返します。
+store denial reasonは `quota_exceeded` / `duplicate_operation` です。`quota_exceeded` はlimiting budgetとremaining unitsを含む場合があります。policy denialはpolicy側reasonを返します。policy denial reasonはobserverへ出る場合があるため、free-form diagnostic textではなくboundedかつnon-secretなreason codeを使ってください。
 
 ### `ReservationRecord`
 
@@ -117,6 +148,7 @@ interface ReservationRecord {
   operationId: string;
   principalId: string;
   tenantId?: string;
+  plan?: string;
   tool: string;
   budgetKeys: string[];
   reservedUnits: number;
@@ -139,6 +171,8 @@ await lease.settle(actualUnits, outcome)
 
 `renew()` はactive leaseを延長します。`settle()` はreservationに参加した全budgetへ同じactual unit countを確定します。v0.1では `actualUnits <= reservedUnits` が必要です。
 
+`UsageControl` 経由でobserverを設定した場合、lease errorとsuccessful settlementもeventを発火します。observer failureはlease結果を変更しません。
+
 ### `SettlementResult`
 
 ```ts
@@ -151,17 +185,20 @@ interface SettlementResult {
 }
 ```
 
-同一settlement replayはtombstone retention中idempotentです。actual units / outcomeが異なるreplayはfailします。
+同一settlement replayはtombstone retention中idempotentです。actual units / outcomeが異なるreplayはfailします。同一内容のidempotent settlementを再度呼ぶと、同じ `settlement.completed` eventが再発火する場合があります。dedupeが必要なdownstream consumerは `(reservationId, actualUnits, outcome)` 等をkeyにしてください。observabilityはdurable ledgerではありません。
 
 ### `MemoryUsageStore`
 
 ```ts
-new MemoryUsageStore({ idempotencyTtlMs? })
+new MemoryUsageStore({
+  idempotencyTtlMs?,
+  observer?,
+})
 ```
 
 test / development向けprocess-local reference storeです。settled replay tombstoneのdefault retentionは `86_400_000` ms（24時間）です。
 
-pending expiryは参加する全budgetを解放しoperation IDを再利用可能にします。cost-liable expiryはfull reservationを消費済みとして確定し、boundedなsettled tombstoneを残します。
+pending expiryは参加する全budgetを解放しoperation IDを再利用可能にします。cost-liable expiryはfull reservationを消費済みとして確定し、boundedなsettled tombstoneを残します。observer設定時はper-reservationの `reservation.recovered` eventを発火します。
 
 ### Core errors
 
@@ -232,6 +269,7 @@ interface RedisUsageStoreOptions {
   hashTag?: string;
   cleanupBatchSize?: number;
   idempotencyTtlMs?: number;
+  observer?: UsageObserver;
 }
 ```
 
@@ -246,7 +284,9 @@ v0.1 Redis storeは1 transaction domain内にused-budget hash、global lease exp
 
 Luaはlease / tombstone判定にRedis server `TIME` を使います。multi-budget reserve / release / expiry recovery / renew / settlementをclient側single-budget loopへ分解しません。
 
-詳細は [Redis adapter](redis.ja.md) を参照してください。
+`observer` 設定時、lazy cleanupはpending-release / liable-retentionについてaggregate `reservation.recovered` eventを発火します。telemetryのためだけにraw principal、tenant、tool、budget stringを永続化しません。expired reservationを直接操作した場合はopaqueなhashed reservation IDをeventへ含む場合があります。
+
+詳細は [Redis adapter](redis.ja.md) と [Observability](observability.ja.md) を参照してください。
 
 ## Numeric validation
 

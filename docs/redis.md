@@ -4,9 +4,7 @@
 
 `mcp-usage-control-redis` is the distributed production-store adapter for `mcp-usage-control`.
 
-```console
-npm install mcp-usage-control-redis redis
-```
+> **Current distribution status:** the package is not published to npm yet. Build/install the local core + Redis tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `redis@6.2.0`.
 
 v0.1 is tested with Redis 7, node-redis 6.2.x, and Node.js 20/22.
 
@@ -60,9 +58,9 @@ This prevents a process crash after entering the metered execution boundary from
 
 ## Redis server time
 
-Reserve, `markLiable`, renew, settle expiry checks, and tombstone expiry use Redis server `TIME` inside Lua. Application `Date.now()` is not used for those decisions.
+Reserve, `markLiable`, renew, settle expiry checks, and tombstone expiry use Redis server `TIME` inside Lua. Application `Date.now()` is not used for those enforcement decisions.
 
-This avoids accounting differences caused by application-instance clock skew or network delay between application-time capture and script execution.
+This avoids accounting differences caused by application-instance clock skew or network delay between application-time capture and script execution. Operational event timestamps are telemetry and are not used for lease decisions.
 
 ## Idempotency
 
@@ -85,6 +83,20 @@ The MCP adapter renews a wrapped active lease by default. Core/Redis direct user
 A network partition can outlive the distributed lease. Redis errors propagate rather than fail open. The generic heartbeat is not upstream-resource fencing. Once the lease is cost-liable, expiry is intentionally conservative.
 
 Applications that must halt work immediately when lease ownership is uncertain need provider-specific cancellation/fencing.
+
+## Recovery observability
+
+Pass an optional `UsageObserver` to `RedisUsageStore` to receive expiry-recovery telemetry. If you also want admission/settlement/error lifecycle events, pass the same observer to `UsageControl`.
+
+Lazy cleanup can recover several expired reservations in one Lua execution. The Redis adapter reports these as aggregate `reservation.recovered` events with:
+
+- `recovery: 'pending_released' | 'liable_retained'`;
+- `count`;
+- aggregate `reservedUnits`.
+
+Redis intentionally does **not** persist raw principal, tenant, tool, or budget strings solely to make cleanup telemetry more detailed. If an expired reservation is touched directly by `renew`, `markLiable`, or `settle`, the event may include its opaque hashed reservation ID.
+
+Observer delivery is best-effort and outside the Redis transaction. Missing telemetry does not mean recovery/enforcement did not happen, and observer failure never changes Redis state. See [Observability](observability.md).
 
 ## Lazy cleanup backlog
 
@@ -140,10 +152,11 @@ interface RedisUsageStoreOptions {
   hashTag?: string;            // default "usage"
   cleanupBatchSize?: number;   // default 256
   idempotencyTtlMs?: number;   // default 86_400_000 (24h)
+  observer?: UsageObserver;    // optional best-effort recovery telemetry
 }
 ```
 
-Processes participating in one logical usage domain must use the same compatible prefix/hash-tag configuration.
+Processes participating in one logical usage domain must use the same compatible prefix/hash-tag configuration. Observer configuration does not participate in Redis transaction identity.
 
 ## Tested invariants
 
@@ -154,11 +167,12 @@ CI uses real Redis 7 for:
 - multi-budget denial leaves no partial reservation;
 - unused settlement releases all participating budgets;
 - pending/liable expiry across all budgets;
+- aggregate pending/liable recovery observability and opaque direct-expiry telemetry;
 - lease renewal;
 - scoped replay protection and tombstone expiry;
 - settlement replay/conflict;
 - lost admission / mark-liable / settlement acknowledgements;
-- Redis server-time independence from the application clock;
+- Redis server-time independence from the application clock for lease decisions;
 - Redis unavailable -> fail closed for admission.
 
 ## Current limits
@@ -168,4 +182,5 @@ CI uses real Redis 7 for:
 - one Redis hash slot per configured usage-control transaction domain;
 - cleanup is lazy/bounded;
 - Redis durability policy remains deployment-specific;
+- observability is best-effort/non-durable and not the quota ledger;
 - no built-in billing, payment, authentication, or analytics backend.
