@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import {
   UsageStateError,
   type Budget,
+  type MarkLiableInput,
+  type MarkLiableResult,
   type RenewInput,
   type RenewResult,
   type SettleInput,
@@ -10,7 +12,7 @@ import {
   type UsageRequest,
   type UsageStore,
 } from '@mcp-usage-control/core';
-import { RENEW_SCRIPT, RESERVE_SCRIPT, SETTLE_SCRIPT } from './scripts.js';
+import { MARK_LIABLE_SCRIPT, RENEW_SCRIPT, RESERVE_SCRIPT, SETTLE_SCRIPT } from './scripts.js';
 
 export interface RedisEvalClient {
   eval(
@@ -79,10 +81,8 @@ export class RedisUsageStore implements UsageStore {
     assertNonNegativeInteger(input.budget.limit, 'budget.limit');
     assertPositiveInteger(input.ttlMs, 'ttlMs');
 
-    const now = Date.now();
-    const expiresAt = now + input.ttlMs;
     const budgetHash = digest(input.budget.key);
-    const operationKey = digest(`${input.request.principal.id}\0${input.request.operationId}`);
+    const operationKey = digest(JSON.stringify([input.request.principal.id, input.request.operationId]));
     const reservationId = `r1.${budgetHash}.${operationKey}`;
     const keys = this.keys(budgetHash);
 
@@ -90,19 +90,20 @@ export class RedisUsageStore implements UsageStore {
       await this.client.eval(RESERVE_SCRIPT, {
         keys: [keys.used, keys.pending, keys.reservations, keys.operations, keys.tombstones],
         arguments: [
-          String(now),
           String(input.units),
           String(input.budget.limit),
-          String(expiresAt),
+          String(input.ttlMs),
           reservationId,
           operationKey,
           String(this.cleanupBatchSize),
+          String(this.idempotencyTtlMs),
         ],
       }),
     );
 
     switch (reply[0]) {
-      case 'accepted':
+      case 'accepted': {
+        const expiresAt = parseInteger(reply[2], 'expiresAt');
         return {
           accepted: true,
           reservation: {
@@ -116,6 +117,7 @@ export class RedisUsageStore implements UsageStore {
           },
           remaining: parseInteger(reply[1], 'remaining'),
         };
+      }
       case 'quota_exceeded':
         return {
           accepted: false,
@@ -129,16 +131,37 @@ export class RedisUsageStore implements UsageStore {
     }
   }
 
+  async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
+    const { budgetHash } = parseReservationId(input.reservationId);
+    const keys = this.keys(budgetHash);
+    const reply = parseReply(
+      await this.client.eval(MARK_LIABLE_SCRIPT, {
+        keys: [keys.used, keys.pending, keys.reservations, keys.operations, keys.tombstones],
+        arguments: [input.reservationId, String(this.idempotencyTtlMs)],
+      }),
+    );
+
+    if (reply[0] === 'marked') {
+      return {
+        reservationId: input.reservationId,
+        expiresAt: parseInteger(reply[1], 'expiresAt'),
+      };
+    }
+    if (reply[0] === 'expired' || reply[0] === 'not_found' || reply[0] === 'not_pending') {
+      throw new UsageStateError('Active reservation not found or expired');
+    }
+    throw new UsageStateError(`Unexpected Redis mark-liable reply: ${reply[0] ?? '<empty>'}`);
+  }
+
   async renew(input: RenewInput): Promise<RenewResult> {
     assertPositiveInteger(input.ttlMs, 'ttlMs');
     const { budgetHash } = parseReservationId(input.reservationId);
     const keys = this.keys(budgetHash);
-    const now = Date.now();
 
     const reply = parseReply(
       await this.client.eval(RENEW_SCRIPT, {
-        keys: [keys.used, keys.pending, keys.reservations, keys.operations],
-        arguments: [String(now), String(input.ttlMs), input.reservationId],
+        keys: [keys.used, keys.pending, keys.reservations, keys.operations, keys.tombstones],
+        arguments: [String(input.ttlMs), input.reservationId, String(this.idempotencyTtlMs)],
       }),
     );
 
@@ -150,7 +173,7 @@ export class RedisUsageStore implements UsageStore {
     }
 
     if (reply[0] === 'expired' || reply[0] === 'not_found' || reply[0] === 'not_pending') {
-      throw new UsageStateError('Pending reservation not found or expired');
+      throw new UsageStateError('Active reservation not found or expired');
     }
 
     throw new UsageStateError(`Unexpected Redis renew reply: ${reply[0] ?? '<empty>'}`);
@@ -160,7 +183,6 @@ export class RedisUsageStore implements UsageStore {
     assertNonNegativeInteger(input.actualUnits, 'actualUnits');
     const { budgetHash } = parseReservationId(input.reservationId);
     const keys = this.keys(budgetHash);
-    const tombstoneExpiresAt = Date.now() + this.idempotencyTtlMs;
 
     const reply = parseReply(
       await this.client.eval(SETTLE_SCRIPT, {
@@ -169,7 +191,7 @@ export class RedisUsageStore implements UsageStore {
           input.reservationId,
           String(input.actualUnits),
           input.outcome,
-          String(tombstoneExpiresAt),
+          String(this.idempotencyTtlMs),
         ],
       }),
     );
@@ -190,8 +212,8 @@ export class RedisUsageStore implements UsageStore {
     if (reply[0] === 'invalid_units') {
       throw new UsageStateError('actualUnits cannot exceed reservedUnits');
     }
-    if (reply[0] === 'not_found' || reply[0] === 'not_pending') {
-      throw new UsageStateError('Reservation not found, expired, or no longer pending');
+    if (reply[0] === 'expired' || reply[0] === 'not_found' || reply[0] === 'not_pending') {
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
     }
 
     throw new UsageStateError(`Unexpected Redis settle reply: ${reply[0] ?? '<empty>'}`);

@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-> Pre-alpha: this reference describes the current `main` API. Names and signatures may change before v0.1.
+> Pre-alpha: this reference describes the current development API. Names and signatures may change before v0.1.
 
 ## `@mcp-usage-control/core`
 
@@ -42,7 +42,7 @@ interface Budget {
 
 A policy-defined accounting bucket. Use explicit window-qualified keys for time windows.
 
-### `UsageQuote`
+### `UsageQuote` / `UsagePolicy`
 
 ```ts
 type UsageQuote =
@@ -52,23 +52,12 @@ type UsageQuote =
       budget: Budget;
       reservationTtlMs?: number;
     }
-  | {
-      decision: 'deny';
-      reason: string;
-    };
-```
+  | { decision: 'deny'; reason: string };
 
-Policy output. Allowed quotes reserve `units` before execution. `reservationTtlMs` overrides the `UsageControl` default for that request.
-
-### `UsagePolicy`
-
-```ts
 interface UsagePolicy {
   quote(request: UsageRequest): UsageQuote | Promise<UsageQuote>;
 }
 ```
-
-Application-defined admission/quoting policy.
 
 ### `UsageStore`
 
@@ -81,12 +70,13 @@ interface UsageStore {
     ttlMs: number;
   }): Promise<StoreReserveResult>;
 
+  markLiable(input: MarkLiableInput): Promise<MarkLiableResult>;
   renew(input: RenewInput): Promise<RenewResult>;
   settle(input: SettleInput): Promise<SettlementResult>;
 }
 ```
 
-Storage contract. Production implementations must preserve the atomicity and failure invariants in [Architecture](architecture.md).
+Production implementations must preserve the atomicity and failure invariants in [Architecture](architecture.md).
 
 ### `UsageControl`
 
@@ -104,21 +94,22 @@ type AdmissionResult =
   | { allowed: false; reason: string; remaining?: number };
 ```
 
-Store-level built-in denial reasons currently include `quota_exceeded` and `duplicate_operation`; a policy may provide its own denial reason.
+Built-in store denial reasons currently include `quota_exceeded` and `duplicate_operation`; a policy may provide its own denial reason.
 
 ### `UsageLease`
-
-Important members:
 
 ```ts
 lease.reservation
 lease.ttlMs
 lease.reservedUnits
+await lease.markLiable()
 await lease.renew(ttlMs?)
 await lease.settle(actualUnits, outcome)
 ```
 
-`renew()` extends a pending lease. `settle()` finalizes actual usage. The current store contract requires `actualUnits <= reservedUnits`.
+`markLiable()` declares that the metered execution boundary has been entered. If that active lease later expires before settlement, production stores should conservatively retain the reservation as consumed rather than refunding it.
+
+`renew()` extends an active lease. `settle()` finalizes actual usage. The current contract requires `actualUnits <= reservedUnits`.
 
 ### `ReservationRecord`
 
@@ -134,8 +125,6 @@ interface ReservationRecord {
 }
 ```
 
-Represents an admitted pending reservation as seen by the caller.
-
 ### `SettlementResult`
 
 ```ts
@@ -150,31 +139,33 @@ interface SettlementResult {
 
 ### Errors
 
-`UsageStateError` indicates an invalid or conflicting store state, such as an expired reservation or conflicting settlement replay.
+`UsageStateError` indicates an invalid, expired, or conflicting store state.
 
-`UsageDeniedError` wraps a denial reason for adapters that expose admission failure as an exception.
+`UsageDeniedError` exposes a programmatic `.reason`, but its thrown message is intentionally generic (`Usage denied by usage policy`) so internal policy details are not automatically surfaced by MCP SDK error conversion.
 
 ### `MemoryUsageStore`
 
-Reference `UsageStore` implementation for tests and local development. It is process-local and is not a production distributed store.
+Reference implementation for tests and local development. It supports pending/cost-liable/settled lifecycle behavior but is process-local and is not a production distributed store.
 
 ## `@mcp-usage-control/mcp`
 
-### `protectTool(options, handler)`
-
-Wraps an `@modelcontextprotocol/server` v2 tool handler with reserve, optional heartbeat, execution, and settlement behavior.
+### `ProtectToolOptions<TArgs, TResult>`
 
 ```ts
 interface ProtectToolOptions<TArgs, TResult> {
   control: UsageControl;
   tool: string;
+  noInput?: boolean;
   principal(ctx: ServerContext): Principal | Promise<Principal>;
-  operationId(
-    args: TArgs,
-    ctx: ServerContext,
-  ): string | Promise<string>;
+  operationId(args: TArgs, ctx: ServerContext): string | Promise<string>;
   leaseHeartbeat?: boolean;
   successUnits?(input: {
+    result: TResult;
+    args: TArgs;
+    ctx: ServerContext;
+    lease: UsageLease;
+  }): number | Promise<number>;
+  toolErrorUnits?(input: {
     result: TResult;
     args: TArgs;
     ctx: ServerContext;
@@ -189,26 +180,67 @@ interface ProtectToolOptions<TArgs, TResult> {
 }
 ```
 
+For a tool with no input schema, use `noInput: true`. For a tool with an input schema, omit `noInput` or set it to false.
+
+The explicit flag is intentional: the SDK's public type models no-input callbacks as `(ctx)`, but current dispatch paths may invoke them at runtime as `({}, ctx)`. `{}` is also valid real input for an empty object schema, so the adapter does not guess from runtime values.
+
+In `noInput: true` mode, the policy request, hooks, operation-ID callback, and wrapped application handler receive `args === undefined` and the real `ServerContext`.
+
+### `protectTool(options, handler)`
+
+Wraps a **single-round** `@modelcontextprotocol/server` v2 tool handler with reserve, cost-liable activation, heartbeat, execution classification, and settlement.
+
+The public overloads are conceptually:
+
+```ts
+protectTool<TResult>(
+  options: ProtectToolOptions<undefined, TResult> & { noInput: true },
+  handler: (args: undefined, ctx: ServerContext) => TResult | Promise<TResult>,
+): (ctx: ServerContext) => Promise<TResult>;
+
+protectTool<TArgs, TResult>(
+  options: ProtectToolOptions<TArgs, TResult> & { noInput?: false },
+  handler: (args: TArgs, ctx: ServerContext) => TResult | Promise<TResult>,
+): (args: TArgs, ctx: ServerContext) => Promise<TResult>;
+```
+
+At runtime the no-input overload also tolerates the SDK dispatch form `({}, ctx)` and normalizes it internally.
+
 Behavior:
 
+- admitted leases are marked cost-liable before entering the handler;
 - `leaseHeartbeat` defaults to enabled;
-- successful handlers settle the full reservation unless `successUnits` is provided;
-- failed handlers settle the full reservation unless `errorUnits` is provided;
+- normal successes use `successUnits` or the full reservation;
+- MCP `{ isError: true }` results use `toolErrorUnits` or the full reservation;
+- thrown errors use `errorUnits` or the full reservation;
+- invalid/throwing cost classifiers cause a conservative full settlement followed by `UsageClassificationError`;
 - admission denial throws `UsageDeniedError` before handler execution;
-- settlement failure throws `UsageSettlementError` and is not blindly retried.
+- settlement failure throws `UsageSettlementError` and is not blindly retried;
+- `resultType: 'input_required'` is currently unsupported and produces `UnsupportedMcpUsageFlowError` after conservative settlement.
 
-See [MCP integration](mcp-integration.md) for usage and safety notes.
+See [MCP integration](mcp-integration.md).
 
 ### `UsageSettlementError`
-
-Contains:
 
 ```ts
 settlementError: unknown
 executionError?: unknown
 ```
 
-When settlement fails after a tool error, `executionError` preserves the original execution failure while `settlementError` describes the accounting failure.
+Represents an ambiguous or failed accounting settlement.
+
+### `UsageClassificationError`
+
+```ts
+classificationError: unknown
+executionError?: unknown
+```
+
+Raised after the wrapper has conservatively settled the full reservation because a cost classifier failed or returned invalid units.
+
+### `UnsupportedMcpUsageFlowError`
+
+Currently used for MCP v2 `input_required` multi-round tool results. Suspend/resume accounting is not yet implemented.
 
 ## `@mcp-usage-control/redis`
 
@@ -218,7 +250,7 @@ When settlement fails after a tool error, `executionError` preserves the origina
 new RedisUsageStore(client, options?);
 ```
 
-The client needs an `eval(script, { keys, arguments })` method compatible with the adapter's `RedisEvalClient` interface.
+The client needs an `eval(script, { keys, arguments })` method compatible with `RedisEvalClient`.
 
 ### `RedisUsageStoreOptions`
 
@@ -238,20 +270,18 @@ Defaults:
 - `cleanupBatchSize`: `256`
 - `idempotencyTtlMs`: `86_400_000` (24 hours)
 
-`prefix` and `hashTag` reject Redis hash-tag braces so the adapter controls its transaction domain.
-
-See [Redis adapter](redis.md) for key layout, cleanup, acknowledgement ambiguity, and Redis Cluster trade-offs.
+Lease and tombstone timestamps are calculated from Redis server time inside Lua, not from the application clock. See [Redis adapter](redis.md) for key layout, cleanup, cost-liable expiry, acknowledgement ambiguity, durability boundaries, and Redis Cluster trade-offs.
 
 ## Numeric validation
 
-Units and limits are represented as JavaScript safe integers. Units/limits must be non-negative; TTL values and cleanup/retention durations must be positive safe integers where accepted.
+Units and limits are JavaScript safe integers. Units/limits must be non-negative; TTL and retention durations must be positive safe integers where accepted. Classifier results must also be `<= reservedUnits`.
 
 ## Compatibility
 
 Current repository targets:
 
 - Node.js 20+
-- `@modelcontextprotocol/server` v2, currently built against 2.0.0
+- `@modelcontextprotocol/server` v2, currently built/tested against 2.0.0
 - Redis 7 integration behavior
 - node-redis `redis` 6.2.x in the workspace
 

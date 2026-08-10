@@ -2,7 +2,7 @@
 
 [English](mcp-integration.md) | [日本語](mcp-integration.ja.md)
 
-`@mcp-usage-control/mcp` adapts the core usage-control lifecycle to tool handlers from `@modelcontextprotocol/server` v2.
+`@mcp-usage-control/mcp` adapts the core usage-control lifecycle to **single-round** tool handlers from `@modelcontextprotocol/server` v2.
 
 The adapter does not authenticate users and does not decide subscription entitlements. It expects the application to derive a trusted `Principal` and a stable idempotency `operationId`.
 
@@ -11,12 +11,6 @@ The adapter does not authenticate users and does not decide subscription entitle
 With the MCP TypeScript SDK v2, a tool is registered with `registerTool(name, config, handler)`. `protectTool()` wraps the handler:
 
 ```ts
-import { McpServer } from '@modelcontextprotocol/server';
-import * as z from 'zod/v4';
-import { protectTool } from '@mcp-usage-control/mcp';
-
-const server = new McpServer({ name: 'example', version: '1.0.0' });
-
 server.registerTool(
   'search',
   {
@@ -30,16 +24,55 @@ server.registerTool(
       principal: async ctx => getPrincipalFromTrustedAuthContext(ctx),
       operationId: async (args, ctx) => getStableInvocationId(args, ctx),
     },
-    async ({ query }) => {
-      return {
-        content: [{ type: 'text', text: await searchCatalog(query) }],
-      };
-    },
+    async ({ query }) => ({
+      content: [{ type: 'text', text: await searchCatalog(query) }],
+    }),
   ),
 );
 ```
 
-The SDK still performs its normal argument validation. Usage admission happens when the wrapped handler is invoked.
+The SDK still performs its normal argument validation before the wrapped handler runs.
+
+### Tools without an input schema
+
+For a tool with **no input schema**, set `noInput: true` explicitly:
+
+```ts
+server.registerTool(
+  'ping-backend',
+  { description: 'Check backend health' },
+  protectTool(
+    {
+      control,
+      tool: 'ping-backend',
+      noInput: true,
+      principal: async ctx => getPrincipalFromTrustedAuthContext(ctx),
+      operationId: async (_args, ctx) => getStableInvocationId(undefined, ctx),
+    },
+    async (_args, ctx) => ({
+      content: [{ type: 'text', text: await pingBackend(ctx) }],
+    }),
+  ),
+);
+```
+
+The SDK's public TypeScript callback model represents a no-input tool as `(ctx)`, while current server dispatch paths can invoke the callback at runtime as `({}, ctx)`. An empty object is also a legitimate argument value for a tool whose input schema is an empty object, so guessing from runtime values would be unsafe. `noInput: true` gives the adapter an unambiguous signal and normalizes both no-input invocation forms to `args === undefined` plus the real `ServerContext`.
+
+For tools **with** an input schema, omit `noInput` (or keep it false). The adapter preserves validated `args` and `ctx`.
+
+Both forms are covered through the official SDK protocol integration tests.
+
+## Execution lifecycle
+
+For an admitted call, the wrapper performs:
+
+```text
+reserve -> markLiable -> start heartbeat -> handler -> stop heartbeat -> classify -> settle
+```
+
+`markLiable()` happens immediately before handler entry. From that point onward, lease expiry is conservative: if the process disappears before settlement, the full reservation remains charged instead of being reclaimed as unused.
+
+This is intentionally conservative because the generic wrapper cannot know exactly where a provider-specific API/compute cost begins. If you need a later cost-liability boundary, use the core lifecycle directly or build a provider-specific adapter.
 
 ## Principal derivation
 
@@ -53,72 +86,50 @@ interface Principal {
 }
 ```
 
-Derive it from authentication state that your server already trusts. Do not accept a caller-supplied `principal.id`, plan, or tenant identifier without authorization checks.
-
-The core currently scopes duplicate operation IDs to `principal.id`. If your application uses shared tenant budgets, ensure your policy and future multi-budget design preserve the intended tenant isolation.
+Derive it from authentication state that your server already trusts. Do not accept caller-supplied principal, plan, or tenant identifiers without authorization checks.
 
 ## Operation IDs
 
-`operationId` is the idempotency key for one logical tool execution.
+`operationId` is the idempotency key for one logical invocation. It should be stable across retries of the same logical execution, different for intentional new executions, non-secret, and derived from trusted request/dispatch state.
 
-A good operation ID is:
-
-- stable across transport/client retries of the same logical invocation;
-- different for two intentional invocations with identical arguments;
-- derived from trusted request/dispatch state rather than model-provided arguments alone;
-- non-secret.
-
-Do not generate a fresh random ID every time a retry reaches the handler; doing so defeats duplicate-operation protection. Do not treat the operation ID as authentication or authorization data.
+The MCP JSON-RPC request ID (`ctx.mcpReq.id`) is useful for tests and some request-scoped cases, but do not assume it is a stable logical idempotency key across host/client retries. Applications that need retry-stable accounting must provide their own stable invocation identity.
 
 ## Lease heartbeat
 
-By default, `protectTool()` renews an active reservation at approximately one third of its lease TTL while the handler is running. Before settlement it stops the heartbeat and waits for any in-flight renewal to finish, preventing an ordinary renew/settle race.
+By default, `protectTool()` renews an active reservation at approximately one third of its lease TTL while the handler runs. Before settlement it stops the heartbeat and waits for any in-flight renewal to finish.
+
+A renewal failure does not prove that the lease was lost, so the generic wrapper does not automatically cancel arbitrary upstream work. Because execution-started leases are cost-liable, an actual expiry charges conservatively rather than refunding the call. If losing lease ownership must immediately stop work, implement provider-specific fencing/cancellation.
+
+## Successful results
+
+Without `successUnits`, a normal successful result settles the full reservation. For dynamic-cost tools, reserve a safe maximum in policy and return the actual units after execution:
 
 ```ts
-protectTool(
-  {
-    control,
-    tool: 'long_job',
-    principal,
-    operationId,
-    leaseHeartbeat: true,
-  },
-  handler,
-);
-```
-
-Set `leaseHeartbeat: false` only when the application provides an equivalent renewal/fencing mechanism.
-
-### Important distributed-lease limitation
-
-The built-in heartbeat is a convenience mechanism, not provider-specific fencing. Individual renewal errors are not used to cancel an arbitrary upstream operation. A sufficiently long Redis/network partition can therefore outlive a lease while the upstream tool keeps running.
-
-If losing lease ownership must immediately stop or fence the metered resource, implement that behavior in the application/provider adapter. See [Architecture](architecture.md).
-
-## Success settlement
-
-Without `successUnits`, a successful handler settles the full reserved amount. For dynamic-cost tools, reserve a safe maximum in policy and return the actual amount after execution:
-
-```ts
-protectTool(
-  {
-    control,
-    tool: 'generate_report',
-    principal,
-    operationId,
-    successUnits: ({ result }) => result.usageUnits,
-  },
-  handler,
-);
+successUnits: ({ result }) => result.usageUnits
 ```
 
 The current contract requires `actualUnits <= reservedUnits`.
 
-## Error settlement
+If `successUnits` throws or returns a negative, unsafe, or over-reservation value, the wrapper **does not leave the lease pending**. It settles the full reservation and then surfaces `UsageClassificationError`.
 
-Unhandled tool errors are conservative by default: the full reservation is charged. This avoids a quota-bypass pattern where a caller deliberately triggers a failure after upstream cost was already incurred.
+## MCP tool errors (`isError: true`)
 
-Return a lower `errorUnits` value only when the application can prove the metered resource was not consumed or knows the exact partial cost:
+MCP tool handlers may return an ordinary result with `isError: true`. This is not treated as success.
+
+Use `toolErrorUnits` when a tool-error result has a known cost:
+
+```ts
+toolErrorUnits: ({ result, lease }) => {
+  if (isKnownZeroCostMiss(result)) return 0;
+  return lease.reservedUnits;
+}
+```
+
+Without `toolErrorUnits`, the full reservation is charged. If the classifier fails, the full reservation is settled before `UsageClassificationError` is surfaced.
+
+## Thrown errors
+
+Unhandled thrown errors are also conservative by default: the full reservation is charged. Return a lower `errorUnits` value only when the application can prove the metered resource was not consumed or knows the exact partial cost.
 
 ```ts
 errorUnits: ({ error, lease }) => {
@@ -129,32 +140,36 @@ errorUnits: ({ error, lease }) => {
 
 Avoid classifying broad network errors as zero-cost unless you can prove the upstream operation did not happen.
 
+## `input_required` is not yet supported
+
+MCP v2 can return `resultType: 'input_required'`, collect input at the client, and invoke the tool handler again in a fresh request. Correct quota accounting for that flow needs reservation suspend/resume semantics across rounds.
+
+The current pre-alpha `protectTool()` therefore intentionally rejects `input_required`. If a wrapped handler returns it, the current reservation is conservatively settled and `UnsupportedMcpUsageFlowError` is surfaced. This is preferable to silently charging every round or deadlocking on a reused operation ID.
+
+Do **not** wrap a production multi-round `input_required` tool with `protectTool()` until explicit support lands. This limitation is tracked for v0.1.
+
 ## Settlement failures
 
 A settlement error is surfaced as `UsageSettlementError`. The adapter does not blindly retry settlement because a datastore can apply a write and lose only the acknowledgement.
 
-```ts
-try {
-  await protectedHandler(args, ctx);
-} catch (error) {
-  if (error instanceof UsageSettlementError) {
-    // The datastore state may be ambiguous. Preserve the operation ID and
-    // reconcile/retry only through an idempotent recovery path.
-  }
-  throw error;
-}
-```
+The Redis adapter makes an identical settlement replay idempotent, but recovery/reconciliation policy remains an application concern.
 
-The Redis adapter is designed so replaying an identical settlement is idempotent, but recovery policy remains an application concern.
+## Denials and information disclosure
 
-## Denials
+Admission denial throws `UsageDeniedError`. Its human-readable message is intentionally generic: `Usage denied by usage policy`. The detailed `reason` remains available as a programmatic property but is not interpolated into the thrown message.
 
-When admission is denied, the adapter throws `UsageDeniedError` before executing the wrapped handler. Map that error to the MCP result/error behavior appropriate for your server and client UX.
+Treat policy reasons as internal unless you intentionally map them to a safe MCP result. Do not expose tenant identifiers, internal budget keys, balances, or entitlement internals merely because they are present in a denial reason.
 
-Do not expose unrelated tenant balances or internal budget identifiers in user-facing messages unless that disclosure is intentional.
+## Protocol integration tests
+
+The repository tests the wrapper directly and also through the official SDK v2 `Client + createMcpHandler` in-process path. The protocol tests pin:
+
+- no-input tools with explicit `noInput: true`, including runtime normalization to `args === undefined`;
+- input-schema tools with validated `(args, ctx)` behavior;
+- `isError: true` preservation and tool-error accounting;
+- generic denial messages without internal reason disclosure;
+- explicit rejection of unsupported `input_required` flows.
 
 ## MCP SDK compatibility
 
-The adapter targets the public `@modelcontextprotocol/server` v2 API and uses the public `ServerContext` type. The core package does not import the MCP SDK, which keeps protocol/SDK churn isolated to this adapter.
-
-The repository currently verifies its TypeScript build against `@modelcontextprotocol/server` v2.0.0. Before upgrading the peer dependency, run the full CI suite and review SDK migration notes.
+The adapter targets the public `@modelcontextprotocol/server` v2 API and currently builds/tests against v2.0.0. The core package does not import the MCP SDK, which keeps protocol/SDK churn isolated to this adapter.

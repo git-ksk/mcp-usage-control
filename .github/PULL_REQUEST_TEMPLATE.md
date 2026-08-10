@@ -12,8 +12,13 @@
 - [ ] Denied path / deny path
 - [ ] Duplicate or retry behavior when relevant / 必要ならduplicate・retry
 - [ ] Concurrency behavior when relevant / 必要ならconcurrency
-- [ ] Lease expiry/renewal when relevant / 必要ならlease expiry・renewal
-- [ ] Ambiguous storage/settlement failure when relevant / 必要ならambiguous storage・settlement failure
+- [ ] Pending vs cost-liable expiry when relevant / 必要ならpending・cost-liable expiry
+- [ ] Lease renewal/loss when relevant / 必要ならlease renewal・loss
+- [ ] Process-crash recovery when relevant / 必要ならprocess crash recovery
+- [ ] Cost-classifier failure/invalid value when relevant / 必要ならcost classifier failure・invalid value
+- [ ] Ambiguous storage/settlement acknowledgement when relevant / 必要ならambiguous storage・settlement ACK
+- [ ] MCP `isError` / callback-shape / multi-round semantics when relevant / 必要ならMCP `isError`・callback shape・multi-round semantics
+- [ ] Official MCP SDK protocol integration test when SDK behavior matters / SDK behaviorが関係する場合は公式MCP SDK integration test
 - [ ] `pnpm check`
 
 ## Compatibility / 互換性

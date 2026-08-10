@@ -11,10 +11,10 @@ const policy: UsagePolicy = {
   },
 };
 
-function request(operationId: string) {
+function request(operationId: string, principalId = 'user-1') {
   return {
     operationId,
-    principal: { id: 'user-1', plan: 'free' },
+    principal: { id: principalId, plan: 'free' },
     tool: 'search',
     args: {},
   };
@@ -54,6 +54,21 @@ describe('UsageControl', () => {
 
     const duplicate = await control.reserve(request('same-op'));
     expect(duplicate).toEqual({ allowed: false, reason: 'duplicate_operation' });
+  });
+
+  it('does not collide when principal and operation IDs contain delimiters', async () => {
+    const store = new MemoryUsageStore();
+    const widePolicy: UsagePolicy = {
+      quote() {
+        return { decision: 'allow', units: 0, budget: { key: 'shared', limit: 10 } };
+      },
+    };
+    const control = new UsageControl(store, widePolicy);
+
+    const first = await control.reserve(request('b:c', 'a'));
+    const second = await control.reserve(request('c', 'a:b'));
+    expect(first.allowed).toBe(true);
+    expect(second.allowed).toBe(true);
   });
 
   it('makes identical settlement idempotent', async () => {
@@ -98,5 +113,50 @@ describe('UsageControl', () => {
     await vi.advanceTimersByTimeAsync(40);
     const afterRenewedLease = await control.reserve(request('op-c'));
     expect(afterRenewedLease.allowed).toBe(true);
+  });
+
+  it('releases an expired reservation that never became cost-liable', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+    const expiringPolicy: UsagePolicy = {
+      quote() {
+        return {
+          decision: 'allow',
+          units: 1,
+          budget: { key: 'monthly:user-1', limit: 1 },
+          reservationTtlMs: 30,
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), expiringPolicy);
+    const first = await control.reserve(request('op-a'));
+    expect(first.allowed).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(31);
+    const second = await control.reserve(request('op-b'));
+    expect(second.allowed).toBe(true);
+  });
+
+  it('charges the full reservation if a cost-liable lease expires before settlement', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+    const expiringPolicy: UsagePolicy = {
+      quote() {
+        return {
+          decision: 'allow',
+          units: 1,
+          budget: { key: 'monthly:user-1', limit: 1 },
+          reservationTtlMs: 30,
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), expiringPolicy);
+    const first = await control.reserve(request('op-a'));
+    if (!first.allowed) throw new Error('expected admission');
+    await first.lease.markLiable();
+
+    await vi.advanceTimersByTimeAsync(31);
+    const second = await control.reserve(request('op-b'));
+    expect(second).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
   });
 });

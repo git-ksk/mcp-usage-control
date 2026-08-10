@@ -38,6 +38,15 @@ export type StoreReserveResult =
   | { accepted: true; reservation: ReservationRecord; remaining: number }
   | { accepted: false; reason: 'quota_exceeded' | 'duplicate_operation'; remaining?: number };
 
+export interface MarkLiableInput {
+  reservationId: string;
+}
+
+export interface MarkLiableResult {
+  reservationId: string;
+  expiresAt: number;
+}
+
 export interface RenewInput {
   reservationId: string;
   ttlMs: number;
@@ -69,6 +78,7 @@ export interface UsageStore {
     budget: Budget;
     ttlMs: number;
   }): Promise<StoreReserveResult>;
+  markLiable(input: MarkLiableInput): Promise<MarkLiableResult>;
   renew(input: RenewInput): Promise<RenewResult>;
   settle(input: SettleInput): Promise<SettlementResult>;
 }
@@ -86,7 +96,7 @@ export class UsageStateError extends Error {
 
 export class UsageDeniedError extends Error {
   constructor(public readonly reason: string) {
-    super(`Usage denied: ${reason}`);
+    super('Usage denied by usage policy');
     this.name = 'UsageDeniedError';
   }
 }
@@ -100,6 +110,12 @@ export class UsageLease {
 
   get reservedUnits(): number {
     return this.reservation.reservedUnits;
+  }
+
+  async markLiable(): Promise<MarkLiableResult> {
+    const marked = await this.store.markLiable({ reservationId: this.reservation.id });
+    this.reservation.expiresAt = marked.expiresAt;
+    return marked;
   }
 
   async renew(ttlMs = this.ttlMs): Promise<RenewResult> {
@@ -150,7 +166,7 @@ export class UsageControl {
 }
 
 interface InternalReservation extends ReservationRecord {
-  state: 'pending' | 'settled';
+  state: 'pending' | 'liable' | 'settled';
   actualUnits?: number;
   outcome?: string;
 }
@@ -167,9 +183,9 @@ export class MemoryUsageStore implements UsageStore {
     ttlMs: number;
   }): Promise<StoreReserveResult> {
     const now = Date.now();
-    this.releaseExpired(now);
+    this.recoverExpired(now);
 
-    const operationKey = `${input.request.principal.id}:${input.request.operationId}`;
+    const operationKey = operationKeyFor(input.request.principal.id, input.request.operationId);
     if (this.operations.has(operationKey)) {
       return { accepted: false, reason: 'duplicate_operation' };
     }
@@ -197,14 +213,25 @@ export class MemoryUsageStore implements UsageStore {
     return { accepted: true, reservation, remaining: remaining - input.units };
   }
 
+  async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
+    const now = Date.now();
+    this.recoverExpired(now);
+    const reservation = this.reservations.get(input.reservationId);
+    if (!reservation || reservation.state === 'settled') {
+      throw new UsageStateError('Active reservation not found or expired');
+    }
+    reservation.state = 'liable';
+    return { reservationId: reservation.id, expiresAt: reservation.expiresAt };
+  }
+
   async renew(input: RenewInput): Promise<RenewResult> {
     assertPositiveInteger(input.ttlMs, 'ttlMs');
     const now = Date.now();
-    this.releaseExpired(now);
+    this.recoverExpired(now);
 
     const reservation = this.reservations.get(input.reservationId);
-    if (!reservation || reservation.state !== 'pending') {
-      throw new UsageStateError('Pending reservation not found or expired');
+    if (!reservation || reservation.state === 'settled') {
+      throw new UsageStateError('Active reservation not found or expired');
     }
 
     reservation.expiresAt = now + input.ttlMs;
@@ -213,6 +240,7 @@ export class MemoryUsageStore implements UsageStore {
 
   async settle(input: SettleInput): Promise<SettlementResult> {
     assertNonNegativeInteger(input.actualUnits, 'actualUnits');
+    this.recoverExpired(Date.now());
     const reservation = this.reservations.get(input.reservationId);
     if (!reservation) throw new UsageStateError('Reservation not found or expired');
 
@@ -238,17 +266,31 @@ export class MemoryUsageStore implements UsageStore {
     return toSettlement(reservation);
   }
 
-  private releaseExpired(now: number): void {
+  private recoverExpired(now: number): void {
     for (const [id, reservation] of this.reservations) {
-      if (reservation.state !== 'pending' || reservation.expiresAt > now) continue;
-      this.used.set(
-        reservation.budgetKey,
-        Math.max(0, (this.used.get(reservation.budgetKey) ?? 0) - reservation.reservedUnits),
-      );
-      this.operations.delete(`${reservation.principalId}:${reservation.operationId}`);
-      this.reservations.delete(id);
+      if (reservation.state === 'settled' || reservation.expiresAt > now) continue;
+
+      if (reservation.state === 'pending') {
+        this.used.set(
+          reservation.budgetKey,
+          Math.max(0, (this.used.get(reservation.budgetKey) ?? 0) - reservation.reservedUnits),
+        );
+        this.operations.delete(operationKeyFor(reservation.principalId, reservation.operationId));
+        this.reservations.delete(id);
+        continue;
+      }
+
+      // Once execution has been marked liable, expiry is conservative: retain
+      // the full reservation as consumed so a process crash cannot become a refund.
+      reservation.state = 'settled';
+      reservation.actualUnits = reservation.reservedUnits;
+      reservation.outcome = 'lease_expired_after_execution_started';
     }
   }
+}
+
+function operationKeyFor(principalId: string, operationId: string): string {
+  return JSON.stringify([principalId, operationId]);
 }
 
 function toSettlement(reservation: InternalReservation): SettlementResult {

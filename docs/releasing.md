@@ -11,7 +11,7 @@ Until the first tagged v0.1 release:
 - `main` is the only supported development line;
 - public TypeScript APIs may change without a deprecation period;
 - package names may change;
-- documentation describes the current `main` behavior unless it explicitly names a tag;
+- documentation describes current `main` behavior unless it explicitly names a tag;
 - changes to accounting invariants should include migration notes in the pull request.
 
 Do not depend on an unpublished workspace package name as if it were a stable npm contract.
@@ -20,8 +20,12 @@ Do not depend on an unpublished workspace package name as if it were a stable np
 
 The first registry release should not happen until at least the following are complete:
 
-- atomic multi-budget admission has an intentionally reviewed contract;
-- idempotency/expiry semantics are documented and tested;
+- atomic multi-budget admission has an intentionally reviewed all-or-nothing contract;
+- idempotency, operation scoping, tombstone, cancellation and expiry semantics are documented and tested;
+- pending -> cost-liable -> settled transitions and crash-after-execution-start recovery are covered by reference and Redis tests;
+- MCP normal success, `{ isError: true }`, thrown errors, classifier failures and settlement ambiguity are covered through both wrapper tests and the official SDK client/handler integration path;
+- MCP v2 `input_required` has either real reservation suspend/resume support or an intentionally finalized/documented support boundary;
+- Redis server-time expiry semantics and durability limitations are documented;
 - core, MCP, and Redis package names are verified on npm;
 - `pnpm-lock.yaml` is committed and CI uses a frozen lockfile;
 - package `files`/exports metadata is verified with pack smoke tests;
@@ -33,8 +37,6 @@ The first registry release should not happen until at least the following are co
 
 Before 1.0, Semantic Versioning is used with the usual caveat that minor releases may contain breaking API changes.
 
-Suggested interpretation:
-
 - patch: fixes that preserve the intended public contract;
 - minor: new features and, before 1.0, intentional breaking API changes;
 - major: reserved for 1.0+ compatibility boundaries.
@@ -43,17 +45,10 @@ Breaking changes must be called out prominently in release notes even when they 
 
 ## Release notes
 
-Each tagged release should summarize:
-
-- user-visible features and fixes;
-- changes to safety/accounting invariants;
-- breaking API or configuration changes;
-- storage schema or migration considerations;
-- supported Node.js / MCP SDK / Redis versions;
-- known limitations.
+Each tagged release should summarize user-visible features/fixes, changes to safety/accounting invariants, breaking API/configuration changes, storage schema/migration considerations, supported Node.js/MCP SDK/Redis versions, and known limitations.
 
 Do not publish secrets, tokens, connection strings, production identifiers, or private incident details in release artifacts.
 
 ## Security fixes
 
-For a vulnerability that could enable quota bypass, double spending, unauthorized entitlement access, or inconsistent settlement, follow [SECURITY.md](../SECURITY.md). Coordinate disclosure before publishing detailed exploit information.
+For a vulnerability that could enable quota bypass, double spending, unauthorized entitlement access, crash-after-cost refund, or inconsistent settlement, follow [SECURITY.md](../SECURITY.md). Coordinate disclosure before publishing detailed exploit information.

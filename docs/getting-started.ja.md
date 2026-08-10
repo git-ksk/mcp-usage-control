@@ -2,15 +2,15 @@
 
 [English](getting-started.md) | [日本語](getting-started.ja.md)
 
-`mcp-usage-control` は現在pre-alphaで、workspace packageは意図的にprivateにしています。そのため、このguideはnpm installではなくrepository sourceから始めます。
+`mcp-usage-control` は現在pre-alphaで、workspace packageは意図的にprivateです。そのためnpm installではなくrepository sourceから開始します。
 
-## 必要環境
+## Requirements
 
 - Node.js 20以上
 - pnpm 10
-- Redis integration testを実行する場合、またはRedis adapterを利用する場合はRedis 7
+- Redis integration testまたはRedis adapter利用時のみRedis 7
 
-## Cloneして確認
+## Clone and verify
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -19,23 +19,25 @@ pnpm install
 pnpm check
 ```
 
-`pnpm check` はworkspace packageをbuildし、testを実行します。CIではNode.js 20 / 22を対象にし、Redis integration testでは実際のRedis 7 serviceを起動します。
+`pnpm check` は全workspace packageをbuildしてtestします。CIではNode.js 20 / 22、実Redis 7、公式MCP SDK v2 client/handler integration pathまで実行します。
 
-## 基本モデル
+> reproducible release installはまだ未確定です。v0.1前に `pnpm-lock.yaml` をcommitし、CIをfrozen installへ切り替えます。
 
-coreの流れは次のとおりです。
+## Mental model
 
 ```text
-principal -> policy -> quote -> atomic reserve -> execute -> settle
-                                 ^              |
-                                 |--- renew -----|
+principal -> policy -> quote -> atomic reserve -> mark liable -> execute -> settle
+                                 ^                          |
+                                 |----------- renew --------|
 ```
 
-policyがrequestを許可するか、何unitをreserveするかを決めます。storeはquota比較とreservation作成をatomicに実行します。成功したreservationはrenew可能なleaseになり、実行後に実消費量をsettleします。
+policyがeligibilityと最大reserve unitsを決定し、storeがquota比較とreservation作成をatomicに行います。
 
-toolが失敗しても自動的に無料にはしません。すでにupstream resourceを消費している場合、そのcostをsettlementへ反映する必要があります。
+reservationは最初pendingです。metered execution開始直前に `markLiable()` を呼びます。pending expiryはcapacityを解放できますが、cost-liable expiryはfull reservationを維持するため、execution開始後のworker/process crashがrefundになりません。
 
-## 最小のin-memory例
+tool failureは自動的にfreeではありません。upstream workがmetered resourceを消費した場合、そのcostをsettleする必要があります。
+
+## Minimal core example
 
 ```ts
 import {
@@ -58,7 +60,6 @@ const policy: UsagePolicy = {
 };
 
 const control = new UsageControl(new MemoryUsageStore(), policy);
-
 const admission = await control.reserve({
   operationId: 'request-123',
   principal: { id: 'user-42', plan: 'free' },
@@ -66,21 +67,22 @@ const admission = await control.reserve({
   args: { query: 'example' },
 });
 
-if (!admission.allowed) {
-  throw new Error(`Usage denied: ${admission.reason}`);
-}
+if (!admission.allowed) throw new Error('usage denied');
 
+await admission.lease.markLiable();
 try {
-  // ここでmetered workを実行します。
+  const result = await performMeteredWork();
   await admission.lease.settle(1, 'success');
+  return result;
 } catch (error) {
-  // executionとsettlementをapplication側で分離する場合は、metered workが
-  // 実際に発生したかに基づいてactual unitsを分類してください。
+  // actual incurred costをsettleします。metered resource未消費を
+  // 証明できる場合だけ0を使います。
+  await admission.lease.settle(admission.lease.reservedUnits, 'error');
   throw error;
 }
 ```
 
-in-memory storeはtest / local development向けです。productionでは [Architecture](architecture.ja.md) に記載したatomicityとfailure semanticsを満たすstoreを利用してください。
+in-memory storeはtest / local development向けです。
 
 ## Production Redis store
 
@@ -90,32 +92,36 @@ import { RedisUsageStore } from '@mcp-usage-control/redis';
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
-
 const store = new RedisUsageStore(redis);
 const control = new UsageControl(store, policy);
 ```
 
-accounting windowが明示されるよう、budget keyにはwindowを含めます。
+window-qualified budget keyを使います。
 
 ```text
 month:user-42:2026-08
 day:user-42:2026-08-10
 ```
 
-adapter側でbudgetのreset日を推測しません。production利用前に [Redis adapter](redis.ja.md) を確認してください。
+adapterはreset dateを推測しません。lease時刻はRedis server timeから取得します。production利用前に [Redis adapter](redis.ja.md) のpersistence / failover durabilityとlazy cleanup behaviorも確認してください。
 
 ## MCP tool handler
 
-`@modelcontextprotocol/server` v2では `protectTool()` を使うことで、reserve、lease heartbeat、error classification、settlementをhandler boundaryへまとめられます。詳しくは [MCP integration](mcp-integration.ja.md) を参照してください。
+`@modelcontextprotocol/server` v2の **single-round** toolでは `protectTool()` を使うと、reserve、`markLiable`、heartbeat、MCP result classification、classifier fallback、settlementをhandler boundaryへまとめられます。詳しくは [MCP integration](mcp-integration.ja.md) を参照してください。
 
-## Production利用前の注意
+MCP v2 `input_required` multi-round toolはまだ `protectTool()` 未対応です。suspend/resume accounting実装まではproductionでwrapしないでください。
 
-このrepositoryはまだpre-alphaです。特に次の点に注意してください。
+## Production利用前
 
-- package名とpublic APIはまだstableではありません。
-- 現在は1 reservationにつき1 budgetです。
-- atomic multi-budget admissionはv0.1までの予定です。
-- lease loss後の厳密なprovider-specific fencingはgeneric coreの責務外です。
-- authenticationとprincipal derivationはapplication側の責務です。
+現在はpre-alphaです。特に次を考慮してください。
 
-実際のenforcement pathへ導入する前に [Architecture](architecture.ja.md)、[Security policy](../SECURITY.ja.md)、[Redis adapter](redis.ja.md) を確認してください。
+- package名 / public APIは未安定。
+- 1 reservationは現在1 budgetのみ。
+- atomic multi-budget admissionはv0.1前に予定。
+- operationのprincipal / tenant scopeは確定作業中。
+- `input_required` multi-round accountingは未実装。
+- lease loss後のprovider-specific fencingはgeneric core外。
+- Redis atomicityだけではpersistence / failover durabilityを保証しない。
+- authentication / principal derivationはapplication責務。
+
+production enforcementへ使う前に [Architecture](architecture.ja.md)、[Security policy](../SECURITY.ja.md)、[Redis adapter](redis.ja.md) を確認してください。

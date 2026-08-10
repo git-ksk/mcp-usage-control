@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-> Pre-alpha: このreferenceはcurrent `main` APIを説明します。v0.1まではname / signatureが変更される可能性があります。
+> Pre-alpha: このreferenceは現在のdevelopment APIを説明します。v0.1まではname / signatureが変更される可能性があります。
 
 ## `@mcp-usage-control/core`
 
@@ -29,7 +29,7 @@ interface UsageRequest<TArgs = unknown> {
 }
 ```
 
-1つのlogical usage-controlled invocationを表します。`operationId` はduplicate protectionに利用し、同一logical invocationのretryではstableにしてください。
+1つのlogical usage-controlled invocationです。`operationId` はduplicate protectionに使い、同じlogical invocationのretryではstableである必要があります。
 
 ### `Budget`
 
@@ -40,9 +40,9 @@ interface Budget {
 }
 ```
 
-policyが定義するaccounting bucketです。time windowを使う場合はwindow-qualified keyを明示してください。
+policy-defined accounting bucketです。time windowには明示的なwindow-qualified keyを使ってください。
 
-### `UsageQuote`
+### `UsageQuote` / `UsagePolicy`
 
 ```ts
 type UsageQuote =
@@ -52,23 +52,12 @@ type UsageQuote =
       budget: Budget;
       reservationTtlMs?: number;
     }
-  | {
-      decision: 'deny';
-      reason: string;
-    };
-```
+  | { decision: 'deny'; reason: string };
 
-policy outputです。allowされたquoteはexecution前に `units` をreserveします。`reservationTtlMs` を指定すると、そのrequestだけ `UsageControl` default TTLをoverrideします。
-
-### `UsagePolicy`
-
-```ts
 interface UsagePolicy {
   quote(request: UsageRequest): UsageQuote | Promise<UsageQuote>;
 }
 ```
-
-application-definedのadmission / quoting policyです。
 
 ### `UsageStore`
 
@@ -81,12 +70,13 @@ interface UsageStore {
     ttlMs: number;
   }): Promise<StoreReserveResult>;
 
+  markLiable(input: MarkLiableInput): Promise<MarkLiableResult>;
   renew(input: RenewInput): Promise<RenewResult>;
   settle(input: SettleInput): Promise<SettlementResult>;
 }
 ```
 
-storage contractです。production implementationは [Architecture](architecture.ja.md) のatomicity / failure invariantを守る必要があります。
+production implementationは [Architecture](architecture.ja.md) のatomicity / failure invariantを維持する必要があります。
 
 ### `UsageControl`
 
@@ -94,7 +84,7 @@ storage contractです。production implementationは [Architecture](architectur
 new UsageControl(store, policy, defaultReservationTtlMs?);
 ```
 
-default reservation TTLは60,000 msです。`reserve(request)` はpolicy評価、quote validation、storeによるatomic admissionを実行し、`AdmissionResult` を返します。
+default reservation TTLは60,000msです。`reserve(request)` はpolicy評価、quote validation、storeのatomic admissionを実行し `AdmissionResult` を返します。
 
 ### `AdmissionResult`
 
@@ -104,21 +94,22 @@ type AdmissionResult =
   | { allowed: false; reason: string; remaining?: number };
 ```
 
-store built-in denial reasonは現在 `quota_exceeded` と `duplicate_operation` です。policyは独自のdeny reasonを返せます。
+store built-inのdenial reasonは現在 `quota_exceeded` と `duplicate_operation` です。policyは独自reasonを返せます。
 
 ### `UsageLease`
-
-主なmember:
 
 ```ts
 lease.reservation
 lease.ttlMs
 lease.reservedUnits
+await lease.markLiable()
 await lease.renew(ttlMs?)
 await lease.settle(actualUnits, outcome)
 ```
 
-`renew()` はpending leaseを延長します。`settle()` はactual usageを確定します。現在のstore contractでは `actualUnits <= reservedUnits` が必要です。
+`markLiable()` はmetered execution boundaryへ入ったことを宣言します。そのactive leaseがsettlement前にexpireした場合、production storeはreservationをrefundせず保守的に消費済みとして維持します。
+
+`renew()` はactive leaseを延長し、`settle()` はactual usageを確定します。現在のcontractでは `actualUnits <= reservedUnits` が必要です。
 
 ### `ReservationRecord`
 
@@ -134,8 +125,6 @@ interface ReservationRecord {
 }
 ```
 
-callerから見たadmitted pending reservationを表します。
-
 ### `SettlementResult`
 
 ```ts
@@ -150,31 +139,33 @@ interface SettlementResult {
 
 ### Errors
 
-`UsageStateError` はexpired reservationやconflicting settlement replayなど、invalid / conflicting store stateを示します。
+`UsageStateError` はinvalid / expired / conflictingなstore stateを表します。
 
-`UsageDeniedError` はadmission failureをexceptionとして扱うadapter向けにdeny reasonを保持します。
+`UsageDeniedError` はprogrammaticな `.reason` を保持しますが、throw messageは意図的にgenericな `Usage denied by usage policy` です。MCP SDKのerror変換でinternal policy detailが自動露出することを防ぎます。
 
 ### `MemoryUsageStore`
 
-test / local development向けのreference `UsageStore` implementationです。process-localでありproduction distributed storeではありません。
+test / local development向けreference implementationです。pending / cost-liable / settled lifecycleを扱いますがprocess-localであり、distributed production storeではありません。
 
 ## `@mcp-usage-control/mcp`
 
-### `protectTool(options, handler)`
-
-`@modelcontextprotocol/server` v2 tool handlerをreserve、optional heartbeat、execution、settlement behaviorでwrapします。
+### `ProtectToolOptions<TArgs, TResult>`
 
 ```ts
 interface ProtectToolOptions<TArgs, TResult> {
   control: UsageControl;
   tool: string;
+  noInput?: boolean;
   principal(ctx: ServerContext): Principal | Promise<Principal>;
-  operationId(
-    args: TArgs,
-    ctx: ServerContext,
-  ): string | Promise<string>;
+  operationId(args: TArgs, ctx: ServerContext): string | Promise<string>;
   leaseHeartbeat?: boolean;
   successUnits?(input: {
+    result: TResult;
+    args: TArgs;
+    ctx: ServerContext;
+    lease: UsageLease;
+  }): number | Promise<number>;
+  toolErrorUnits?(input: {
     result: TResult;
     args: TArgs;
     ctx: ServerContext;
@@ -189,26 +180,67 @@ interface ProtectToolOptions<TArgs, TResult> {
 }
 ```
 
+input schemaがないtoolでは `noInput: true` を指定します。input schemaがあるtoolでは `noInput` を省略するかfalseにします。
+
+このflagを明示するのは意図的です。SDKのpublic typeではno-input callbackを `(ctx)` と表現しますが、現在のdispatch pathではruntime上 `({}, ctx)` で呼ばれる場合があります。`{}` はempty object schemaの正当な入力にもなるため、adapterはruntime valueだけから推測しません。
+
+`noInput: true` modeではpolicy request、各hook、operation-ID callback、wrapped application handlerへ `args === undefined` と正しい `ServerContext` を渡します。
+
+### `protectTool(options, handler)`
+
+**single-round** `@modelcontextprotocol/server` v2 tool handlerへreserve、cost-liable activation、heartbeat、execution classification、settlementを追加します。
+
+public overloadは概念的に次の形です。
+
+```ts
+protectTool<TResult>(
+  options: ProtectToolOptions<undefined, TResult> & { noInput: true },
+  handler: (args: undefined, ctx: ServerContext) => TResult | Promise<TResult>,
+): (ctx: ServerContext) => Promise<TResult>;
+
+protectTool<TArgs, TResult>(
+  options: ProtectToolOptions<TArgs, TResult> & { noInput?: false },
+  handler: (args: TArgs, ctx: ServerContext) => TResult | Promise<TResult>,
+): (args: TArgs, ctx: ServerContext) => Promise<TResult>;
+```
+
+runtimeではno-input overloadについてSDK dispatchの `({}, ctx)` 形式も受け入れ、内部でnormalizeします。
+
 behavior:
 
-- `leaseHeartbeat` はdefault enabled。
-- `successUnits` 未指定のsuccessはfull reservationをsettle。
-- `errorUnits` 未指定のfailureはfull reservationをsettle。
-- admission denyはhandler execution前に `UsageDeniedError` をthrow。
-- settlement failureは `UsageSettlementError` をthrowし、盲目的にretryしない。
+- admitted leaseはhandler entry前にcost-liableへ遷移します。
+- `leaseHeartbeat` はdefaultでenabledです。
+- normal successは `successUnits` またはfull reservationを使います。
+- MCP `{ isError: true }` resultは `toolErrorUnits` またはfull reservationを使います。
+- thrown errorは `errorUnits` またはfull reservationを使います。
+- classifierがthrow / invalid valueを返した場合、full reservationを保守的にsettleした後 `UsageClassificationError` を返します。
+- admission denialはhandler実行前に `UsageDeniedError` をthrowします。
+- settlement failureは `UsageSettlementError` となり、blind retryしません。
+- `resultType: 'input_required'` は現在未対応で、保守的settlement後に `UnsupportedMcpUsageFlowError` を返します。
 
-利用方法とsafety noteは [MCP integration](mcp-integration.ja.md) を参照してください。
+詳しくは [MCP integration](mcp-integration.ja.md) を参照してください。
 
 ### `UsageSettlementError`
-
-次を保持します。
 
 ```ts
 settlementError: unknown
 executionError?: unknown
 ```
 
-tool error後のsettlementが失敗した場合、`executionError` に元のexecution failure、`settlementError` にaccounting failureを保持します。
+ambiguous / failed accounting settlementを表します。
+
+### `UsageClassificationError`
+
+```ts
+classificationError: unknown
+executionError?: unknown
+```
+
+cost classifierが失敗またはinvalid unitsを返したため、wrapperがfull reservationを保守的にsettleした後に返されます。
+
+### `UnsupportedMcpUsageFlowError`
+
+現在はMCP v2 `input_required` multi-round tool resultに使います。suspend/resume accountingはまだ実装していません。
 
 ## `@mcp-usage-control/redis`
 
@@ -218,7 +250,7 @@ tool error後のsettlementが失敗した場合、`executionError` に元のexec
 new RedisUsageStore(client, options?);
 ```
 
-clientはadapterの `RedisEvalClient` interfaceと互換な `eval(script, { keys, arguments })` methodを持つ必要があります。
+clientは `RedisEvalClient` compatibleな `eval(script, { keys, arguments })` methodを必要とします。
 
 ### `RedisUsageStoreOptions`
 
@@ -236,23 +268,21 @@ default:
 - `prefix`: `muc`
 - `hashTag`: `usage`
 - `cleanupBatchSize`: `256`
-- `idempotencyTtlMs`: `86_400_000`（24時間）
+- `idempotencyTtlMs`: `86_400_000` (24時間)
 
-`prefix` / `hashTag` ではRedis hash-tag braceを拒否し、adapterがtransaction domainを管理します。
-
-key layout、cleanup、acknowledgement ambiguity、Redis Cluster trade-offは [Redis adapter](redis.ja.md) を参照してください。
+lease / tombstone timestampはapplication clockではなくLua内のRedis server timeから計算します。key layout、cleanup、cost-liable expiry、ACK ambiguity、durability boundary、Redis Cluster trade-offは [Redis adapter](redis.ja.md) を参照してください。
 
 ## Numeric validation
 
-unit / limitはJavaScript safe integerとして扱います。unit / limitはnon-negative、TTLやcleanup / retention durationは受け付ける箇所でpositive safe integerが必要です。
+units / limitsはJavaScript safe integerです。units / limitsはnon-negative、TTL / retention durationは受け付ける箇所でpositive safe integerが必要です。classifier resultも `reservedUnits` 以下である必要があります。
 
 ## Compatibility
 
 現在のrepository target:
 
 - Node.js 20+
-- `@modelcontextprotocol/server` v2（現在2.0.0に対してbuild）
+- `@modelcontextprotocol/server` v2（現在2.0.0でbuild/test）
 - Redis 7 integration behavior
 - workspaceのnode-redis `redis` 6.2.x
 
-これらはpre-alpha compatibility targetであり、まだlong-term support promiseではありません。
+pre-alphaのcompatibility targetであり、まだlong-term support promiseではありません。
