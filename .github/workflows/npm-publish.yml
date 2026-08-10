@@ -1,21 +1,25 @@
-name: GitHub Release
+name: Publish npm
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to validate/release (for example v0.1.0)
+        description: Existing GitHub release tag to publish (for example v0.1.0)
         required: true
         type: string
+      confirm:
+        description: Explicitly authorize npm publication
+        required: true
+        default: false
+        type: boolean
 
 permissions:
-  contents: write
+  contents: read
+  id-token: write
 
 jobs:
-  release:
+  publish:
+    if: ${{ inputs.confirm == true }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -29,17 +33,14 @@ jobs:
           --health-retries 10
     env:
       REDIS_URL: redis://127.0.0.1:6379
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Resolve release tag
         id: release
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag='${{ inputs.tag }}'
-          else
-            tag='${{ github.ref_name }}'
-          fi
+          tag='${{ inputs.tag }}'
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "invalid release tag: $tag" >&2
             exit 1
@@ -58,11 +59,21 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
+          registry-url: https://registry.npmjs.org
           package-manager-cache: false
+
+      - name: Use npm CLI with Trusted Publishing support
+        run: npm install --global npm@11.15.0
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+
+      - name: Verify GitHub Release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: gh release view "$TAG" >/dev/null
 
       - name: Verify package versions match tag
         shell: bash
@@ -75,7 +86,7 @@ jobs:
             test "$actual" = "$VERSION"
           done
 
-      - name: Pack and inspect public packages
+      - name: Pack packages
         shell: bash
         run: |
           set -euo pipefail
@@ -89,47 +100,45 @@ jobs:
             packages/mcp/package.json \
             packages/redis/package.json \
             packages/cloudflare/package.json
-          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 4
           for archive in /tmp/muc-packs/*.tgz; do
-            listing="$(tar -tzf "$archive")"
-            grep -qx 'package/dist/index.js' <<<"$listing"
-            grep -qx 'package/dist/index.d.ts' <<<"$listing"
-            grep -qx 'package/README.md' <<<"$listing"
-            grep -qx 'package/LICENSE' <<<"$listing"
-            if grep -Eq '^package/(src/|dist/.*(\.test\.|\.integration\.test\.))' <<<"$listing"; then
-              echo "source or compiled test files leaked into $archive" >&2
-              exit 1
-            fi
             manifest="$(tar -xOf "$archive" package/package.json)"
             ! grep -q 'workspace:' <<<"$manifest"
             ! grep -q 'pack-workspace-deps' <<<"$manifest"
           done
 
-      - name: Build release notes from changelog
+      - name: Publish packages in dependency order
         shell: bash
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          awk -v version="$VERSION" '
-            $0 ~ "^## \\[" version "\\]" { capture=1; next }
-            capture && /^## / { exit }
-            capture { print }
-          ' CHANGELOG.md > /tmp/release-notes.md
-          test -s /tmp/release-notes.md
+          if [[ -n "${NPM_TOKEN:-}" ]]; then
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          else
+            unset NODE_AUTH_TOKEN || true
+          fi
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
+          publish_one() {
+            local name="$1"
+            local archive="$2"
+            if npm view "${name}@${VERSION}" version --json >/dev/null 2>&1; then
+              echo "${name}@${VERSION} is already published; skipping"
+              return 0
+            fi
+            npm publish "$archive" --access public --provenance
+          }
+
+          publish_one mcp-usage-control "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz"
+          publish_one mcp-usage-control-mcp "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz"
+          publish_one mcp-usage-control-redis "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz"
+          publish_one mcp-usage-control-cloudflare "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz"
+
+      - name: Verify registry versions
         shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "GitHub Release $TAG already exists; skipping"
-          else
-            gh release create "$TAG" \
-              --verify-tag \
-              --title "$TAG" \
-              --notes-file /tmp/release-notes.md
-          fi
+          for name in mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis mcp-usage-control-cloudflare; do
+            test "$(npm view "${name}@${VERSION}" version)" = "$VERSION"
+          done

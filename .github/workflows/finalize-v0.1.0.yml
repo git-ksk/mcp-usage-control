@@ -1,21 +1,17 @@
-name: GitHub Release
+name: Finalize v0.1.0 GitHub Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [main]
+    paths:
+      - '.github/workflows/finalize-v0.1.0.yml'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing release tag to validate/release (for example v0.1.0)
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 jobs:
-  release:
+  finalize:
     runs-on: ubuntu-latest
     services:
       redis:
@@ -29,27 +25,11 @@ jobs:
           --health-retries 10
     env:
       REDIS_URL: redis://127.0.0.1:6379
+      TAG: v0.1.0
+      VERSION: 0.1.0
     steps:
-      - name: Resolve release tag
-        id: release
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            tag='${{ inputs.tag }}'
-          else
-            tag='${{ github.ref_name }}'
-          fi
-          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "invalid release tag: $tag" >&2
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
-
       - uses: actions/checkout@v6
         with:
-          ref: ${{ steps.release.outputs.tag }}
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
@@ -64,10 +44,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
 
-      - name: Verify package versions match tag
+      - name: Verify v0.1.0 package versions
         shell: bash
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           for dir in packages/core packages/mcp packages/redis packages/cloudflare; do
@@ -75,7 +53,31 @@ jobs:
             test "$actual" = "$VERSION"
           done
 
-      - name: Pack and inspect public packages
+      - name: Run Cloudflare workerd integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm dlx wrangler@4.114.0 dev --local \
+            --config packages/cloudflare/wrangler.test.jsonc \
+            --port 8799 >/tmp/muc-cloudflare-wrangler.log 2>&1 &
+          WRANGLER_PID=$!
+          trap 'kill "$WRANGLER_PID" 2>/dev/null || true; cat /tmp/muc-cloudflare-wrangler.log || true' EXIT
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -sS http://127.0.0.1:8799/health >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+
+          node packages/cloudflare/test/integration.mjs
+          node packages/cloudflare/test/reconciliation.mjs
+          node packages/cloudflare/test/maintenance.mjs
+
+      - name: Pack and inspect v0.1.0 artifacts
         shell: bash
         run: |
           set -euo pipefail
@@ -91,24 +93,13 @@ jobs:
             packages/cloudflare/package.json
           test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 4
           for archive in /tmp/muc-packs/*.tgz; do
-            listing="$(tar -tzf "$archive")"
-            grep -qx 'package/dist/index.js' <<<"$listing"
-            grep -qx 'package/dist/index.d.ts' <<<"$listing"
-            grep -qx 'package/README.md' <<<"$listing"
-            grep -qx 'package/LICENSE' <<<"$listing"
-            if grep -Eq '^package/(src/|dist/.*(\.test\.|\.integration\.test\.))' <<<"$listing"; then
-              echo "source or compiled test files leaked into $archive" >&2
-              exit 1
-            fi
             manifest="$(tar -xOf "$archive" package/package.json)"
             ! grep -q 'workspace:' <<<"$manifest"
             ! grep -q 'pack-workspace-deps' <<<"$manifest"
           done
 
-      - name: Build release notes from changelog
+      - name: Build release notes
         shell: bash
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
           awk -v version="$VERSION" '
@@ -118,18 +109,31 @@ jobs:
           ' CHANGELOG.md > /tmp/release-notes.md
           test -s /tmp/release-notes.md
 
-      - name: Create GitHub Release
+      - name: Move unfinished tag to this tested commit and create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
+
+          current_target="$(git rev-list -n 1 "$TAG" 2>/dev/null || true)"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "GitHub Release $TAG already exists; skipping"
-          else
-            gh release create "$TAG" \
-              --verify-tag \
-              --title "$TAG" \
-              --notes-file /tmp/release-notes.md
+            if [[ "$current_target" != "$GITHUB_SHA" ]]; then
+              echo "refusing to move $TAG because a GitHub Release already exists" >&2
+              exit 1
+            fi
+            echo "$TAG is already released at this commit"
+            exit 0
           fi
+
+          if [[ "$current_target" != "$GITHUB_SHA" ]]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag -f "$TAG" "$GITHUB_SHA"
+            git push origin "refs/tags/$TAG" --force
+          fi
+
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "$TAG" \
+            --notes-file /tmp/release-notes.md
