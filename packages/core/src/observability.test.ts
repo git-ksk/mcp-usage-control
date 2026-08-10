@@ -109,7 +109,7 @@ describe('provider-neutral observability', () => {
     });
   });
 
-  it('swallows observer failures and preserves enforcement results', async () => {
+  it('swallows synchronous observer failures and preserves enforcement results', async () => {
     const observer: UsageObserver = {
       onEvent() {
         throw new Error('telemetry backend unavailable');
@@ -126,12 +126,32 @@ describe('provider-neutral observability', () => {
     });
   });
 
-  it('emits store errors without raw exception messages', async () => {
+  it('swallows asynchronous observer rejections and preserves enforcement results', async () => {
+    const observer: UsageObserver = {
+      async onEvent() {
+        throw new Error('async telemetry backend unavailable');
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore({ observer }), policy, { observer });
+
+    const admission = await control.reserve({ ...request, operationId: 'async-observer' });
+    expect(admission.allowed).toBe(true);
+    if (!admission.allowed) return;
+    await expect(admission.lease.settle(2, 'success')).resolves.toMatchObject({
+      actualUnits: 2,
+      releasedUnits: 0,
+    });
+    await Promise.resolve();
+  });
+
+  it('emits store errors without raw exception messages or mutable error names', async () => {
     const events: UsageEvent[] = [];
     const observer = collector(events);
     const failingStore = {
       reserve: async () => {
-        throw new Error('redis://user:password@internal.example');
+        const error = new Error('redis://user:password@internal.example');
+        error.name = 'secret-derived-dynamic-name';
+        throw error;
       },
       markLiable: async () => {
         throw new Error('unused');
@@ -155,6 +175,7 @@ describe('provider-neutral observability', () => {
     });
     expect(JSON.stringify(events[0])).not.toContain('password');
     expect(JSON.stringify(events[0])).not.toContain('internal.example');
+    expect(JSON.stringify(events[0])).not.toContain('secret-derived');
   });
 
   it('emits pending release and liable retention recovery events from the memory store', async () => {
