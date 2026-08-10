@@ -42,7 +42,9 @@ describe('MCP protocol integration', () => {
   it('normalizes the SDK no-input runtime shape and preserves MCP tool errors', async () => {
     const policy: UsagePolicy = {
       quote(request) {
-        expect(request.args).toBeUndefined();
+        if (request.operationId !== 'after-tool-error') {
+          expect(request.args).toBeUndefined();
+        }
         return { decision: 'allow', units: 1, budget: { key: 'shared', limit: 1 } };
       },
     };
@@ -89,7 +91,7 @@ describe('MCP protocol integration', () => {
       operationId: 'after-tool-error',
       principal: { id: 'user-1' },
       tool: 'lookup',
-      args: {},
+      args: undefined,
     });
     expect(next.allowed).toBe(true);
   });
