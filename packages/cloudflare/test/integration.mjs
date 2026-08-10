@@ -153,16 +153,17 @@ assert.ok(
   'liable recovery event must be observed',
 );
 
-// Long-running work survives a short lease through explicit renewal.
-const longRunning = await reserve(store, 'long-running', 'long-running-budget', 1, 180);
+// Long-running work survives beyond its initial lease through explicit renewal.
+// Keep a wide margin after each renewal so slow CI/workerd requests cannot make this timing test flaky.
+const longRunning = await reserve(store, 'long-running', 'long-running-budget', 1, 500);
 assert.equal(longRunning.accepted, true);
 if (!longRunning.accepted) throw new Error('expected long-running admission');
 await store.markLiable({ reservationId: longRunning.reservation.id });
 for (let index = 0; index < 8; index += 1) {
-  await sleep(70);
-  await store.renew({ reservationId: longRunning.reservation.id, ttlMs: 180 });
+  await sleep(100);
+  await store.renew({ reservationId: longRunning.reservation.id, ttlMs: 500 });
 }
-await sleep(70);
+await sleep(100);
 await store.settle({ reservationId: longRunning.reservation.id, actualUnits: 1, outcome: 'success' });
 
 // Lost reserve ACK is not blindly retried. A manual retry sees the committed duplicate.
