@@ -18,7 +18,7 @@ A quote can apply several budgets to one invocation. Every budget reserves atomi
 
 Pending expiry releases every participating budget. Cost-liable expiry conservatively keeps the full charge so a crash after execution starts cannot become a refund.
 
-`UsageControl` can receive an optional `UsageObserver` and explicit metadata. Observer delivery is best-effort/non-blocking and can never change enforcement state. Tool arguments and raw exception messages are not captured automatically.
+`UsageControl` can receive an optional `UsageObserver` and explicit metadata. Observer delivery is best-effort, returned promises are not awaited, and observer failures can never change enforcement state. `onEvent()` itself is invoked inline, so keep synchronous work lightweight. Tool arguments and raw exception messages are not captured automatically.
 
 - [Current source/tarball usage](../../docs/using-from-source.md)
 - [Getting started](../../docs/getting-started.md)
@@ -42,7 +42,7 @@ reserve -> markLiable -> execute -> settle
 
 pending expiryは全budgetを解放し、cost-liable expiryはexecution開始後crashがrefundにならないようfull chargeを保守的に維持します。
 
-`UsageControl` へoptionalな `UsageObserver` と明示metadataを渡せます。observer deliveryはbest-effort / non-blockingで、enforcement stateを変更しません。tool argumentsやraw exception messageは自動収集しません。
+`UsageControl` へoptionalな `UsageObserver` と明示metadataを渡せます。observer deliveryはbest-effortで、返されたPromiseをawaitせず、observer failureがenforcement stateを変更することはありません。`onEvent()` 自体はinlineで呼ばれるため同期処理は軽量にしてください。tool argumentsやraw exception messageは自動収集しません。
 
 - [現在のsource / tarball利用手順](../../docs/using-from-source.ja.md)
 - [Getting started](../../docs/getting-started.ja.md)
