@@ -23,13 +23,17 @@ Hashing is not encryption. Do not put secrets in identifiers.
 
 ### Remote gateway safety
 
-The HTTP gateway has no allow-all authentication mode: callers must provide an application-defined `authorize(request)` callback. The remote client does not blindly retry timeouts or lost acknowledgements. Retry the same logical operation only through the normal idempotency semantics after the application has decided reconciliation is appropriate.
+The HTTP gateway has no allow-all authentication mode: callers must provide an application-defined `authorize(request)` callback. The remote client does not blindly retry timeouts or lost acknowledgements.
+
+For applications that need to recover an ambiguous `reserve()` after a timeout/network failure, the optional `mcp-usage-control-cloudflare/reconciliation` subpath provides an authenticated read-only lookup. Use `createReconciliableCloudflareUsageStoreGateway()` and `reconcileRemoteCloudflareReserve()` explicitly; do not hide ambiguous reserve results behind generic retry middleware.
 
 ### Cost behavior
 
 The adapter does not schedule alarms or intentionally keep a Durable Object active. Expiry/tombstone cleanup is lazy and bounded on subsequent operations. This minimizes background activity but means a large stale-state backlog can conservatively delay capacity recovery.
 
 - [Cloudflare adapter guide](../../docs/cloudflare.md)
+- [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.md)
+- [SQLite schema migrations](../../docs/cloudflare-schema-migrations.md)
 - [Observability](../../docs/observability.md)
 - [Architecture](../../docs/architecture.md)
 - [Security](../../SECURITY.md)
@@ -53,13 +57,17 @@ hashingはencryptionではありません。identifierへsecretを入れない�
 
 ### Remote gateway safety
 
-HTTP gatewayにallow-all authentication defaultはありません。application側で `authorize(request)` callbackを必ず指定します。remote clientはtimeout / lost ACKをblind retryしません。reconciliationが適切とapplicationが判断した場合のみ、通常のidempotency semanticsに従って同じlogical operationをretryしてください。
+HTTP gatewayにallow-all authentication defaultはありません。application側で `authorize(request)` callbackを必ず指定します。remote clientはtimeout / lost ACKをblind retryしません。
+
+`reserve()` のtimeout / network failure後にambiguous resultを復元する必要があるapplication向けに、optionalな `mcp-usage-control-cloudflare/reconciliation` subpathがauthenticated read-only lookupを提供します。`createReconciliableCloudflareUsageStoreGateway()` と `reconcileRemoteCloudflareReserve()` を明示的に利用し、ambiguous reserveをgeneric retry middlewareで隠さないでください。
 
 ### Cost behavior
 
 adapterはalarmをscheduleせず、Durable Objectを意図的に常駐させません。expiry / tombstone cleanupは後続operation時のlazy / bounded cleanupです。background activityを抑える代わりに、大量のstale stateがある場合はcapacity recoveryが保守的に遅れる可能性があります。
 
 - [Cloudflare adapter guide](../../docs/cloudflare.ja.md)
+- [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.ja.md)
+- [SQLite schema migration](../../docs/cloudflare-schema-migrations.ja.md)
 - [Observability](../../docs/observability.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 - [Security](../../SECURITY.ja.md)
