@@ -8,27 +8,11 @@
 - Redis 7 when using `mcp-usage-control-redis`
 - MCP TypeScript SDK v2 when using `mcp-usage-control-mcp`
 
-## Install
+## Current installation path
 
-Core only:
+The packages are **not published to npm yet**. For current use, clone the repository and either work directly from the checkout or pack local `.tgz` packages for installation into another project.
 
-```console
-npm install mcp-usage-control
-```
-
-MCP adapter:
-
-```console
-npm install mcp-usage-control-mcp @modelcontextprotocol/server
-```
-
-Redis store:
-
-```console
-npm install mcp-usage-control-redis redis
-```
-
-To verify the repository from source:
+Verify the repository:
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -37,7 +21,11 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-CI runs the same frozen dependency graph on Node.js 20/22 with real Redis 7 and the official MCP SDK v2 client/handler integration path.
+To consume the packages from another application now, follow **[Use from source / local tarballs](using-from-source.md)**. That guide uses the same package artifacts that CI installs into a clean consumer project.
+
+After the first npm registry publish completes, this section will switch to registry installation as the primary path. Source/tarball installation will remain supported for development and unreleased commits.
+
+CI runs the frozen dependency graph on Node.js 20/22 with real Redis 7 and the official MCP SDK v2 client/handler integration path.
 
 ## Mental model
 

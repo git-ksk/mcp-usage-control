@@ -2,9 +2,7 @@
 
 Core package for concurrency-safe MCP usage enforcement. MCP and storage vendor independent.
 
-```console
-npm install mcp-usage-control
-```
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-0.1.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
 
 ## English
 
@@ -20,6 +18,7 @@ A quote can apply several budgets to one invocation. Every budget reserves atomi
 
 Pending expiry releases every participating budget. Cost-liable expiry conservatively keeps the full charge so a crash after execution starts cannot become a refund.
 
+- [Current source/tarball usage](../../docs/using-from-source.md)
 - [Getting started](../../docs/getting-started.md)
 - [API reference](../../docs/api-reference.md)
 - [Architecture](../../docs/architecture.md)
@@ -40,6 +39,7 @@ reserve -> markLiable -> execute -> settle
 
 pending expiryは全budgetを解放し、cost-liable expiryはexecution開始後crashがrefundにならないようfull chargeを保守的に維持します。
 
+- [現在のsource / tarball利用手順](../../docs/using-from-source.ja.md)
 - [Getting started](../../docs/getting-started.ja.md)
 - [API reference](../../docs/api-reference.ja.md)
 - [Architecture](../../docs/architecture.ja.md)

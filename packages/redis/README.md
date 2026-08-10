@@ -2,9 +2,7 @@
 
 Atomic Redis store for `mcp-usage-control`.
 
-```console
-npm install mcp-usage-control-redis redis
-```
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or locally packed `mcp-usage-control` + `mcp-usage-control-redis` tarballs. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
 
 ## English
 
@@ -14,6 +12,7 @@ Lease/tombstone timestamps come from Redis server `TIME`, not application `Date.
 
 Pending expiry releases every participating budget. Cost-liable expiry conservatively keeps the full charge. Identical settlement replay is idempotent; conflicting replay fails. The logical replay scope is `(tenantId, principal.id, tool, operationId)`.
 
+- [Current source/tarball usage](../../docs/using-from-source.md)
 - [Redis adapter](../../docs/redis.md)
 - [Getting started](../../docs/getting-started.md)
 - [API reference](../../docs/api-reference.md)
@@ -29,6 +28,7 @@ lease / tombstone時刻はapplication `Date.now()` ではなくRedis server `TIM
 
 pending expiryは参加する全budgetを解放し、cost-liable expiryはfull chargeを保守的に維持します。identical settlement replayはidempotent、conflicting replayはfailします。logical replay scopeは `(tenantId, principal.id, tool, operationId)` です。
 
+- [現在のsource / tarball利用手順](../../docs/using-from-source.ja.md)
 - [Redis adapter](../../docs/redis.ja.md)
 - [Getting started](../../docs/getting-started.ja.md)
 - [API reference](../../docs/api-reference.ja.md)

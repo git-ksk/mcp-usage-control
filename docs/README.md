@@ -6,7 +6,8 @@ Maintained documentation for `mcp-usage-control` v0.1.
 
 ## Start here
 
-- [Getting started](getting-started.md) — npm/source setup, multi-budget policy, core lifecycle, Redis and MCP examples.
+- [Use from source / local tarballs](using-from-source.md) — **current installation path while npm publication is pending**; clone, verify, pack, install into another project, and smoke-test imports.
+- [Getting started](getting-started.md) — multi-budget policy, core lifecycle, Redis and MCP examples.
 - [MCP integration](mcp-integration.md) — `@modelcontextprotocol/server` v2 single-round usage control and the `input_required` support boundary.
 - [API reference](api-reference.md) — v0.1 core, MCP, and Redis public surface/defaults.
 - [Architecture](architecture.md) — safety invariants, multi-budget atomicity, liability, idempotency, settlement, trust boundaries.

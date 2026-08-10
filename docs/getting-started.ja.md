@@ -8,27 +8,11 @@
 - `mcp-usage-control-redis` 利用時はRedis 7
 - `mcp-usage-control-mcp` 利用時はMCP TypeScript SDK v2
 
-## Install
+## 現在のinstall方法
 
-Coreのみ:
+packageは**まだnpmへ公開していません**。現時点ではrepositoryをcloneし、checkoutを直接使うか、ローカルで`.tgz` packageを生成して別projectへinstallしてください。
 
-```console
-npm install mcp-usage-control
-```
-
-MCP adapter:
-
-```console
-npm install mcp-usage-control-mcp @modelcontextprotocol/server
-```
-
-Redis store:
-
-```console
-npm install mcp-usage-control-redis redis
-```
-
-repository sourceから確認する場合:
+repositoryを検証:
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -36,6 +20,10 @@ cd mcp-usage-control
 pnpm install --frozen-lockfile
 pnpm check
 ```
+
+別applicationから現在のpackageを利用する場合は **[Source / local tarballから使う](using-from-source.ja.md)** に従ってください。CIがcleanなconsumer projectへinstallしているpackage artifactと同じ方法です。
+
+初回npm registry publish完了後は、このsectionをregistry install中心へ切り替えます。source / tarball installはdevelopmentや未release commit向けとして残します。
 
 CIでは同じlockfileを使ってNode.js 20 / 22、実Redis 7、公式MCP SDK v2 client/handler integration pathまでtestします。
 
