@@ -39,7 +39,7 @@ async function connect(register: (server: McpServer) => void): Promise<Client> {
 }
 
 describe('MCP protocol integration', () => {
-  it('normalizes the SDK no-input (ctx) callback shape and preserves MCP tool errors', async () => {
+  it('normalizes the SDK no-input runtime shape and preserves MCP tool errors', async () => {
     const policy: UsagePolicy = {
       quote(request) {
         expect(request.args).toBeUndefined();
@@ -55,6 +55,7 @@ describe('MCP protocol integration', () => {
           {
             control,
             tool: 'lookup',
+            noInput: true,
             principal: ctx => {
               expect(ctx.mcpReq.method).toBe('tools/call');
               return { id: 'user-1' };
@@ -93,7 +94,7 @@ describe('MCP protocol integration', () => {
     expect(next.allowed).toBe(true);
   });
 
-  it('passes validated args and context through the SDK input-schema (args, ctx) callback shape', async () => {
+  it('passes validated args and context through the SDK input-schema callback shape', async () => {
     const policy: UsagePolicy = {
       quote(request) {
         expect(request.args).toEqual({ query: 'hello' });
@@ -146,6 +147,7 @@ describe('MCP protocol integration', () => {
           {
             control,
             tool: 'blocked',
+            noInput: true,
             principal: () => ({ id: 'user-1' }),
             operationId: (_args, ctx) => String(ctx.mcpReq.id),
           },
@@ -178,6 +180,7 @@ describe('MCP protocol integration', () => {
           {
             control,
             tool: 'confirm',
+            noInput: true,
             principal: () => ({ id: 'user-1' }),
             operationId: (_args, ctx) => String(ctx.mcpReq.id),
           },
