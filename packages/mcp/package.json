@@ -34,7 +34,9 @@
   "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "node ../../scripts/pack-workspace-deps.mjs prepare",
+    "postpack": "node ../../scripts/pack-workspace-deps.mjs restore"
   },
   "dependencies": {
     "mcp-usage-control": "workspace:^"
