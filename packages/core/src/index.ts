@@ -38,6 +38,11 @@ export type StoreReserveResult =
   | { accepted: true; reservation: ReservationRecord; remaining: number }
   | { accepted: false; reason: 'quota_exceeded' | 'duplicate_operation'; remaining?: number };
 
+export interface RenewInput {
+  reservationId: string;
+  ttlMs: number;
+}
+
 export interface SettleInput {
   reservationId: string;
   actualUnits: number;
@@ -59,6 +64,7 @@ export interface UsageStore {
     budget: Budget;
     ttlMs: number;
   }): Promise<StoreReserveResult>;
+  renew(input: RenewInput): Promise<ReservationRecord>;
   settle(input: SettleInput): Promise<SettlementResult>;
 }
 
@@ -84,10 +90,18 @@ export class UsageLease {
   constructor(
     private readonly store: UsageStore,
     public readonly reservation: ReservationRecord,
+    public readonly ttlMs: number,
   ) {}
 
   get reservedUnits(): number {
     return this.reservation.reservedUnits;
+  }
+
+  async renew(ttlMs = this.ttlMs): Promise<ReservationRecord> {
+    assertPositiveInteger(ttlMs, 'ttlMs');
+    const renewed = await this.store.renew({ reservationId: this.reservation.id, ttlMs });
+    this.reservation.expiresAt = renewed.expiresAt;
+    return this.reservation;
   }
 
   settle(actualUnits: number, outcome: string): Promise<SettlementResult> {
@@ -100,7 +114,9 @@ export class UsageControl {
     private readonly store: UsageStore,
     private readonly policy: UsagePolicy,
     private readonly defaultReservationTtlMs = 60_000,
-  ) {}
+  ) {
+    assertPositiveInteger(defaultReservationTtlMs, 'defaultReservationTtlMs');
+  }
 
   async reserve<TArgs>(request: UsageRequest<TArgs>): Promise<AdmissionResult> {
     const quote = await this.policy.quote(request as UsageRequest);
@@ -108,12 +124,14 @@ export class UsageControl {
 
     assertNonNegativeInteger(quote.units, 'units');
     assertNonNegativeInteger(quote.budget.limit, 'budget.limit');
+    const ttlMs = quote.reservationTtlMs ?? this.defaultReservationTtlMs;
+    assertPositiveInteger(ttlMs, 'reservationTtlMs');
 
     const result = await this.store.reserve({
       request: request as UsageRequest,
       units: quote.units,
       budget: quote.budget,
-      ttlMs: quote.reservationTtlMs ?? this.defaultReservationTtlMs,
+      ttlMs,
     });
 
     if (!result.accepted) {
@@ -122,7 +140,7 @@ export class UsageControl {
         : { allowed: false, reason: result.reason, remaining: result.remaining };
     }
 
-    return { allowed: true, lease: new UsageLease(this.store, result.reservation) };
+    return { allowed: true, lease: new UsageLease(this.store, result.reservation, ttlMs) };
   }
 }
 
@@ -172,6 +190,20 @@ export class MemoryUsageStore implements UsageStore {
     this.reservations.set(reservation.id, reservation);
     this.operations.set(operationKey, reservation.id);
     return { accepted: true, reservation, remaining: remaining - input.units };
+  }
+
+  async renew(input: RenewInput): Promise<ReservationRecord> {
+    assertPositiveInteger(input.ttlMs, 'ttlMs');
+    const now = Date.now();
+    this.releaseExpired(now);
+
+    const reservation = this.reservations.get(input.reservationId);
+    if (!reservation || reservation.state !== 'pending') {
+      throw new UsageStateError('Pending reservation not found or expired');
+    }
+
+    reservation.expiresAt = now + input.ttlMs;
+    return reservation;
   }
 
   async settle(input: SettleInput): Promise<SettlementResult> {
@@ -228,5 +260,11 @@ function toSettlement(reservation: InternalReservation): SettlementResult {
 function assertNonNegativeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
+  }
+}
+
+function assertPositiveInteger(value: number, name: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive safe integer`);
   }
 }
