@@ -62,15 +62,17 @@ describe('Cloudflare platform failures vs usage-control quota denial', () => {
         }),
     });
 
-    await expect(
-      store.reserve({
+    try {
+      await store.reserve({
         request,
         units: 1,
         budgets: [{ key: 'user:daily', limit: 10 }],
         ttlMs: 1_000,
-      }),
-    ).rejects.toMatchObject<Partial<CloudflareUsageTransportError>>({
-      code: 'remote',
-    });
+      });
+      throw new Error('expected remote Cloudflare failure');
+    } catch (error) {
+      expect(error).toBeInstanceOf(CloudflareUsageTransportError);
+      expect((error as CloudflareUsageTransportError).code).toBe('remote');
+    }
   });
 });
