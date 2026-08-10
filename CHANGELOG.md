@@ -2,52 +2,64 @@
 
 [English](CHANGELOG.md) | [日本語](CHANGELOG.ja.md)
 
-All notable project changes are recorded here. The project is currently pre-alpha and has not published its first package release.
+All notable project changes are recorded here.
 
-## Unreleased
+## [0.1.0] - 2026-08-10
+
+Initial public release.
 
 ### Added
 
-- provider-neutral `@mcp-usage-control/core` usage-control contract;
-- atomic reserve-before-execute lifecycle with explicit settlement;
-- pending -> cost-liable lease transition via `markLiable()`;
-- renewable reservation leases and lease renewal API;
-- crash-after-execution-start recovery that conservatively retains the full reservation;
-- in-memory reference store with concurrency/idempotency/liability tests;
-- `@mcp-usage-control/mcp` adapter for `@modelcontextprotocol/server` v2 single-round tools;
-- MCP-aware classification for normal results, `{ isError: true }` tool errors, and thrown errors;
-- conservative fallback settlement plus `UsageClassificationError` when cost classifiers fail or return invalid units;
-- explicit `UsageSettlementError` for ambiguous settlement state;
-- explicit `UnsupportedMcpUsageFlowError` for currently unsupported MCP v2 `input_required` multi-round results;
-- production-oriented `@mcp-usage-control/redis` adapter using Redis-side Lua transitions;
-- Redis-server-time lease/tombstone decisions instead of application `Date.now()`;
-- state-dependent Redis expiry recovery and bounded idempotency tombstones;
-- Redis Cluster-compatible single-hash-slot transaction domain;
-- real Redis integration, crash-recovery, application-clock-independence, and ambiguous-acknowledgement fault-injection tests;
-- official MCP SDK v2 `Client + createMcpHandler` in-process protocol integration tests;
-- English/Japanese project, architecture, Redis, integration, API, security, support, contribution, and release documentation;
-- bilingual GitHub issue forms and pull-request template.
+- `mcp-usage-control` core runtime with provider-neutral usage policy and store contracts.
+- Atomic **multi-budget** admission: all applicable budgets reserve or none does.
+- Pending -> cost-liable -> settled lifecycle with `markLiable()`.
+- Renewable leases for long-running work.
+- Explicit outcome-aware settlement with `actualUnits <= reservedUnits`.
+- Replay protection scoped by `(tenantId, principal.id, tool, operationId)`.
+- Bounded settled idempotency tombstones; Memory/Redis default to 24 hours.
+- `MemoryUsageStore` reference implementation.
+- `mcp-usage-control-mcp` adapter for `@modelcontextprotocol/server` v2 single-round tools.
+- MCP result classification for normal success, `{ isError: true }`, and thrown errors.
+- Conservative classifier-failure settlement and explicit `UsageClassificationError`.
+- Explicit `UsageSettlementError` for ambiguous settlement state.
+- Explicit `UnsupportedMcpUsageFlowError` for v0.1 `input_required` support boundary.
+- `mcp-usage-control-redis` with Redis-side Lua for atomic multi-budget reserve, liability, renew, settlement, expiry recovery, and tombstones.
+- Redis server-time lease/tombstone decisions.
+- Global Redis lease index so multi-budget expiry recovery happens once per reservation.
+- Redis Cluster-compatible single-hash-slot transaction domain.
+- Real Redis 7 concurrency/crash/ACK-loss integration tests.
+- Official MCP SDK v2 `Client + createMcpHandler` protocol integration tests.
+- Frozen `pnpm-lock.yaml` CI on Node.js 20/22.
+- Package tarball smoke tests for exports/files/license and workspace-protocol removal.
+- English/Japanese user, architecture, Redis, MCP integration, API, release, security, support, and contribution documentation.
 
-### Changed
+### Safety behavior
 
-- operation-key input is tuple-encoded before hashing/string storage to avoid delimiter ambiguity;
-- `UsageDeniedError` keeps its detailed `.reason` programmatically but uses a generic human-readable message to avoid accidental MCP disclosure;
-- cost-liable lease expiry charges conservatively instead of releasing reserved units;
-- Redis lease timing is authoritative on the Redis server rather than application instances;
-- Redis documentation now distinguishes Lua atomicity from persistence/failover durability and documents lazy-cleanup backlog behavior;
-- release gates now require crash semantics, MCP result semantics, protocol integration coverage, and an explicit `input_required` support decision.
+- Quota compare + reserve is atomic; no `check -> execute -> record` race.
+- Process loss after execution starts does not become an automatic refund.
+- Pending expiry releases every participating budget; liable expiry conservatively keeps the full reservation.
+- Cost classifiers that fail or return invalid units cause full settlement before the classification error is surfaced.
+- Settlement acknowledgement ambiguity is not blindly retried; identical replay is idempotent in the Redis store.
+- Redis lease/tombstone time is authoritative on Redis rather than application-host clocks.
+- Admission storage failures fail closed rather than becoming an allow decision.
 
-### Known pre-alpha limitations
+### Known limitations
 
-- one budget per reservation; atomic multi-budget admission is still planned for v0.1;
-- MCP v2 `input_required` multi-round suspend/resume accounting is not implemented;
-- principal/tenant/tool idempotency scoping is still being finalized;
-- package names and public APIs may change;
-- workspace packages remain private and unpublished;
-- `pnpm-lock.yaml` is not committed yet; frozen reproducible installs are a v0.1 release gate;
-- generic lease renewal does not provide provider-specific fencing after lease loss;
-- Redis atomicity does not imply financial-ledger durability.
+- MCP v2 multi-round `input_required` is intentionally unsupported by `protectTool()` in v0.1; issue #14 tracks suspend/resume accounting.
+- Every budget participating in one reservation consumes the same quoted/actual unit count.
+- Redis transactional state uses one configured Redis Cluster hash slot.
+- Redis atomicity does not imply financial-ledger durability; persistence/HA is deployment-specific.
+- Generic lease renewal is not provider-specific fencing after lease loss.
+- Provider-neutral observability hooks are not included in v0.1.
 
-## Release entries
+### Compatibility
 
-Once tagged releases begin, each release entry should include the release date, breaking changes, invariant changes, storage/migration notes, and supported runtime dependencies. See [Release policy](docs/releasing.md).
+- Node.js 20+
+- ESM
+- `@modelcontextprotocol/server` v2 (CI currently resolves 2.0.0)
+- Redis 7 integration behavior
+- node-redis `redis` 6.2.x
+
+## Unreleased
+
+No unreleased user-visible changes yet.
