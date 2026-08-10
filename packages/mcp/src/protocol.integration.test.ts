@@ -33,9 +33,10 @@ async function connect(register: (server: McpServer) => void): Promise<Client> {
 }
 
 describe('MCP protocol integration', () => {
-  it('preserves MCP isError results while applying tool-error accounting', async () => {
+  it('normalizes the SDK no-input (ctx) callback shape and preserves MCP tool errors', async () => {
     const policy: UsagePolicy = {
-      quote() {
+      quote(request) {
+        expect(request.args).toBeUndefined();
         return { decision: 'allow', units: 1, budget: { key: 'shared', limit: 1 } };
       },
     };
@@ -48,20 +49,34 @@ describe('MCP protocol integration', () => {
           {
             control,
             tool: 'lookup',
-            principal: () => ({ id: 'user-1' }),
-            operationId: (_args, ctx) => String(ctx.mcpReq.id),
-            toolErrorUnits: () => 0,
+            principal: ctx => {
+              expect(ctx.mcpReq.method).toBe('tools/call');
+              return { id: 'user-1' };
+            },
+            operationId: (args, ctx) => {
+              expect(args).toBeUndefined();
+              return String(ctx.mcpReq.id);
+            },
+            toolErrorUnits: ({ args }) => {
+              expect(args).toBeUndefined();
+              return 0;
+            },
           },
-          async () => ({
-            content: [{ type: 'text' as const, text: 'not found' }],
-            isError: true,
-          }),
+          async (args, ctx) => {
+            expect(args).toBeUndefined();
+            expect(ctx.mcpReq.method).toBe('tools/call');
+            return {
+              content: [{ type: 'text' as const, text: 'not found' }],
+              isError: true,
+            };
+          },
         ),
       );
     });
 
     const result = await client.callTool({ name: 'lookup', arguments: {} });
     expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('not found');
 
     const next = await control.reserve({
       operationId: 'after-tool-error',
