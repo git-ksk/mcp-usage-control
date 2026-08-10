@@ -10,18 +10,20 @@
 
 It is not a payment processor, MCP gateway, OAuth provider, billing dashboard, or generic rate limiter.
 
-## Install
+## Current distribution status
+
+**The packages are not published to npm yet.** Until the first registry publish completes, use a repository checkout or locally packed tarballs. Do not expect registry installation of `mcp-usage-control`, `mcp-usage-control-mcp`, or `mcp-usage-control-redis` to work yet.
+
+Quick verification from source:
 
 ```console
-npm install mcp-usage-control
+git clone https://github.com/git-ksk/mcp-usage-control.git
+cd mcp-usage-control
+pnpm install --frozen-lockfile
+pnpm check
 ```
 
-Optional adapters:
-
-```console
-npm install mcp-usage-control-mcp @modelcontextprotocol/server
-npm install mcp-usage-control-redis redis
-```
+To use the packages from another project now, build `.tgz` packages locally and install those tarballs. See **[Use from source / local tarballs](docs/using-from-source.md)** for exact commands. CI validates the same tarballs in a clean consumer project.
 
 Requirements: Node.js 20+. The repository CI tests Node.js 20 and 22, Redis 7, and the official MCP TypeScript SDK v2 client/handler path.
 
@@ -186,6 +188,7 @@ See [Redis adapter](docs/redis.md) before production use.
 
 ## Documentation
 
+- [Use from source / local tarballs](docs/using-from-source.md)
 - [Getting started](docs/getting-started.md)
 - [MCP SDK v2 integration](docs/mcp-integration.md)
 - [Architecture and invariants](docs/architecture.md)
