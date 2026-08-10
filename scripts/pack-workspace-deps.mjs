@@ -67,6 +67,12 @@ async function prepare() {
     }
   }
 
+  if (manifest.scripts?.prepack || manifest.scripts?.postpack) {
+    delete manifest.scripts.prepack;
+    delete manifest.scripts.postpack;
+    changed = true;
+  }
+
   await writeFile(backupPath, raw, 'utf8');
   if (changed) {
     await writeFile(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
