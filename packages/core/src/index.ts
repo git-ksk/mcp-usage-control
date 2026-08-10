@@ -1,3 +1,12 @@
+import {
+  emitUsageEvent,
+  usageErrorName,
+  type UsageEventMetadata,
+  type UsageObserver,
+} from './observability.js';
+
+export * from './observability.js';
+
 export interface Principal {
   id: string;
   tenantId?: string;
@@ -45,6 +54,7 @@ export interface ReservationRecord {
   operationId: string;
   principalId: string;
   tenantId?: string;
+  plan?: string;
   tool: string;
   budgetKeys: string[];
   reservedUnits: number;
@@ -132,11 +142,20 @@ export class UsageDeniedError extends Error {
   }
 }
 
+export interface UsageControlOptions {
+  defaultReservationTtlMs?: number;
+  observer?: UsageObserver;
+  /** Explicit metadata only. Request args are never copied into events automatically. */
+  metadata?: UsageEventMetadata | ((request: UsageRequest) => UsageEventMetadata | undefined);
+}
+
 export class UsageLease {
   constructor(
     private readonly store: UsageStore,
     public readonly reservation: ReservationRecord,
     public readonly ttlMs: number,
+    private readonly observer?: UsageObserver,
+    private readonly metadata?: UsageEventMetadata,
   ) {}
 
   get reservedUnits(): number {
@@ -144,50 +163,171 @@ export class UsageLease {
   }
 
   async markLiable(): Promise<MarkLiableResult> {
-    const marked = await this.store.markLiable({ reservationId: this.reservation.id });
-    this.reservation.expiresAt = marked.expiresAt;
-    return marked;
+    try {
+      const marked = await this.store.markLiable({ reservationId: this.reservation.id });
+      this.reservation.expiresAt = marked.expiresAt;
+      return marked;
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'mark_liable',
+        source: 'store',
+        reservationId: this.reservation.id,
+        ...reservationIdentity(this.reservation),
+        errorName: usageErrorName(error),
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      throw error;
+    }
   }
 
   async renew(ttlMs = this.ttlMs): Promise<RenewResult> {
     assertPositiveInteger(ttlMs, 'ttlMs');
-    const renewed = await this.store.renew({ reservationId: this.reservation.id, ttlMs });
-    this.reservation.expiresAt = renewed.expiresAt;
-    return renewed;
+    try {
+      const renewed = await this.store.renew({ reservationId: this.reservation.id, ttlMs });
+      this.reservation.expiresAt = renewed.expiresAt;
+      return renewed;
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'renew',
+        source: 'store',
+        reservationId: this.reservation.id,
+        ...reservationIdentity(this.reservation),
+        errorName: usageErrorName(error),
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      throw error;
+    }
   }
 
-  settle(actualUnits: number, outcome: string): Promise<SettlementResult> {
-    return this.store.settle({ reservationId: this.reservation.id, actualUnits, outcome });
+  async settle(actualUnits: number, outcome: string): Promise<SettlementResult> {
+    try {
+      const settlement = await this.store.settle({
+        reservationId: this.reservation.id,
+        actualUnits,
+        outcome,
+      });
+      emitUsageEvent(this.observer, {
+        type: 'settlement.completed',
+        timestamp: Date.now(),
+        reservationId: this.reservation.id,
+        ...reservationIdentity(this.reservation),
+        budgetKeys: [...this.reservation.budgetKeys],
+        reservedUnits: settlement.reservedUnits,
+        actualUnits: settlement.actualUnits,
+        releasedUnits: settlement.releasedUnits,
+        outcome: settlement.outcome,
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      return settlement;
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'settle',
+        source: 'store',
+        reservationId: this.reservation.id,
+        ...reservationIdentity(this.reservation),
+        errorName: usageErrorName(error),
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      throw error;
+    }
   }
 }
 
 export class UsageControl {
+  private readonly defaultReservationTtlMs: number;
+  private readonly observer?: UsageObserver;
+  private readonly metadata?: UsageControlOptions['metadata'];
+
   constructor(
     private readonly store: UsageStore,
     private readonly policy: UsagePolicy,
-    private readonly defaultReservationTtlMs = 60_000,
+    optionsOrTtl: number | UsageControlOptions = 60_000,
   ) {
-    assertPositiveInteger(defaultReservationTtlMs, 'defaultReservationTtlMs');
+    if (typeof optionsOrTtl === 'number') {
+      this.defaultReservationTtlMs = optionsOrTtl;
+    } else {
+      this.defaultReservationTtlMs = optionsOrTtl.defaultReservationTtlMs ?? 60_000;
+      this.observer = optionsOrTtl.observer;
+      this.metadata = optionsOrTtl.metadata;
+    }
+    assertPositiveInteger(this.defaultReservationTtlMs, 'defaultReservationTtlMs');
   }
 
   async reserve<TArgs>(request: UsageRequest<TArgs>): Promise<AdmissionResult> {
     validateRequestIdentity(request);
-    const quote = await this.policy.quote(request as UsageRequest);
-    if (quote.decision === 'deny') return { allowed: false, reason: quote.reason };
+    const requestForPolicy = request as UsageRequest;
+    const metadata = resolveMetadata(this.metadata, requestForPolicy);
+    let quote: UsageQuote;
+    try {
+      quote = await this.policy.quote(requestForPolicy);
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'quote',
+        source: 'policy',
+        ...requestIdentity(requestForPolicy),
+        errorName: usageErrorName(error),
+        ...(metadata === undefined ? {} : { metadata }),
+      });
+      throw error;
+    }
+
+    if (quote.decision === 'deny') {
+      emitUsageEvent(this.observer, {
+        type: 'reserve.denied',
+        timestamp: Date.now(),
+        ...requestIdentity(requestForPolicy),
+        reason: quote.reason,
+        ...(metadata === undefined ? {} : { metadata }),
+      });
+      return { allowed: false, reason: quote.reason };
+    }
 
     assertNonNegativeInteger(quote.units, 'units');
     const budgets = canonicalizeBudgets('budgets' in quote && quote.budgets ? quote.budgets : [quote.budget]);
     const ttlMs = quote.reservationTtlMs ?? this.defaultReservationTtlMs;
     assertPositiveInteger(ttlMs, 'reservationTtlMs');
 
-    const result = await this.store.reserve({
-      request: request as UsageRequest,
-      units: quote.units,
-      budgets,
-      ttlMs,
-    });
+    let result: StoreReserveResult;
+    try {
+      result = await this.store.reserve({
+        request: requestForPolicy,
+        units: quote.units,
+        budgets,
+        ttlMs,
+      });
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'reserve',
+        source: 'store',
+        ...requestIdentity(requestForPolicy),
+        errorName: usageErrorName(error),
+        ...(metadata === undefined ? {} : { metadata }),
+      });
+      throw error;
+    }
 
     if (!result.accepted) {
+      emitUsageEvent(this.observer, {
+        type: 'reserve.denied',
+        timestamp: Date.now(),
+        ...requestIdentity(requestForPolicy),
+        reason: result.reason,
+        ...(result.limitingBudgetKey === undefined
+          ? {}
+          : { limitingBudgetKey: result.limitingBudgetKey }),
+        ...(result.remaining === undefined ? {} : { remaining: result.remaining }),
+        ...(metadata === undefined ? {} : { metadata }),
+      });
       return {
         allowed: false,
         reason: result.reason,
@@ -198,13 +338,29 @@ export class UsageControl {
       };
     }
 
-    return { allowed: true, lease: new UsageLease(this.store, result.reservation, ttlMs) };
+    emitUsageEvent(this.observer, {
+      type: 'reserve.accepted',
+      timestamp: Date.now(),
+      ...requestIdentity(requestForPolicy),
+      reservationId: result.reservation.id,
+      budgetKeys: [...result.reservation.budgetKeys],
+      reservedUnits: result.reservation.reservedUnits,
+      remainingByBudget: result.remainingByBudget.map(balance => ({ ...balance })),
+      ...(metadata === undefined ? {} : { metadata }),
+    });
+
+    return {
+      allowed: true,
+      lease: new UsageLease(this.store, result.reservation, ttlMs, this.observer, metadata),
+    };
   }
 }
 
 export interface MemoryUsageStoreOptions {
   /** How long a settled operation remains replay-protected. Defaults to 24 hours. */
   idempotencyTtlMs?: number;
+  /** Optional best-effort observer for expiry/recovery events. */
+  observer?: UsageObserver;
 }
 
 interface InternalReservation extends ReservationRecord {
@@ -220,9 +376,11 @@ export class MemoryUsageStore implements UsageStore {
   private readonly reservations = new Map<string, InternalReservation>();
   private readonly operations = new Map<string, string>();
   private readonly idempotencyTtlMs: number;
+  private readonly observer?: UsageObserver;
 
   constructor(options: MemoryUsageStoreOptions = {}) {
     this.idempotencyTtlMs = options.idempotencyTtlMs ?? 86_400_000;
+    this.observer = options.observer;
     assertPositiveInteger(this.idempotencyTtlMs, 'idempotencyTtlMs');
   }
 
@@ -266,6 +424,7 @@ export class MemoryUsageStore implements UsageStore {
       ...(input.request.principal.tenantId === undefined
         ? {}
         : { tenantId: input.request.principal.tenantId }),
+      ...(input.request.principal.plan === undefined ? {} : { plan: input.request.principal.plan }),
       tool: input.request.tool,
       budgetKeys: budgets.map(budget => budget.key),
       reservedUnits: input.units,
@@ -357,6 +516,19 @@ export class MemoryUsageStore implements UsageStore {
         this.releaseAcrossBudgets(reservation.budgetKeys, reservation.reservedUnits);
         this.operations.delete(reservation.operationKey);
         this.reservations.delete(id);
+        emitUsageEvent(this.observer, {
+          type: 'reservation.recovered',
+          timestamp: now,
+          store: 'memory',
+          recovery: 'pending_released',
+          reservationId: reservation.id,
+          principalId: reservation.principalId,
+          ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+          tool: reservation.tool,
+          budgetIdentifiers: [...reservation.budgetKeys],
+          reservedUnits: reservation.reservedUnits,
+          count: 1,
+        });
         continue;
       }
 
@@ -366,6 +538,19 @@ export class MemoryUsageStore implements UsageStore {
       reservation.actualUnits = reservation.reservedUnits;
       reservation.outcome = 'lease_expired_after_execution_started';
       reservation.tombstoneExpiresAt = now + this.idempotencyTtlMs;
+      emitUsageEvent(this.observer, {
+        type: 'reservation.recovered',
+        timestamp: now,
+        store: 'memory',
+        recovery: 'liable_retained',
+        reservationId: reservation.id,
+        principalId: reservation.principalId,
+        ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+        tool: reservation.tool,
+        budgetIdentifiers: [...reservation.budgetKeys],
+        reservedUnits: reservation.reservedUnits,
+        count: 1,
+      });
     }
   }
 
@@ -409,6 +594,51 @@ function validateRequestIdentity(request: UsageRequest): void {
   if (!request.operationId) throw new RangeError('operationId must be non-empty');
   if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
   if (!request.tool) throw new RangeError('tool must be non-empty');
+}
+
+function requestIdentity(request: UsageRequest): {
+  principalId: string;
+  tenantId?: string;
+  plan?: string;
+  tool: string;
+  operationId: string;
+} {
+  return {
+    principalId: request.principal.id,
+    ...(request.principal.tenantId === undefined ? {} : { tenantId: request.principal.tenantId }),
+    ...(request.principal.plan === undefined ? {} : { plan: request.principal.plan }),
+    tool: request.tool,
+    operationId: request.operationId,
+  };
+}
+
+function reservationIdentity(reservation: ReservationRecord): {
+  principalId: string;
+  tenantId?: string;
+  plan?: string;
+  tool: string;
+  operationId: string;
+} {
+  return {
+    principalId: reservation.principalId,
+    ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+    ...(reservation.plan === undefined ? {} : { plan: reservation.plan }),
+    tool: reservation.tool,
+    operationId: reservation.operationId,
+  };
+}
+
+function resolveMetadata(
+  metadata: UsageControlOptions['metadata'],
+  request: UsageRequest,
+): UsageEventMetadata | undefined {
+  if (!metadata) return undefined;
+  if (typeof metadata !== 'function') return metadata;
+  try {
+    return metadata(request);
+  } catch {
+    return undefined;
+  }
 }
 
 function toSettlement(reservation: InternalReservation): SettlementResult {
