@@ -2,53 +2,71 @@
 
 [English](releasing.md) | [日本語](releasing.ja.md)
 
-`mcp-usage-control` is currently pre-alpha. The repository is public, but workspace packages remain `private: true` until package names and public contracts are intentionally reviewed.
+## Published packages
 
-## Before v0.1
+The v0.1 release line uses three public npm packages:
 
-Until the first tagged v0.1 release:
+- `mcp-usage-control`
+- `mcp-usage-control-mcp`
+- `mcp-usage-control-redis`
 
-- `main` is the only supported development line;
-- public TypeScript APIs may change without a deprecation period;
-- package names may change;
-- documentation describes current `main` behavior unless it explicitly names a tag;
-- changes to accounting invariants should include migration notes in the pull request.
-
-Do not depend on an unpublished workspace package name as if it were a stable npm contract.
-
-## v0.1 release gate
-
-The first registry release should not happen until at least the following are complete:
-
-- atomic multi-budget admission has an intentionally reviewed all-or-nothing contract;
-- idempotency, operation scoping, tombstone, cancellation and expiry semantics are documented and tested;
-- pending -> cost-liable -> settled transitions and crash-after-execution-start recovery are covered by reference and Redis tests;
-- MCP normal success, `{ isError: true }`, thrown errors, classifier failures and settlement ambiguity are covered through both wrapper tests and the official SDK client/handler integration path;
-- MCP v2 `input_required` has either real reservation suspend/resume support or an intentionally finalized/documented support boundary;
-- Redis server-time expiry semantics and durability limitations are documented;
-- core, MCP, and Redis package names are verified on npm;
-- `pnpm-lock.yaml` is committed and CI uses a frozen lockfile;
-- package `files`/exports metadata is verified with pack smoke tests;
-- release provenance/trusted publishing is configured where practical;
-- no long-lived npm token is required by CI;
-- English and Japanese user documentation is consistent with the tagged code.
+All packages use the same release version in v0.1.x.
 
 ## Versioning
 
-Before 1.0, Semantic Versioning is used with the usual caveat that minor releases may contain breaking API changes.
+Semantic Versioning is used with the normal pre-1.0 caveat: a minor release may intentionally include breaking API changes.
 
-- patch: fixes that preserve the intended public contract;
-- minor: new features and, before 1.0, intentional breaking API changes;
-- major: reserved for 1.0+ compatibility boundaries.
+- patch: fixes preserving the intended public contract;
+- minor: features and, before 1.0, intentional breaking API changes;
+- major: 1.0+ compatibility boundary.
 
-Breaking changes must be called out prominently in release notes even when they occur in a pre-1.0 minor release.
+Breaking changes are called out prominently even when they occur in a pre-1.0 minor release.
+
+## v0.1.0 gate
+
+The first release is considered ready only when:
+
+- multi-budget admission is all-or-nothing in Memory and Redis stores;
+- idempotency scope and bounded tombstone retention are documented/tested;
+- pending -> cost-liable -> settled crash semantics are tested;
+- MCP success, `isError`, thrown errors, classifier failure, and settlement ambiguity are tested directly and through the official SDK path;
+- `input_required` has an explicit v0.1 support boundary;
+- Redis server-time behavior and durability limitations are documented;
+- package names/exports/files are verified;
+- `pnpm-lock.yaml` is committed and CI uses `--frozen-lockfile`;
+- package tarballs are smoke-tested in CI and do not contain workspace protocol dependencies;
+- English/Japanese user documentation matches the tagged code;
+- the release mechanism does not require committing or logging npm credentials.
+
+## Release procedure
+
+1. update package versions, changelog, and bilingual docs;
+2. run Node.js 20/22 CI with real Redis and frozen dependencies;
+3. pack all public packages and verify tarball contents;
+4. merge the release PR to `main`;
+5. tag the exact tested commit as `vX.Y.Z`;
+6. publish packages in dependency order: core -> MCP -> Redis;
+7. create the GitHub Release from the same tag;
+8. verify registry metadata and installation from a clean consumer project.
+
+Prefer npm Trusted Publishing / OIDC on GitHub-hosted runners when the npm package configuration supports it. Do not add long-lived npm tokens to repository files, logs, or release artifacts.
 
 ## Release notes
 
-Each tagged release should summarize user-visible features/fixes, changes to safety/accounting invariants, breaking API/configuration changes, storage schema/migration considerations, supported Node.js/MCP SDK/Redis versions, and known limitations.
+Each release should state:
 
-Do not publish secrets, tokens, connection strings, production identifiers, or private incident details in release artifacts.
+- user-visible features/fixes;
+- changes to accounting/security invariants;
+- breaking API/configuration changes;
+- Redis schema/migration considerations;
+- supported Node.js/MCP SDK/Redis versions;
+- known limitations, especially MCP multi-round support;
+- npm package names and GitHub tag.
+
+## Redis schema
+
+The Redis storage layout is an implementation detail but changes can affect deployments carrying existing enforcement state. Any post-v0.1 change that cannot safely read existing state must include a prominent migration/reset note.
 
 ## Security fixes
 
-For a vulnerability that could enable quota bypass, double spending, unauthorized entitlement access, crash-after-cost refund, or inconsistent settlement, follow [SECURITY.md](../SECURITY.md). Coordinate disclosure before publishing detailed exploit information.
+Vulnerabilities enabling quota bypass, double spending, unauthorized entitlement access, cross-tenant replay, crash-after-cost refunds, or inconsistent settlement follow [SECURITY.md](../SECURITY.md). Coordinate disclosure before publishing exploit details.
