@@ -149,14 +149,13 @@ test / local development向けreference implementationです。pending / cost-li
 
 ## `@mcp-usage-control/mcp`
 
-### `protectTool(options, handler)`
-
-**single-round** `@modelcontextprotocol/server` v2 tool handlerへreserve、cost-liable activation、heartbeat、execution classification、settlementを追加します。
+### `ProtectToolOptions<TArgs, TResult>`
 
 ```ts
 interface ProtectToolOptions<TArgs, TResult> {
   control: UsageControl;
   tool: string;
+  noInput?: boolean;
   principal(ctx: ServerContext): Principal | Promise<Principal>;
   operationId(args: TArgs, ctx: ServerContext): string | Promise<string>;
   leaseHeartbeat?: boolean;
@@ -181,20 +180,31 @@ interface ProtectToolOptions<TArgs, TResult> {
 }
 ```
 
-wrapped application handlerはadapter-levelでは `(args, ctx)` 形式です。SDK toolにinput schemaがない場合、`protectTool()` がSDK nativeの `(ctx)` invocationをnormalizeし、operation-ID hook、cost hook、policy request、wrapped handlerへ `args === undefined` を渡します。
+input schemaがないtoolでは `noInput: true` を指定します。input schemaがあるtoolでは `noInput` を省略するかfalseにします。
 
-### `ProtectedToolHandler<TArgs, TResult>`
+このflagを明示するのは意図的です。SDKのpublic typeではno-input callbackを `(ctx)` と表現しますが、現在のdispatch pathではruntime上 `({}, ctx)` で呼ばれる場合があります。`{}` はempty object schemaの正当な入力にもなるため、adapterはruntime valueだけから推測しません。
 
-`protectTool()` が返すfunctionはSDK v2の両callback形式を受け付けます。
+`noInput: true` modeではpolicy request、各hook、operation-ID callback、wrapped application handlerへ `args === undefined` と正しい `ServerContext` を渡します。
+
+### `protectTool(options, handler)`
+
+**single-round** `@modelcontextprotocol/server` v2 tool handlerへreserve、cost-liable activation、heartbeat、execution classification、settlementを追加します。
+
+public overloadは概念的に次の形です。
 
 ```ts
-interface ProtectedToolHandler<TArgs, TResult> {
-  (ctx: ServerContext): Promise<TResult>;
-  (args: TArgs, ctx: ServerContext): Promise<TResult>;
-}
+protectTool<TResult>(
+  options: ProtectToolOptions<undefined, TResult> & { noInput: true },
+  handler: (args: undefined, ctx: ServerContext) => TResult | Promise<TResult>,
+): (ctx: ServerContext) => Promise<TResult>;
+
+protectTool<TArgs, TResult>(
+  options: ProtectToolOptions<TArgs, TResult> & { noInput?: false },
+  handler: (args: TArgs, ctx: ServerContext) => TResult | Promise<TResult>,
+): (args: TArgs, ctx: ServerContext) => Promise<TResult>;
 ```
 
-SDKがno-input-schema toolを `(ctx)`、input schemaありtoolを `(args, ctx)` で呼ぶため、このnormalizationをadapterが担当します。
+runtimeではno-input overloadについてSDK dispatchの `({}, ctx)` 形式も受け入れ、内部でnormalizeします。
 
 behavior:
 
