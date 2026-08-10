@@ -1,14 +1,16 @@
 # mcp-usage-control
 
+[![CI](https://github.com/git-ksk/mcp-usage-control/actions/workflows/ci.yml/badge.svg)](https://github.com/git-ksk/mcp-usage-control/actions/workflows/ci.yml)
+
 [English](README.md) | [日本語](README.ja.md)
 
 **MCP tool実行向けの、同時実行に強いusage enforcement runtimeです。**
 
-> Status: pre-alpha。APIとpackage名はまだ固定していません。
+> Status: pre-alpha。APIとpackage名はまだstableではありません。workspace packageはまだnpmへpublishしていません。
 
-`mcp-usage-control` は、Model Context Protocol (MCP) のtool実行を対象に、entitlement・usage budget・credit消費を安全に制御するためのprovider-neutralなruntimeです。
+`mcp-usage-control` は、Model Context Protocol (MCP) のtool実行を対象に、entitlement・usage budget・credit消費を安全に制御するprovider-neutral runtimeです。
 
-決済、MCP Gateway、OAuth、一般的なrate limiting自体を目的にはしていません。agentのretry、parallel tool call、timeout、長時間実行、upstream cost発生後の失敗などでusage accountingが壊れないことを目的にしています。
+決済、MCP Gateway、OAuth provider、一般的なrate limiter自体を目的にはしていません。agentのretry、parallel tool call、timeout、長時間実行、upstream cost発生後のfailureでもusage accountingを壊さないことを主目的にしています。
 
 ## 基本ライフサイクル
 
@@ -18,58 +20,123 @@ principal -> policy/entitlement -> quote -> atomic reserve -> execute -> settle
                                                 |--- renew -----|
 ```
 
-重要なのは、失敗時に自動rollbackするのではなく、**settleで実消費量を確定する**ことです。toolが失敗しても、その前に外部API・DB・compute costが発生している場合があります。
+重要なのは、failure時に自動rollbackするのではなく**settlementで実消費量を確定する**ことです。toolが失敗しても、その前に外部API、DB、compute resourceのcostが発生している場合があります。
 
-reservationはrenew可能なleaseとして扱います。MCP adapterはhandler実行中に自動heartbeatするため、正常な長時間toolが単純なTTL超過だけで誤回収されることを防ぎます。
+reservationはrenew可能なleaseです。MCP adapterはhandler実行中にactive leaseをheartbeatし、正常な長時間toolを初回TTL超過だけでabandoned扱いしないようにします。
 
-## 現在の構成
+## 現在のpackage
 
 - `@mcp-usage-control/core`
   - principal単位のadmission
-  - policyによるcredit quote
-  - tool実行前のreservation
+  - policy-driven credit quote
+  - pre-execution reservation
   - renewable lease
   - outcome-aware settlement
-  - duplicate operation防止
+  - duplicate operation protection
   - in-memory reference store
 - `@mcp-usage-control/mcp`
   - `@modelcontextprotocol/server` v2 adapter
   - lease heartbeatを既定で有効化
-  - error時は予約分を消費する保守的な既定値
-  - 実消費量を明示分類するhook
-  - 曖昧なsettlement failureを盲目的に再試行しない
+  - error時はfull reservationを使う保守的な既定値
+  - actual-cost classification hook
+  - ambiguous settlement failureを盲目的にretryしない
 - `@mcp-usage-control/redis`
   - Luaによるatomic reserve / renew / settle
-  - expiry / idempotency stateのbounded cleanup
-  - budget / operation識別子をSHA-256化
-  - Redis Clusterで同一hash-slotに収まるtransaction domain
+  - bounded expiry / idempotency cleanup
+  - budget / operation identifierをhash化
+  - Redis Cluster-compatibleなsingle hash-slot transaction domain
   - CIで実Redis integration testを実施
 
-pre-alpha中はpackage名確定前の誤publishを防ぐため、workspace packageはprivateにしています。
+pre-alpha中はpackage名とpublic contractを確定してからregistry releaseするため、workspace packageを `private: true` のまま維持します。
 
-## Safety invariants
+## ドキュメント
 
-1. quota checkとreservationは1つのstore operationとして扱います。
-2. 同一principal / operation IDで二重reservationを作りません。
-3. 長時間実行中のactive reservationはrenewし、初回TTLだけを理由に回収しません。
-4. v0.1ではactual unitsはreserved unitsを超えられません。
-5. 同じsettlementの再送はidempotent、異なるsettlementはerrorにします。
-6. 放棄された期限切れreservationはreserved unitsを解放します。
-7. errorは明示分類されない限り予約分を消費します。
-8. 曖昧なsettlement failureは表面化させ、盲目的に再実行しません。
-9. storage failureをallow判定へ変換しません。
+- **最初に読む:** [Getting started](docs/getting-started.ja.md)
+- **MCP SDK v2へ組み込む:** [MCP integration](docs/mcp-integration.ja.md)
+- **設計・invariant:** [Architecture](docs/architecture.ja.md)
+- **Production storage:** [Redis adapter](docs/redis.ja.md)
+- **Release互換性:** [Release policy](docs/releasing.ja.md)
+- **一覧:** [Documentation index](docs/README.ja.md)
 
-詳しくは [Architecture](docs/architecture.md)、Redis固有の設計は [Redis adapter](docs/redis.md) を参照してください。
+Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md) · [Support](SUPPORT.ja.md) · [Code of Conduct](CODE_OF_CONDUCT.ja.md)
 
-## v0.1予定
+## SourceからのQuick start
+
+packageはまだpublishしていないため、現時点ではrepositoryをcloneしてworkspaceを実行します。
+
+```console
+git clone https://github.com/git-ksk/mcp-usage-control.git
+cd mcp-usage-control
+pnpm install
+pnpm check
+```
+
+Node.js 20+とpnpm 10が必要です。CIではNode.js 20 / 22と実Redis 7 integration testを実行します。
+
+## Example
+
+```ts
+const control = new UsageControl(
+  new MemoryUsageStore(),
+  {
+    quote(request) {
+      return {
+        decision: 'allow',
+        units: request.tool === 'full_export' ? 5 : 1,
+        budget: {
+          key: `month:${request.principal.id}:2026-08`,
+          limit: request.principal.plan === 'pro' ? 2000 : 100,
+        },
+      };
+    },
+  },
+);
+```
+
+MCP tool handlerでは `protectTool()` が実行前にreserveし、handler実行中はleaseをrenewし、完了後にsettleします。未分類exceptionはfull reservationを課金し、metered resourceが消費されていないことを証明できる場合だけ小さいerror costを返してください。
+
+production Redis storage:
+
+```ts
+import { createClient } from 'redis';
+import { RedisUsageStore } from '@mcp-usage-control/redis';
+
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+const store = new RedisUsageStore(redis);
+```
+
+key model、cleanup、failure semantics、Redis Cluster trade-offは [Redis adapter](docs/redis.ja.md) を確認してください。
+
+## Safety invariant
+
+1. quota checkとreservationは1つのstore operationとして扱い、`check -> execute -> record`へ分離しない。
+2. 同一principal / operation IDで2つのactive reservationを作らない。
+3. 長時間実行中のactive reservationはrenewし、初回TTLだけを理由に回収しない。
+4. 現在のv0.1 modelでは `actualUnits` はreserved amountを超えない。
+5. 同一settlement replayはidempotent、conflicting settlementはfailする。
+6. abandonedなexpired reservationはin-flight unitsをreleaseする。
+7. applicationが明示分類しないerrorは保守的に課金する。
+8. ambiguous settlement failureを表面化させ、盲目的にretryしない。
+9. storage failureを新規admissionのallow判定へ変換しない。
+
+full design boundaryとdistributed leaseの制約は [Architecture](docs/architecture.ja.md) を参照してください。
+
+## Planned v0.1
 
 - daily + monthly + tenantなどのatomic multi-budget admission
 - operation tombstone / expiry semanticsの確定
 - observability hook
-- MCP integration example
-- npm package名とrelease workflow
+- package名とnpm release workflow
 
-OpenMeter、Unkey、Stripe、RevenueCat、x402などはcore dependencyではなくadapter候補として扱います。
+Billing provider、OAuth provider、dashboard、payment protocolはcoreの責務外です。OpenMeter、Unkey、Stripe、RevenueCat、x402などはruntime dependencyではなくintegration candidateとして扱います。
+
+## Contributing
+
+contributionを歓迎します。reservation、retry、expiry、settlement behaviorの変更はcorrectness / security sensitiveなので、対応するconcurrency / failure testを追加してください。詳しくは [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。
+
+quota bypass、double spending、cross-tenant leakage、replay abuse、inconsistent settlementにつながるvulnerabilityはpublic Issueへ投稿せず [SECURITY.ja.md](SECURITY.ja.md) に従ってください。
 
 ## License
 
