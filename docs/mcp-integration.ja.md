@@ -33,6 +33,12 @@ server.registerTool(
 
 SDK本来のargument validationはwrapped handlerが実行される前にそのまま動作します。
 
+### input schemaがないtool
+
+SDK v2のcallback invocationには2つの形があります。input schemaありのtoolは `(args, ctx)`、input schemaなしのtoolは `(ctx)` で呼ばれます。`protectTool()` は両方を受け付け、no-input形式をnormalizationして、policy / hook / wrapped application handlerには `args === undefined` と正しい `ServerContext` を渡します。
+
+このnormalizationはprotocol integration testで固定しています。`protectTool()` 利用時にfirst argumentから独自にcontextを推測する必要はありません。
+
 ## Execution lifecycle
 
 admission後は次の順で処理します。
@@ -135,6 +141,7 @@ policy reasonは明示的にsafe mappingするまではinternal dataとして扱
 
 repositoryではdirect wrapper testに加え、公式SDK v2の `Client + createMcpHandler` in-process pathでもtestします。現在次を固定しています。
 
+- SDKの両callback shape（no-input-schema `(ctx)` normalizationを含む）。
 - `isError: true` の保持とtool-error accounting。
 - internal reasonを露出しないgeneric denial message。
 - unsupported `input_required` flowの明示reject。
