@@ -20,7 +20,8 @@ Initial public release.
 - `MemoryUsageStore` reference implementation.
 - Provider-neutral `UsageObserver` lifecycle hooks for admission, settlement, expiry recovery, and policy/store errors.
 - Explicit opt-in event metadata; tool arguments and raw exception messages are not captured automatically.
-- Best-effort/non-blocking observer delivery that cannot change enforcement state.
+- Best-effort observer delivery outside enforcement outcomes; returned promises are not awaited, and observer failures cannot change enforcement state.
+- Explicit settlement-event replay/deduplication guidance for downstream analytics.
 - `mcp-usage-control-mcp` adapter for `@modelcontextprotocol/server` v2 single-round tools.
 - MCP result classification for normal success, `{ isError: true }`, and thrown errors.
 - Conservative classifier-failure settlement and explicit `UsageClassificationError`.
@@ -55,7 +56,7 @@ Initial public release.
 - Redis transactional state uses one configured Redis Cluster hash slot.
 - Redis atomicity does not imply financial-ledger durability; persistence/HA is deployment-specific.
 - Generic lease renewal is not provider-specific fencing after lease loss.
-- Observability is best-effort, non-durable, and is not the transactional quota ledger. Vendor-specific telemetry adapters are outside the core package.
+- Observability is best-effort, non-durable, not exactly-once, and is not the transactional quota ledger. `onEvent()` is invoked inline; returned promises are not awaited. Vendor-specific telemetry adapters are outside the core package.
 
 ### Compatibility
 
