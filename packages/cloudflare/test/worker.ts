@@ -1,7 +1,5 @@
-import {
-  createCloudflareUsageStoreGateway,
-  type CloudflareDurableObjectNamespace,
-} from '../src/index.js';
+import type { CloudflareDurableObjectNamespace } from '../src/index.js';
+import { createReconciliableCloudflareUsageStoreGateway } from '../src/reconciliation.js';
 export { UsageControlDurableObject } from '../src/versioned-worker.js';
 
 interface Env {
@@ -12,7 +10,7 @@ interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (new URL(request.url).pathname === '/health') return new Response('ok');
-    const handler = createCloudflareUsageStoreGateway({
+    const handler = createReconciliableCloudflareUsageStoreGateway({
       namespace: env.USAGE_CONTROL,
       domainName: 'integration-test',
       cleanupBatchSize: 256,
