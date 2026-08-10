@@ -76,7 +76,7 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for dir in packages/core packages/mcp packages/redis; do
+          for dir in packages/core packages/mcp packages/redis packages/cloudflare; do
             actual="$(node -p "require('./${dir}/package.json').version")"
             if [[ "$actual" != "$VERSION" ]]; then
               echo "$dir version $actual does not match tag $VERSION" >&2
@@ -93,7 +93,8 @@ jobs:
           pnpm --dir packages/core pack --pack-destination /tmp/muc-packs
           pnpm --dir packages/mcp pack --pack-destination /tmp/muc-packs
           pnpm --dir packages/redis pack --pack-destination /tmp/muc-packs
-          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 3
+          pnpm --dir packages/cloudflare pack --pack-destination /tmp/muc-packs
+          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 4
           for archive in /tmp/muc-packs/*.tgz; do
             listing="$(tar -tzf "$archive")"
             grep -qx 'package/dist/index.js' <<<"$listing"
@@ -110,6 +111,9 @@ jobs:
               exit 1
             fi
           done
+          cloudflare_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-cloudflare-${{ steps.release.outputs.version }}.tgz)"
+          grep -qx 'package/dist/worker.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/worker.d.ts' <<<"$cloudflare_listing"
 
       - name: Install tarballs in a clean consumer project
         shell: bash
@@ -125,6 +129,7 @@ jobs:
             "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz" \
             "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz" \
             "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz" \
+            "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz" \
             @modelcontextprotocol/server@2.0.0 \
             redis@6.2.0 \
             --ignore-scripts
@@ -132,7 +137,8 @@ jobs:
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
           import { protectTool } from 'mcp-usage-control-mcp';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
-          if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore].every(Boolean)) {
+          import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
+          if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore].every(Boolean)) {
             throw new Error('public package import smoke test failed');
           }
           NODE
@@ -163,6 +169,7 @@ jobs:
           publish_one mcp-usage-control "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz"
           publish_one mcp-usage-control-mcp "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz"
           publish_one mcp-usage-control-redis "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz"
+          publish_one mcp-usage-control-cloudflare "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz"
 
       - name: Verify registry versions
         shell: bash
@@ -170,7 +177,7 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for name in mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis; do
+          for name in mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis mcp-usage-control-cloudflare; do
             published="$(npm view "${name}@${VERSION}" version)"
             test "$published" = "$VERSION"
           done
