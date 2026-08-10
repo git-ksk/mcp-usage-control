@@ -102,11 +102,11 @@ v0.1のevent union:
 - `reservation.recovered`
 - `operation.error`
 
-observer deliveryはbest-effort / non-blockingです。observerのsync throw / async promise rejectionは握りつぶし、admission / settlement stateを変更しません。tool argumentsやraw exception messageは自動収集しません。
+observer deliveryはbest-effortでenforcement outcomeの外側です。`onEvent()` 自体はinlineで呼びますが、返されたPromiseはawaitしません。同期callbackは軽量にし、network / durable I/Oはoffloadしてください。observerのsync throw / async promise rejectionは握りつぶし、admission / settlement stateを変更しません。tool argumentsやraw exception messageは自動収集しません。
 
 `UsageEventMetadata` は明示opt-inの `Record<string, string | number | boolean | null>` です。
 
-event field、privacy / cardinality指針、Redis aggregate recovery、delivery guaranteeは [Observability](observability.ja.md) を参照してください。
+event field、privacy / cardinality指針、replay deduplication、Redis aggregate recovery、delivery guaranteeは [Observability](observability.ja.md) を参照してください。
 
 ### `UsageControl`
 
@@ -138,7 +138,7 @@ type AdmissionResult =
     };
 ```
 
-store denial reasonは `quota_exceeded` / `duplicate_operation` です。`quota_exceeded` はlimiting budgetとremaining unitsを含む場合があります。policy denialはpolicy側reasonを返します。
+store denial reasonは `quota_exceeded` / `duplicate_operation` です。`quota_exceeded` はlimiting budgetとremaining unitsを含む場合があります。policy denialはpolicy側reasonを返します。policy denial reasonはobserverへ出る場合があるため、free-form diagnostic textではなくboundedかつnon-secretなreason codeを使ってください。
 
 ### `ReservationRecord`
 
@@ -185,7 +185,7 @@ interface SettlementResult {
 }
 ```
 
-同一settlement replayはtombstone retention中idempotentです。actual units / outcomeが異なるreplayはfailします。observabilityはdurable ledgerではないため、eventからcounterを作るconsumerはretryとbest-effort deliveryを考慮してください。
+同一settlement replayはtombstone retention中idempotentです。actual units / outcomeが異なるreplayはfailします。同一内容のidempotent settlementを再度呼ぶと、同じ `settlement.completed` eventが再発火する場合があります。dedupeが必要なdownstream consumerは `(reservationId, actualUnits, outcome)` 等をkeyにしてください。observabilityはdurable ledgerではありません。
 
 ### `MemoryUsageStore`
 
