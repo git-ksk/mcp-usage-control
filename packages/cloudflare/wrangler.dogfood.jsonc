@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "mcp-usage-control-cloudflare-dogfood",
+  "main": "./test/worker.ts",
+  "compatibility_date": "2026-07-29",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USAGE_CONTROL",
+        "class_name": "UsageControlDurableObject"
+      }
+    ]
+  },
+  "exports": {
+    "UsageControlDurableObject": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "secrets": {
+    "required": ["MCP_USAGE_TEST_TOKEN"]
+  }
+}
