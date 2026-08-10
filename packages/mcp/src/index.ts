@@ -21,6 +21,12 @@ export interface ProtectToolOptions<TArgs, TResult> {
     ctx: ServerContext;
     lease: UsageLease;
   }): MaybePromise<number>;
+  toolErrorUnits?(input: {
+    result: TResult;
+    args: TArgs;
+    ctx: ServerContext;
+    lease: UsageLease;
+  }): MaybePromise<number>;
   errorUnits?(input: {
     error: unknown;
     args: TArgs;
@@ -40,22 +46,42 @@ export class UsageSettlementError extends Error {
   }
 }
 
+export class UsageClassificationError extends Error {
+  constructor(
+    message: string,
+    public readonly classificationError: unknown,
+    public readonly executionError?: unknown,
+  ) {
+    super(message);
+    this.name = 'UsageClassificationError';
+  }
+}
+
+export class UnsupportedMcpUsageFlowError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnsupportedMcpUsageFlowError';
+  }
+}
+
 /**
- * Wrap an MCP v2 tool handler with usage admission and settlement.
+ * Wrap an MCP v2 single-round tool handler with usage admission and settlement.
+ *
+ * The lease is marked cost-liable immediately before the application handler is
+ * entered. If the process disappears after that point, expiry conservatively
+ * charges the full reservation instead of turning a crash into a refund.
  *
  * Error settlement is conservative by default: the full reservation is charged.
- * Applications may return a lower amount only when they can prove the failure
- * happened before the metered cost was incurred.
+ * Applications may return a lower amount only when they can prove the metered
+ * cost was not incurred. If a cost-classification hook throws or returns an
+ * invalid amount, the wrapper charges the full reservation before surfacing a
+ * UsageClassificationError.
  *
- * While a handler is running, the reservation is renewed at roughly one third of
- * its lease TTL. This prevents a legitimate long-running tool from being reclaimed
- * as abandoned during normal operation. The heartbeat can be disabled only when
- * the application provides an equivalent renewal mechanism.
- *
- * Settlement failures are never reclassified as tool-execution failures and are
- * not retried here. A production store may have applied a write even when the
- * caller did not receive an acknowledgement, so retrying settlement blindly can
- * create a second state transition.
+ * MCP `isError: true` results are classified as tool errors rather than success.
+ * MCP v2 `input_required` multi-round-trip results are intentionally rejected in
+ * this pre-alpha adapter because correct suspend/resume accounting requires a
+ * dedicated reservation-resume contract. The reservation is conservatively
+ * settled before the unsupported-flow error is surfaced.
  */
 export function protectTool<TArgs, TResult>(
   options: ProtectToolOptions<TArgs, TResult>,
@@ -76,6 +102,11 @@ export function protectTool<TArgs, TResult>(
     }
 
     const { lease } = admission;
+    // This transition is deliberately before the handler. An ambiguous failure
+    // here prevents tool execution; if Redis applied the transition but lost the
+    // acknowledgement, expiry remains conservative rather than under-accounting.
+    await lease.markLiable();
+
     const heartbeat = options.leaseHeartbeat === false ? noHeartbeat() : startLeaseHeartbeat(lease);
     let result: TResult;
 
@@ -83,18 +114,65 @@ export function protectTool<TArgs, TResult>(
       result = await handler(args, ctx);
     } catch (executionError) {
       await heartbeat.stop();
-      const actualUnits = options.errorUnits
-        ? await options.errorUnits({ error: executionError, args, ctx, lease })
-        : lease.reservedUnits;
-      await settleOnce(lease, actualUnits, 'error', executionError);
+      const classified = await classifyUnits(
+        options.errorUnits
+          ? () => options.errorUnits!({ error: executionError, args, ctx, lease })
+          : undefined,
+        lease.reservedUnits,
+        lease,
+      );
+      await settleOnce(lease, classified.units, 'error', executionError);
+      if (classified.error !== undefined) {
+        throw new UsageClassificationError(
+          'Usage error-cost classification failed; full reservation was charged',
+          classified.error,
+          executionError,
+        );
+      }
       throw executionError;
     }
 
     await heartbeat.stop();
-    const actualUnits = options.successUnits
-      ? await options.successUnits({ result, args, ctx, lease })
-      : lease.reservedUnits;
-    await settleOnce(lease, actualUnits, 'success');
+
+    if (isInputRequiredResult(result)) {
+      await settleOnce(lease, lease.reservedUnits, 'unsupported_input_required');
+      throw new UnsupportedMcpUsageFlowError(
+        'MCP input_required multi-round tool flows are not yet supported by protectTool()',
+      );
+    }
+
+    if (isToolErrorResult(result)) {
+      const classified = await classifyUnits(
+        options.toolErrorUnits
+          ? () => options.toolErrorUnits!({ result, args, ctx, lease })
+          : undefined,
+        lease.reservedUnits,
+        lease,
+      );
+      await settleOnce(lease, classified.units, 'tool_error');
+      if (classified.error !== undefined) {
+        throw new UsageClassificationError(
+          'Usage tool-error classification failed; full reservation was charged',
+          classified.error,
+        );
+      }
+      return result;
+    }
+
+    const classified = await classifyUnits(
+      options.successUnits
+        ? () => options.successUnits!({ result, args, ctx, lease })
+        : undefined,
+      lease.reservedUnits,
+      lease,
+    );
+    await settleOnce(lease, classified.units, 'success');
+    if (classified.error !== undefined) {
+      throw new UsageClassificationError(
+        'Usage success-cost classification failed; full reservation was charged',
+        classified.error,
+      );
+    }
     return result;
   };
 }
@@ -120,6 +198,9 @@ function startLeaseHeartbeat(lease: UsageLease): LeaseHeartbeat {
       inFlight = lease
         .renew()
         .then(() => undefined)
+        // Renewal failure does not imply the lease definitely expired. The
+        // reservation is already cost-liable, so expiry is conservative; final
+        // settlement will surface a lost/expired lease if ownership was lost.
         .catch(() => undefined)
         .finally(() => {
           inFlight = undefined;
@@ -137,6 +218,35 @@ function startLeaseHeartbeat(lease: UsageLease): LeaseHeartbeat {
       if (inFlight !== undefined) await inFlight;
     },
   };
+}
+
+async function classifyUnits(
+  resolver: (() => MaybePromise<number>) | undefined,
+  fallbackUnits: number,
+  lease: UsageLease,
+): Promise<{ units: number; error?: unknown }> {
+  if (!resolver) return { units: fallbackUnits };
+  try {
+    const units = await resolver();
+    if (!Number.isSafeInteger(units) || units < 0 || units > lease.reservedUnits) {
+      throw new RangeError('classified units must be a non-negative safe integer within the reservation');
+    }
+    return { units };
+  } catch (error) {
+    return { units: fallbackUnits, error };
+  }
+}
+
+function isToolErrorResult(value: unknown): boolean {
+  return isRecord(value) && value.isError === true;
+}
+
+function isInputRequiredResult(value: unknown): boolean {
+  return isRecord(value) && value.resultType === 'input_required';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 async function settleOnce(
