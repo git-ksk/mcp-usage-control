@@ -181,6 +181,21 @@ interface ProtectToolOptions<TArgs, TResult> {
 }
 ```
 
+wrapped application handlerはadapter-levelでは `(args, ctx)` 形式です。SDK toolにinput schemaがない場合、`protectTool()` がSDK nativeの `(ctx)` invocationをnormalizeし、operation-ID hook、cost hook、policy request、wrapped handlerへ `args === undefined` を渡します。
+
+### `ProtectedToolHandler<TArgs, TResult>`
+
+`protectTool()` が返すfunctionはSDK v2の両callback形式を受け付けます。
+
+```ts
+interface ProtectedToolHandler<TArgs, TResult> {
+  (ctx: ServerContext): Promise<TResult>;
+  (args: TArgs, ctx: ServerContext): Promise<TResult>;
+}
+```
+
+SDKがno-input-schema toolを `(ctx)`、input schemaありtoolを `(args, ctx)` で呼ぶため、このnormalizationをadapterが担当します。
+
 behavior:
 
 - admitted leaseはhandler entry前にcost-liableへ遷移します。
