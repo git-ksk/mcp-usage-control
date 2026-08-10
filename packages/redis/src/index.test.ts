@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from 'redis';
 import { UsageControl, type UsagePolicy } from '@mcp-usage-control/core';
 import { RedisUsageStore, type RedisEvalClient } from './index.js';
@@ -48,6 +48,7 @@ integration('RedisUsageStore', () => {
   });
 
   beforeEach(async () => {
+    vi.restoreAllMocks();
     await client.flushDb();
   });
 
@@ -146,6 +147,43 @@ integration('RedisUsageStore', () => {
     await sleep(80);
     const second = await control.reserve(request('op-b'));
     expect(second.allowed).toBe(true);
+  });
+
+  it('charges a cost-liable reservation if the process disappears before settlement', async () => {
+    const control = new UsageControl(new RedisUsageStore(client), policy(1, 40));
+    const first = await control.reserve(request('op-a'));
+    if (!first.allowed) throw new Error('expected admission');
+    await first.lease.markLiable();
+
+    await sleep(80);
+    const second = await control.reserve(request('op-b'));
+    expect(second).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+    const retry = await control.reserve(request('op-a'));
+    expect(retry).toEqual({ allowed: false, reason: 'duplicate_operation' });
+  });
+
+  it('fails safely if mark-liable was applied but its acknowledgement was lost', async () => {
+    const lossyClient = new LoseNextReplyClient(client);
+    const control = new UsageControl(new RedisUsageStore(lossyClient), policy(1, 40));
+    const first = await control.reserve(request('op-a'));
+    if (!first.allowed) throw new Error('expected admission');
+
+    lossyClient.loseNextReply = true;
+    await expect(first.lease.markLiable()).rejects.toThrow('simulated lost Redis acknowledgement');
+    await sleep(80);
+
+    const second = await control.reserve(request('op-b'));
+    expect(second).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+  });
+
+  it('does not use the application clock for lease expiry calculations', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => {
+      throw new Error('application clock must not be used by RedisUsageStore');
+    });
+    const control = new UsageControl(new RedisUsageStore(client), policy(1, 200));
+    const first = await control.reserve(request('op-a'));
+    expect(first.allowed).toBe(true);
+    expect(dateNow).not.toHaveBeenCalled();
   });
 
   it('does not reclaim a reservation whose lease was renewed', async () => {
