@@ -3,9 +3,12 @@ export type UsageEventMetadataValue = string | number | boolean | null;
 /** Explicit opt-in metadata. Tool arguments and secrets are never captured automatically. */
 export type UsageEventMetadata = Readonly<Record<string, UsageEventMetadataValue>>;
 
-export interface UsageObserver {
+export interface UsageObserverHandler {
   onEvent(event: UsageEvent): void | Promise<void>;
 }
+
+/** Observer configuration may be omitted without weakening exact optional property checks. */
+export type UsageObserver = UsageObserverHandler | undefined;
 
 interface UsageEventBase {
   timestamp: number;
@@ -56,6 +59,7 @@ export type UsageEvent =
       tenantId?: string;
       tool?: string;
       budgetIdentifiers?: readonly string[];
+      /** Aggregate total when count > 1. */
       reservedUnits: number;
       count: number;
     })
@@ -73,7 +77,7 @@ export type UsageEvent =
  * Best-effort, non-blocking observer delivery. Observer failures never change
  * admission/settlement state and are intentionally swallowed.
  */
-export function emitUsageEvent(observer: UsageObserver | undefined, event: UsageEvent): void {
+export function emitUsageEvent(observer: UsageObserver, event: UsageEvent): void {
   if (!observer) return;
   try {
     const result = observer.onEvent(event);
