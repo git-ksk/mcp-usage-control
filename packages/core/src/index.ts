@@ -16,8 +16,24 @@ export interface Budget {
   limit: number;
 }
 
+export interface BudgetRemaining {
+  key: string;
+  remaining: number;
+}
+
+type AllowUsageQuoteBase = {
+  decision: 'allow';
+  units: number;
+  reservationTtlMs?: number;
+};
+
+/**
+ * `budgets` is the v0.1 form. `budget` remains accepted as a source-compatibility
+ * convenience for single-budget callers and is normalized to a one-element list.
+ */
 export type UsageQuote =
-  | { decision: 'allow'; units: number; budget: Budget; reservationTtlMs?: number }
+  | (AllowUsageQuoteBase & { budgets: readonly Budget[]; budget?: never })
+  | (AllowUsageQuoteBase & { budget: Budget; budgets?: never })
   | { decision: 'deny'; reason: string };
 
 export interface UsagePolicy {
@@ -28,15 +44,25 @@ export interface ReservationRecord {
   id: string;
   operationId: string;
   principalId: string;
+  tenantId?: string;
   tool: string;
-  budgetKey: string;
+  budgetKeys: string[];
   reservedUnits: number;
   expiresAt: number;
 }
 
 export type StoreReserveResult =
-  | { accepted: true; reservation: ReservationRecord; remaining: number }
-  | { accepted: false; reason: 'quota_exceeded' | 'duplicate_operation'; remaining?: number };
+  | {
+      accepted: true;
+      reservation: ReservationRecord;
+      remainingByBudget: BudgetRemaining[];
+    }
+  | {
+      accepted: false;
+      reason: 'quota_exceeded' | 'duplicate_operation';
+      limitingBudgetKey?: string;
+      remaining?: number;
+    };
 
 export interface MarkLiableInput {
   reservationId: string;
@@ -75,7 +101,7 @@ export interface UsageStore {
   reserve(input: {
     request: UsageRequest;
     units: number;
-    budget: Budget;
+    budgets: readonly Budget[];
     ttlMs: number;
   }): Promise<StoreReserveResult>;
   markLiable(input: MarkLiableInput): Promise<MarkLiableResult>;
@@ -85,7 +111,12 @@ export interface UsageStore {
 
 export type AdmissionResult =
   | { allowed: true; lease: UsageLease }
-  | { allowed: false; reason: string; remaining?: number };
+  | {
+      allowed: false;
+      reason: string;
+      limitingBudgetKey?: string;
+      remaining?: number;
+    };
 
 export class UsageStateError extends Error {
   constructor(message: string) {
@@ -140,77 +171,123 @@ export class UsageControl {
   }
 
   async reserve<TArgs>(request: UsageRequest<TArgs>): Promise<AdmissionResult> {
+    validateRequestIdentity(request);
     const quote = await this.policy.quote(request as UsageRequest);
     if (quote.decision === 'deny') return { allowed: false, reason: quote.reason };
 
     assertNonNegativeInteger(quote.units, 'units');
-    assertNonNegativeInteger(quote.budget.limit, 'budget.limit');
+    const budgets = canonicalizeBudgets('budgets' in quote && quote.budgets ? quote.budgets : [quote.budget]);
     const ttlMs = quote.reservationTtlMs ?? this.defaultReservationTtlMs;
     assertPositiveInteger(ttlMs, 'reservationTtlMs');
 
     const result = await this.store.reserve({
       request: request as UsageRequest,
       units: quote.units,
-      budget: quote.budget,
+      budgets,
       ttlMs,
     });
 
     if (!result.accepted) {
-      return result.remaining === undefined
-        ? { allowed: false, reason: result.reason }
-        : { allowed: false, reason: result.reason, remaining: result.remaining };
+      return {
+        allowed: false,
+        reason: result.reason,
+        ...(result.limitingBudgetKey === undefined
+          ? {}
+          : { limitingBudgetKey: result.limitingBudgetKey }),
+        ...(result.remaining === undefined ? {} : { remaining: result.remaining }),
+      };
     }
 
     return { allowed: true, lease: new UsageLease(this.store, result.reservation, ttlMs) };
   }
 }
 
+export interface MemoryUsageStoreOptions {
+  /** How long a settled operation remains replay-protected. Defaults to 24 hours. */
+  idempotencyTtlMs?: number;
+}
+
 interface InternalReservation extends ReservationRecord {
+  operationKey: string;
   state: 'pending' | 'liable' | 'settled';
   actualUnits?: number;
   outcome?: string;
+  tombstoneExpiresAt?: number;
 }
 
 export class MemoryUsageStore implements UsageStore {
   private readonly used = new Map<string, number>();
   private readonly reservations = new Map<string, InternalReservation>();
   private readonly operations = new Map<string, string>();
+  private readonly idempotencyTtlMs: number;
+
+  constructor(options: MemoryUsageStoreOptions = {}) {
+    this.idempotencyTtlMs = options.idempotencyTtlMs ?? 86_400_000;
+    assertPositiveInteger(this.idempotencyTtlMs, 'idempotencyTtlMs');
+  }
 
   async reserve(input: {
     request: UsageRequest;
     units: number;
-    budget: Budget;
+    budgets: readonly Budget[];
     ttlMs: number;
   }): Promise<StoreReserveResult> {
+    assertNonNegativeInteger(input.units, 'units');
+    const budgets = canonicalizeBudgets(input.budgets);
+    assertPositiveInteger(input.ttlMs, 'ttlMs');
+    validateRequestIdentity(input.request);
+
     const now = Date.now();
     this.recoverExpired(now);
 
-    const operationKey = operationKeyFor(input.request.principal.id, input.request.operationId);
+    const operationKey = operationKeyFor(input.request);
     if (this.operations.has(operationKey)) {
       return { accepted: false, reason: 'duplicate_operation' };
     }
 
-    const current = this.used.get(input.budget.key) ?? 0;
-    const remaining = Math.max(0, input.budget.limit - current);
-    if (input.units > remaining) {
-      return { accepted: false, reason: 'quota_exceeded', remaining };
+    const remainingByBudget = budgets.map(budget => ({
+      key: budget.key,
+      remaining: Math.max(0, budget.limit - (this.used.get(budget.key) ?? 0)),
+    }));
+    const limiting = remainingByBudget.find(balance => input.units > balance.remaining);
+    if (limiting) {
+      return {
+        accepted: false,
+        reason: 'quota_exceeded',
+        limitingBudgetKey: limiting.key,
+        remaining: limiting.remaining,
+      };
     }
 
     const reservation: InternalReservation = {
       id: operationKey,
       operationId: input.request.operationId,
       principalId: input.request.principal.id,
+      ...(input.request.principal.tenantId === undefined
+        ? {}
+        : { tenantId: input.request.principal.tenantId }),
       tool: input.request.tool,
-      budgetKey: input.budget.key,
+      budgetKeys: budgets.map(budget => budget.key),
       reservedUnits: input.units,
       expiresAt: now + input.ttlMs,
+      operationKey,
       state: 'pending',
     };
 
-    this.used.set(input.budget.key, current + input.units);
+    for (const budget of budgets) {
+      this.used.set(budget.key, (this.used.get(budget.key) ?? 0) + input.units);
+    }
     this.reservations.set(reservation.id, reservation);
     this.operations.set(operationKey, reservation.id);
-    return { accepted: true, reservation, remaining: remaining - input.units };
+
+    return {
+      accepted: true,
+      reservation,
+      remainingByBudget: remainingByBudget.map(balance => ({
+        key: balance.key,
+        remaining: balance.remaining - input.units,
+      })),
+    };
   }
 
   async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
@@ -240,7 +317,8 @@ export class MemoryUsageStore implements UsageStore {
 
   async settle(input: SettleInput): Promise<SettlementResult> {
     assertNonNegativeInteger(input.actualUnits, 'actualUnits');
-    this.recoverExpired(Date.now());
+    const now = Date.now();
+    this.recoverExpired(now);
     const reservation = this.reservations.get(input.reservationId);
     if (!reservation) throw new UsageStateError('Reservation not found or expired');
 
@@ -256,26 +334,28 @@ export class MemoryUsageStore implements UsageStore {
     }
 
     const released = reservation.reservedUnits - input.actualUnits;
-    this.used.set(
-      reservation.budgetKey,
-      Math.max(0, (this.used.get(reservation.budgetKey) ?? 0) - released),
-    );
+    if (released > 0) this.releaseAcrossBudgets(reservation.budgetKeys, released);
     reservation.state = 'settled';
     reservation.actualUnits = input.actualUnits;
     reservation.outcome = input.outcome;
+    reservation.tombstoneExpiresAt = now + this.idempotencyTtlMs;
     return toSettlement(reservation);
   }
 
   private recoverExpired(now: number): void {
     for (const [id, reservation] of this.reservations) {
-      if (reservation.state === 'settled' || reservation.expiresAt > now) continue;
+      if (reservation.state === 'settled') {
+        if ((reservation.tombstoneExpiresAt ?? Number.POSITIVE_INFINITY) <= now) {
+          this.operations.delete(reservation.operationKey);
+          this.reservations.delete(id);
+        }
+        continue;
+      }
+      if (reservation.expiresAt > now) continue;
 
       if (reservation.state === 'pending') {
-        this.used.set(
-          reservation.budgetKey,
-          Math.max(0, (this.used.get(reservation.budgetKey) ?? 0) - reservation.reservedUnits),
-        );
-        this.operations.delete(operationKeyFor(reservation.principalId, reservation.operationId));
+        this.releaseAcrossBudgets(reservation.budgetKeys, reservation.reservedUnits);
+        this.operations.delete(reservation.operationKey);
         this.reservations.delete(id);
         continue;
       }
@@ -285,12 +365,50 @@ export class MemoryUsageStore implements UsageStore {
       reservation.state = 'settled';
       reservation.actualUnits = reservation.reservedUnits;
       reservation.outcome = 'lease_expired_after_execution_started';
+      reservation.tombstoneExpiresAt = now + this.idempotencyTtlMs;
+    }
+  }
+
+  private releaseAcrossBudgets(budgetKeys: readonly string[], units: number): void {
+    for (const budgetKey of budgetKeys) {
+      const next = Math.max(0, (this.used.get(budgetKey) ?? 0) - units);
+      if (next === 0) this.used.delete(budgetKey);
+      else this.used.set(budgetKey, next);
     }
   }
 }
 
-function operationKeyFor(principalId: string, operationId: string): string {
-  return JSON.stringify([principalId, operationId]);
+function operationKeyFor(request: UsageRequest): string {
+  return JSON.stringify([
+    request.principal.tenantId ?? null,
+    request.principal.id,
+    request.tool,
+    request.operationId,
+  ]);
+}
+
+function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
+  if (budgets.length === 0) throw new RangeError('budgets must contain at least one budget');
+  const normalized = budgets.map(budget => {
+    if (typeof budget.key !== 'string' || budget.key.length === 0) {
+      throw new RangeError('budget.key must be a non-empty string');
+    }
+    assertNonNegativeInteger(budget.limit, `budget.limit (${budget.key})`);
+    return { key: budget.key, limit: budget.limit };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  for (let i = 1; i < normalized.length; i += 1) {
+    if (normalized[i - 1]!.key === normalized[i]!.key) {
+      throw new RangeError(`duplicate budget key: ${normalized[i]!.key}`);
+    }
+  }
+  return normalized;
+}
+
+function validateRequestIdentity(request: UsageRequest): void {
+  if (!request.operationId) throw new RangeError('operationId must be non-empty');
+  if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
+  if (!request.tool) throw new RangeError('tool must be non-empty');
 }
 
 function toSettlement(reservation: InternalReservation): SettlementResult {
