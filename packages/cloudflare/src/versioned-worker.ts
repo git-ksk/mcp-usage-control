@@ -1,4 +1,9 @@
 import type { DurableObjectState } from 'cloudflare:workers';
+import {
+  lookupCloudflareReservation,
+  type CloudflareLookupCommand,
+  type CloudflareLookupReply,
+} from './reconciliation-protocol.js';
 import { initializeCloudflareUsageSchema } from './schema.js';
 import { UsageControlDurableObject as BaseUsageControlDurableObject } from './worker.js';
 
@@ -11,5 +16,10 @@ export class UsageControlDurableObject extends BaseUsageControlDurableObject {
   constructor(ctx: DurableObjectState, env: unknown) {
     initializeCloudflareUsageSchema(ctx.storage);
     super(ctx, env);
+  }
+
+  /** Read-only lookup for explicit lost-reserve-ACK reconciliation. */
+  async lookup(command: CloudflareLookupCommand): Promise<CloudflareLookupReply> {
+    return lookupCloudflareReservation(this.ctx.storage, command);
   }
 }

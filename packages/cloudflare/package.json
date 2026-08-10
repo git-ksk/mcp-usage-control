@@ -17,6 +17,11 @@
       "types": "./dist/versioned-worker.d.ts",
       "import": "./dist/versioned-worker.js",
       "default": "./dist/versioned-worker.js"
+    },
+    "./reconciliation": {
+      "types": "./dist/reconciliation.d.ts",
+      "import": "./dist/reconciliation.js",
+      "default": "./dist/reconciliation.js"
     }
   },
   "files": [
@@ -36,6 +41,14 @@
     "dist/versioned-worker.js.map",
     "dist/versioned-worker.d.ts",
     "dist/versioned-worker.d.ts.map",
+    "dist/reconciliation.js",
+    "dist/reconciliation.js.map",
+    "dist/reconciliation.d.ts",
+    "dist/reconciliation.d.ts.map",
+    "dist/reconciliation-protocol.js",
+    "dist/reconciliation-protocol.js.map",
+    "dist/reconciliation-protocol.d.ts",
+    "dist/reconciliation-protocol.d.ts.map",
     "README.md",
     "LICENSE"
   ],
