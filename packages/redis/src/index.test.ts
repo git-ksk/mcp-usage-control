@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createClient } from 'redis';
 import { UsageControl, type UsagePolicy } from '@mcp-usage-control/core';
-import { RedisUsageStore } from './index.js';
+import { RedisUsageStore, type RedisEvalClient } from './index.js';
 
 const redisUrl = process.env.REDIS_URL;
 const integration = redisUrl ? describe : describe.skip;
@@ -25,6 +25,21 @@ function policy(limit = 1, reservationTtlMs = 5_000): UsagePolicy {
       };
     },
   };
+}
+
+class LoseNextReplyClient implements RedisEvalClient {
+  loseNextReply = false;
+
+  constructor(private readonly inner: RedisEvalClient) {}
+
+  async eval(script: string, options: { keys: string[]; arguments: string[] }): Promise<unknown> {
+    const reply = await this.inner.eval(script, options);
+    if (this.loseNextReply) {
+      this.loseNextReply = false;
+      throw new Error('simulated lost Redis acknowledgement');
+    }
+    return reply;
+  }
 }
 
 integration('RedisUsageStore', () => {
@@ -80,6 +95,47 @@ integration('RedisUsageStore', () => {
     await expect(admission.lease.settle(0, 'success')).rejects.toThrow(
       'already settled with a different result',
     );
+  });
+
+  it('keeps settlement idempotent when Redis applied the write but its acknowledgement was lost', async () => {
+    const lossyClient = new LoseNextReplyClient(client);
+    const control = new UsageControl(new RedisUsageStore(lossyClient), policy(2));
+    const admission = await control.reserve(request('op-a'));
+    if (!admission.allowed) throw new Error('expected admission');
+
+    lossyClient.loseNextReply = true;
+    await expect(admission.lease.settle(1, 'success')).rejects.toThrow(
+      'simulated lost Redis acknowledgement',
+    );
+
+    const replay = await admission.lease.settle(1, 'success');
+    expect(replay).toEqual({
+      reservationId: admission.lease.reservation.id,
+      reservedUnits: 1,
+      actualUnits: 1,
+      releasedUnits: 0,
+      outcome: 'success',
+    });
+  });
+
+  it('fails closed after an admission write whose acknowledgement was lost', async () => {
+    const lossyClient = new LoseNextReplyClient(client);
+    const control = new UsageControl(new RedisUsageStore(lossyClient), policy(1));
+
+    lossyClient.loseNextReply = true;
+    await expect(control.reserve(request('op-a'))).rejects.toThrow(
+      'simulated lost Redis acknowledgement',
+    );
+
+    const sameOperation = await control.reserve(request('op-a'));
+    expect(sameOperation).toEqual({ allowed: false, reason: 'duplicate_operation' });
+
+    const differentOperation = await control.reserve(request('op-b'));
+    expect(differentOperation).toEqual({
+      allowed: false,
+      reason: 'quota_exceeded',
+      remaining: 0,
+    });
   });
 
   it('reclaims an abandoned reservation after its lease expires', async () => {
