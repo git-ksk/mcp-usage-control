@@ -1,0 +1,53 @@
+name: Feature request / 機能提案
+description: Propose a scoped feature or design change. / scopeの明確な機能・設計変更を提案します。
+title: "feat: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 課題
+      description: What concrete user or operator problem should be solved? / どの具体的な利用者・運用課題を解決しますか？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior / 提案する動作
+      description: Describe the desired API or behavior without requiring a specific implementation. / 特定実装に固定せず、必要なAPI・behaviorを説明してください。
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Likely scope / 想定scope
+      options:
+        - core contract
+        - MCP adapter
+        - Redis adapter
+        - documentation
+        - new provider/storage adapter
+        - unsure / 不明
+    validations:
+      required: true
+  - type: textarea
+    id: invariant
+    attributes:
+      label: Safety/accounting invariant / Safety・accounting invariant
+      description: Which invariant must remain true under concurrency, retry, expiry, or failure? / concurrency・retry・expiry・failure時に何を守る必要がありますか？
+      placeholder: "Example: all budgets must reserve atomically or none may reserve."
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and trade-offs / 代替案・trade-off
+      description: What alternatives were considered? Why does this belong in this project? / 代替案と、このprojectに入れる理由を記載してください。
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Project boundaries / Project boundary
+      options:
+        - label: I considered whether this belongs in an adapter rather than core. / coreではなくadapterに置くべきか検討しました。
+          required: true
+        - label: This request does not require putting authentication, payment processing, or provider-specific billing into core. / authentication・payment processing・provider-specific billingをcoreへ入れる提案ではありません。
+          required: true
