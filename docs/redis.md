@@ -1,5 +1,7 @@
 # Redis adapter
 
+[English](redis.md) | [日本語](redis.ja.md)
+
 `@mcp-usage-control/redis` is the first production-store adapter for `mcp-usage-control`.
 
 The current pre-alpha implementation is tested in CI with Redis 7 and Node.js 20/22. It uses the public `eval(script, { keys, arguments })` shape provided by node-redis; the workspace currently tests against `redis` 6.2.x.
@@ -46,7 +48,7 @@ Expired pending reservations are reclaimed lazily during subsequent admission. T
 
 The MCP adapter renews active leases by default while a tool handler is running. Applications using core/Redis directly must renew long-running reservations themselves.
 
-A network partition can still outlive any distributed lease. While Redis is unavailable, adapter calls propagate the storage error rather than failing open. See [Architecture](architecture.md) for the distributed-lease limitation.
+A network partition can still outlive any distributed lease. While Redis is unavailable, adapter calls propagate the storage error rather than failing open for new admission. See [Architecture](architecture.md) for the distributed-lease limitation.
 
 ## Idempotency tombstones
 
@@ -62,6 +64,25 @@ day:user-123:2026-08-10
 ```
 
 Changing the budget key starts a new accounting window. Old `used` keys are intentionally not given a potentially unsafe automatic TTL by the adapter. Operators with many historical windows should apply a retention policy appropriate to their own budget-key scheme.
+
+## Configuration
+
+Common options include:
+
+- `prefix`: key prefix for usage-control state. Redis hash-tag braces are rejected.
+- `hashTag`: the hash tag used to keep transactional keys in one Redis Cluster slot.
+- `cleanupBatchSize`: maximum expired reservation/tombstone cleanup work performed by one reserve call.
+- `idempotencyTtlMs`: retention period for settled operation replay protection.
+
+Processes participating in the same logical usage domain must use compatible prefix/hash-tag settings. Different settings create separate accounting state.
+
+## Failure behavior
+
+Redis errors are propagated rather than converted to an allow decision. An admission write can succeed even if the client loses the acknowledgement; retrying the same logical invocation with the same operation ID is therefore important because duplicate protection prevents a second reservation.
+
+Settlement has the same acknowledgement ambiguity. Identical settlement replay is idempotent; a replay with different actual units or outcome is rejected as a conflict.
+
+CI fault-injection tests exercise real Redis behavior for 100-way concurrent admission, expiry recovery, renewal, settlement replay/conflict, tombstone expiry, and lost acknowledgements after writes.
 
 ## Current limits
 

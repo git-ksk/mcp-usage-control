@@ -6,7 +6,7 @@
 
 **Concurrency-safe usage enforcement for MCP tool execution.**
 
-> Status: pre-alpha. The API and package names are not stable yet.
+> Status: pre-alpha. The API and package names are not stable yet. Workspace packages are intentionally not published to npm yet.
 
 `mcp-usage-control` is a provider-neutral runtime for enforcing entitlements and usage budgets around Model Context Protocol (MCP) tool execution.
 
@@ -22,7 +22,7 @@ principal -> policy/entitlement -> quote -> atomic reserve -> execute -> settle
 
 The key distinction is **settlement**, not automatic rollback. A failed tool call may still have consumed an upstream API, database, or compute resource, so failures are not refunded by default.
 
-Reservations are renewable leases. The MCP adapter heartbeats an active lease while the handler runs so a legitimate long-running tool is not reclaimed as abandoned.
+Reservations are renewable leases. The MCP adapter heartbeats an active lease while the handler runs so a legitimate long-running tool is not reclaimed as abandoned solely because its initial TTL elapsed.
 
 ## Current packages
 
@@ -47,7 +47,31 @@ Reservations are renewable leases. The MCP adapter heartbeats an active lease wh
   - Redis Cluster-compatible single hash-slot transaction domain
   - real Redis integration tests in CI
 
-Workspace packages are private during the pre-alpha phase so package naming can be finalized before the first registry release.
+Workspace packages remain `private: true` during pre-alpha so names and public contracts can be finalized before the first registry release.
+
+## Documentation
+
+- **Start here:** [Getting started](docs/getting-started.md)
+- **Using MCP SDK v2:** [MCP integration](docs/mcp-integration.md)
+- **Design and invariants:** [Architecture](docs/architecture.md)
+- **Production storage:** [Redis adapter](docs/redis.md)
+- **Release compatibility:** [Release policy](docs/releasing.md)
+- **All docs:** [Documentation index](docs/README.md)
+
+Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
+
+## Quick start from source
+
+Because packages are not published yet, clone the repository and run the workspace directly:
+
+```console
+git clone https://github.com/git-ksk/mcp-usage-control.git
+cd mcp-usage-control
+pnpm install
+pnpm check
+```
+
+Requires Node.js 20+ and pnpm 10. CI tests Node.js 20 and 22, including real Redis 7 integration tests.
 
 ## Example
 
@@ -83,7 +107,7 @@ await redis.connect();
 const store = new RedisUsageStore(redis);
 ```
 
-See [Redis adapter](docs/redis.md) for the key model, cleanup behavior, and Redis Cluster trade-offs.
+See [Redis adapter](docs/redis.md) for the key model, cleanup behavior, failure semantics, and Redis Cluster trade-offs.
 
 ## Safety invariants
 
@@ -95,30 +119,24 @@ See [Redis adapter](docs/redis.md) for the key model, cleanup behavior, and Redi
 6. Expired abandoned reservations release their in-flight units.
 7. Errors are charged conservatively unless the application explicitly classifies them otherwise.
 8. Ambiguous settlement failures are surfaced and are not blindly retried.
-9. Storage failures do not turn into an allow decision.
+9. Storage failures do not turn into an allow decision for new admission.
 
-See [Architecture](docs/architecture.md) for the design boundaries.
+See [Architecture](docs/architecture.md) for the full design boundaries and distributed-lease limitations.
 
 ## Planned v0.1
 
 - atomic multi-budget admission (for example daily + monthly + tenant budgets)
 - finalized operation tombstone/expiry semantics
 - observability hooks
-- MCP integration examples
 - package naming and npm release workflow
 
 Billing providers, OAuth providers, dashboards, and payment protocols remain out of scope for the core. OpenMeter, Unkey, Stripe, RevenueCat, and x402 are integration candidates rather than dependencies of the runtime.
 
-## Development
+## Contributing
 
-Requires Node.js 20+ and pnpm 10.
+Contributions are welcome. Changes to reservation, retry, expiry, or settlement behavior are correctness/security sensitive and should include the corresponding concurrency and failure tests. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-```console
-pnpm install
-pnpm check
-```
-
-CI tests Node.js 20 and 22, including real Redis integration tests.
+For vulnerabilities that could enable quota bypass, double spending, cross-tenant leakage, replay abuse, or inconsistent settlement, do not open a public issue; follow [SECURITY.md](SECURITY.md).
 
 ## License
 

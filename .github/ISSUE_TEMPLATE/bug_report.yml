@@ -1,0 +1,71 @@
+name: Bug report / バグ報告
+description: Report a reproducible correctness or integration problem. / 再現可能な不具合を報告します。
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Do not include credentials, tokens, cookies, production identifiers, or customer data.
+        ご報告ありがとうございます。credential、token、cookie、production identifier、customer dataは記載しないでください。
+  - type: input
+    id: revision
+    attributes:
+      label: Version or commit / Version・commit
+      description: Tag, commit SHA, or branch. / tag、commit SHA、branchを記載してください。
+      placeholder: main @ abc1234
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment / 環境
+      description: Node.js, storage adapter, Redis version if relevant. / Node.js、storage adapter、必要ならRedis version。
+      placeholder: Node.js 22, Redis 7, @mcp-usage-control/redis
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction / 最小再現手順
+      description: Keep it secret-free and as small as practical. / secretを含めず、可能な限り最小化してください。
+      placeholder: Steps, code, or a minimal repository...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 期待する動作
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / 実際の動作
+    validations:
+      required: true
+  - type: checkboxes
+    id: conditions
+    attributes:
+      label: Relevant conditions / 関係する条件
+      options:
+        - label: Concurrent calls / 並列呼び出し
+        - label: Duplicate operation ID or retry / duplicate operation ID・retry
+        - label: Lease renewal or expiry / lease renewal・expiry
+        - label: Settlement or ambiguous acknowledgement / settlement・曖昧なACK
+        - label: Redis/network/storage failure / Redis・network・storage failure
+        - label: MCP adapter behavior / MCP adapter behavior
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs / sanitize済みログ
+      description: Remove secrets and production identifiers first. / secretとproduction identifierを除去してください。
+      render: text
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check / 確認
+      options:
+        - label: I removed secrets, credentials, cookies, tokens, and private customer data. / secret・credential・cookie・token・private customer dataを除去しました。
+          required: true
+        - label: This is not a vulnerability requiring private disclosure under SECURITY.md. / SECURITY.mdに従いprivate報告すべき脆弱性ではありません。
+          required: true
