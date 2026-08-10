@@ -2,7 +2,7 @@ import {
   createCloudflareUsageStoreGateway,
   type CloudflareDurableObjectNamespace,
 } from '../src/index.js';
-export { UsageControlDurableObject } from '../src/worker.js';
+export { UsageControlDurableObject } from '../src/versioned-worker.js';
 
 interface Env {
   USAGE_CONTROL: CloudflareDurableObjectNamespace;
