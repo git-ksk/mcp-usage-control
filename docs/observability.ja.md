@@ -32,7 +32,9 @@ const control = new UsageControl(store, policy, {
 });
 ```
 
-`metadata` は明示的なopt-in dataです。usage requestを受け取るcallback形式にもできます。secret、token、raw tool arguments、無制限なuser contentはmetadataへ入れないでください。
+`metadata` は明示的なopt-in dataです。usage requestを受け取るcallback形式にもできます。secret、token、raw tool arguments、provider payload、無制限なuser contentはmetadataへ入れないでください。
+
+policy denialの `reason` もapplication定義で、`reserve.denied` へコピーされます。free-form diagnostic textではなく、boundedかつnon-secretなreason codeとして扱ってください。
 
 従来のnumber形式の第3constructor引数も引き続き利用できます。
 
@@ -56,7 +58,7 @@ quota denialでは `limitingBudgetKey` / `remaining` を含む場合がありま
 
 ### `settlement.completed`
 
-store settlement成功後に発火します。idempotent settlement replayも含みます。
+store settlement成功後に発火します。同一内容のidempotent settlement replayでも再発火する場合があります。
 
 reserved / actual / released unitsとsettlement outcomeを含みます。
 
@@ -73,22 +75,35 @@ Memory reference storeは、もともと保持しているlocal reservation / re
 
 policy quoteまたはstore reserve / mark-liable / renew / settleがthrowした場合に発火します。
 
-error class/nameだけを含み、raw exception messageは意図的に含めません。exception messageにはcredential、内部URL、query text、provider response bodyなどが入る可能性があるためです。
+boundedなconstructor class名だけを含みます。raw exception messageやmutableな `Error.name` は、credential、内部URL、query text、provider response body、無制限なhigh-cardinality textを含む可能性があるため意図的に含めません。
 
 ## Delivery semantics
 
 observer deliveryは次の性質です。
 
 - best-effort
-- non-blocking
+- enforcement outcomeの外側
+- `onEvent()` がPromiseを返してもawaitしない
 - concurrent call間の順序保証なし
 - runtimeによるretryなし
 - durableではない
 - admission / settlement結果を変更しない
 
-observerの同期throwとasync promise rejectionは握りつぶします。durable analyticsやbilling reconciliationが必要なら、application側でdurable queue / ledgerへ送信し、そのpipelineを別途monitorしてください。
+`onEvent()` 自体はinlineで呼ばれます。同期処理は軽量にし、network call、durable write、重いserializationはapplication側のqueue / telemetry pipelineへoffloadしてください。返されたPromiseはawaitしません。observerの同期throwとasync promise rejectionは握りつぶします。
 
-usage storeがenforcement truthです。
+durable analyticsやbilling reconciliationが必要なら、application側でdurable queue / ledgerへ送信し、そのpipelineを別途monitorしてください。usage storeがenforcement truthです。
+
+## Replay / deduplication
+
+observabilityはexactly-onceではなく、**同じ意味のeventが再度届く可能性があります**。例えばRedisのidentical settlement replayはenforcement state上idempotentですが、`settle()` をもう一度呼ぶと同一内容の `settlement.completed` が再発火する場合があります。
+
+downstream counterやdurable pipelineで二重計上を避ける必要がある場合は、例えば次のstable keyでsettlement eventをdedupeしてください。
+
+```text
+(reservationId, actualUnits, outcome)
+```
+
+dedupe horizonは対象pipelineのretry / reconciliation horizon以上にします。event件数からquota truthを推測せず、enforcement stateまたはdurable accounting stateをquery / reconcileしてください。
 
 ## Privacy / cardinality
 
@@ -99,14 +114,14 @@ runtime eventには `principalId`、`tenantId`、`operationId`、`reservationId`
 推奨:
 
 - structured log / trace: privacy policy上許容される場合のみIDを利用。
-- metric: tool、outcome、plan、error classなどbounded dimensionを利用。
+- metric: tool、outcome、plan、denial reason code、error classなどbounded dimensionを利用。
 - **unique principal / operation / reservation / user-specific budget IDをmetric label/tagにしない。**
 
 Prometheus、Cloud Monitoring、Datadog、OpenTelemetry metrics backend等でのcardinality explosionを避けるためです。
 
 ## 作りやすいcounter
 
-このevent streamから、例えば次のbounded counterを作れます。
+このevent streamから、例えば次のbounded operational counterを作れます。
 
 - tool / plan別accepted call数
 - reason / tool / plan別denied call数
@@ -116,7 +131,7 @@ Prometheus、Cloud Monitoring、Datadog、OpenTelemetry metrics backend等での
 - liable-expiry retained units
 - phase / error class別store/state error
 
-ただし、これらのcounterをtransactional quota balanceとして使わないでください。enforcement eventから作る運用ビューです。
+必要に応じてreplay deduplicationを適用してください。これらのcounterをtransactional quota balanceとして使わないでください。enforcement eventから作る運用ビューです。
 
 ## Vendor adapter
 
