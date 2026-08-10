@@ -269,7 +269,6 @@ export class RemoteCloudflareUsageStore implements UsageStore {
     ttlMs: number;
   }): Promise<StoreReserveResult> {
     const prepared = await prepareReserve(input, {
-      domainName: 'remote',
       cleanupBatchSize: 1,
       idempotencyTtlMs: 1,
     });
