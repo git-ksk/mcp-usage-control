@@ -1,13 +1,18 @@
 export const RESERVE_SCRIPT = String.raw`
-local now = tonumber(ARGV[1])
-local units = tonumber(ARGV[2])
-local limit = tonumber(ARGV[3])
-local expiresAt = tonumber(ARGV[4])
-local reservationId = ARGV[5]
-local operationKey = ARGV[6]
-local cleanupLimit = tonumber(ARGV[7])
+local units = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local ttlMs = tonumber(ARGV[3])
+local reservationId = ARGV[4]
+local operationKey = ARGV[5]
+local cleanupLimit = tonumber(ARGV[6])
+local idempotencyTtlMs = tonumber(ARGV[7])
 
--- Reclaim expired pending reservations for this budget before admitting new work.
+local redisTime = redis.call('TIME')
+local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
+
+-- Reclaim expired reservations for this budget before admitting new work.
+-- Pending work that never became cost-liable is released. Once execution was
+-- marked liable, expiry conservatively charges the full reservation.
 local expiredReservations = redis.call('ZRANGEBYSCORE', KEYS[2], '-inf', now, 'LIMIT', 0, cleanupLimit)
 for _, rid in ipairs(expiredReservations) do
   local raw = redis.call('HGET', KEYS[3], rid)
@@ -23,6 +28,12 @@ for _, rid in ipairs(expiredReservations) do
       end
       redis.call('HDEL', KEYS[4], record.operationKey)
       redis.call('HDEL', KEYS[3], rid)
+    elseif record.state == 'liable' then
+      record.state = 'settled'
+      record.actualUnits = tonumber(record.reservedUnits)
+      record.outcome = 'lease_expired_after_execution_started'
+      redis.call('HSET', KEYS[3], rid, cjson.encode(record))
+      redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
     end
   end
   redis.call('ZREM', KEYS[2], rid)
@@ -64,6 +75,7 @@ else
   redis.call('SET', KEYS[1], tostring(nextUsed))
 end
 
+local expiresAt = now + ttlMs
 local record = cjson.encode({
   state = 'pending',
   operationKey = operationKey,
@@ -74,13 +86,15 @@ redis.call('HSET', KEYS[3], reservationId, record)
 redis.call('HSET', KEYS[4], operationKey, reservationId)
 redis.call('ZADD', KEYS[2], expiresAt, reservationId)
 
-return { 'accepted', tostring(remaining - units) }
+return { 'accepted', tostring(remaining - units), tostring(expiresAt) }
 `;
 
-export const RENEW_SCRIPT = String.raw`
-local now = tonumber(ARGV[1])
-local ttlMs = tonumber(ARGV[2])
-local reservationId = ARGV[3]
+export const MARK_LIABLE_SCRIPT = String.raw`
+local reservationId = ARGV[1]
+local idempotencyTtlMs = tonumber(ARGV[2])
+
+local redisTime = redis.call('TIME')
+local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then
@@ -88,22 +102,84 @@ if not raw then
 end
 
 local record = cjson.decode(raw)
-if record.state ~= 'pending' then
+if record.state == 'settled' then
   return { 'not_pending' }
 end
 
 if tonumber(record.expiresAt) <= now then
-  local used = tonumber(redis.call('GET', KEYS[1]) or '0')
-  local nextUsed = used - tonumber(record.reservedUnits)
-  if nextUsed <= 0 then
-    redis.call('DEL', KEYS[1])
-  else
-    redis.call('SET', KEYS[1], tostring(nextUsed))
+  if record.state == 'pending' then
+    local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+    local nextUsed = used - tonumber(record.reservedUnits)
+    if nextUsed <= 0 then
+      redis.call('DEL', KEYS[1])
+    else
+      redis.call('SET', KEYS[1], tostring(nextUsed))
+    end
+    redis.call('HDEL', KEYS[4], record.operationKey)
+    redis.call('HDEL', KEYS[3], reservationId)
+  elseif record.state == 'liable' then
+    record.state = 'settled'
+    record.actualUnits = tonumber(record.reservedUnits)
+    record.outcome = 'lease_expired_after_execution_started'
+    redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
+    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
   end
   redis.call('ZREM', KEYS[2], reservationId)
-  redis.call('HDEL', KEYS[4], record.operationKey)
-  redis.call('HDEL', KEYS[3], reservationId)
   return { 'expired' }
+end
+
+if record.state == 'pending' then
+  record.state = 'liable'
+  redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
+elseif record.state ~= 'liable' then
+  return { 'not_pending' }
+end
+
+return { 'marked', tostring(record.expiresAt) }
+`;
+
+export const RENEW_SCRIPT = String.raw`
+local ttlMs = tonumber(ARGV[1])
+local reservationId = ARGV[2]
+local idempotencyTtlMs = tonumber(ARGV[3])
+
+local redisTime = redis.call('TIME')
+local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
+
+local raw = redis.call('HGET', KEYS[3], reservationId)
+if not raw then
+  return { 'not_found' }
+end
+
+local record = cjson.decode(raw)
+if record.state == 'settled' then
+  return { 'not_pending' }
+end
+
+if tonumber(record.expiresAt) <= now then
+  if record.state == 'pending' then
+    local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+    local nextUsed = used - tonumber(record.reservedUnits)
+    if nextUsed <= 0 then
+      redis.call('DEL', KEYS[1])
+    else
+      redis.call('SET', KEYS[1], tostring(nextUsed))
+    end
+    redis.call('HDEL', KEYS[4], record.operationKey)
+    redis.call('HDEL', KEYS[3], reservationId)
+  elseif record.state == 'liable' then
+    record.state = 'settled'
+    record.actualUnits = tonumber(record.reservedUnits)
+    record.outcome = 'lease_expired_after_execution_started'
+    redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
+    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+  end
+  redis.call('ZREM', KEYS[2], reservationId)
+  return { 'expired' }
+end
+
+if record.state ~= 'pending' and record.state ~= 'liable' then
+  return { 'not_pending' }
 end
 
 local expiresAt = now + ttlMs
@@ -117,7 +193,10 @@ export const SETTLE_SCRIPT = String.raw`
 local reservationId = ARGV[1]
 local actualUnits = tonumber(ARGV[2])
 local outcome = ARGV[3]
-local tombstoneExpiresAt = tonumber(ARGV[4])
+local idempotencyTtlMs = tonumber(ARGV[4])
+
+local redisTime = redis.call('TIME')
+local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then
@@ -126,10 +205,6 @@ end
 
 local record = cjson.decode(raw)
 local reservedUnits = tonumber(record.reservedUnits)
-
-if actualUnits > reservedUnits then
-  return { 'invalid_units' }
-end
 
 if record.state == 'settled' then
   if tonumber(record.actualUnits) == actualUnits and record.outcome == outcome then
@@ -143,8 +218,34 @@ if record.state == 'settled' then
   return { 'conflict' }
 end
 
-if record.state ~= 'pending' then
+if record.state ~= 'pending' and record.state ~= 'liable' then
   return { 'not_pending' }
+end
+
+if tonumber(record.expiresAt) <= now then
+  if record.state == 'pending' then
+    local used = tonumber(redis.call('GET', KEYS[1]) or '0')
+    local nextUsed = used - reservedUnits
+    if nextUsed <= 0 then
+      redis.call('DEL', KEYS[1])
+    else
+      redis.call('SET', KEYS[1], tostring(nextUsed))
+    end
+    redis.call('HDEL', KEYS[4], record.operationKey)
+    redis.call('HDEL', KEYS[3], reservationId)
+  else
+    record.state = 'settled'
+    record.actualUnits = reservedUnits
+    record.outcome = 'lease_expired_after_execution_started'
+    redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
+    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+  end
+  redis.call('ZREM', KEYS[2], reservationId)
+  return { 'expired' }
+end
+
+if actualUnits > reservedUnits then
+  return { 'invalid_units' }
 end
 
 local released = reservedUnits - actualUnits
@@ -163,7 +264,7 @@ record.actualUnits = actualUnits
 record.outcome = outcome
 redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
 redis.call('ZREM', KEYS[2], reservationId)
-redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
+redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
 
 return {
   'settled',
