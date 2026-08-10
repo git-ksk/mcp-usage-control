@@ -27,12 +27,28 @@ export interface ProtectToolOptions<TArgs, TResult> {
   }): MaybePromise<number>;
 }
 
+export class UsageSettlementError extends Error {
+  constructor(
+    message: string,
+    public readonly settlementError: unknown,
+    public readonly executionError?: unknown,
+  ) {
+    super(message);
+    this.name = 'UsageSettlementError';
+  }
+}
+
 /**
  * Wrap an MCP v2 tool handler with usage admission and settlement.
  *
  * Error settlement is conservative by default: the full reservation is charged.
  * Applications may return a lower amount only when they can prove the failure
  * happened before the metered cost was incurred.
+ *
+ * Settlement failures are never reclassified as tool-execution failures and are
+ * not retried here. A production store may have applied a write even when the
+ * caller did not receive an acknowledgement, so retrying settlement blindly can
+ * create a second state transition.
  */
 export function protectTool<TArgs, TResult>(
   options: ProtectToolOptions<TArgs, TResult>,
@@ -53,19 +69,39 @@ export function protectTool<TArgs, TResult>(
     }
 
     const { lease } = admission;
+    let result: TResult;
+
     try {
-      const result = await handler(args, ctx);
-      const actualUnits = options.successUnits
-        ? await options.successUnits({ result, args, ctx, lease })
-        : lease.reservedUnits;
-      await lease.settle(actualUnits, 'success');
-      return result;
-    } catch (error) {
+      result = await handler(args, ctx);
+    } catch (executionError) {
       const actualUnits = options.errorUnits
-        ? await options.errorUnits({ error, args, ctx, lease })
+        ? await options.errorUnits({ error: executionError, args, ctx, lease })
         : lease.reservedUnits;
-      await lease.settle(actualUnits, 'error');
-      throw error;
+      await settleOnce(lease, actualUnits, 'error', executionError);
+      throw executionError;
     }
+
+    const actualUnits = options.successUnits
+      ? await options.successUnits({ result, args, ctx, lease })
+      : lease.reservedUnits;
+    await settleOnce(lease, actualUnits, 'success');
+    return result;
   };
+}
+
+async function settleOnce(
+  lease: UsageLease,
+  actualUnits: number,
+  outcome: string,
+  executionError?: unknown,
+): Promise<void> {
+  try {
+    await lease.settle(actualUnits, outcome);
+  } catch (settlementError) {
+    throw new UsageSettlementError(
+      'Usage settlement failed; settlement state may be ambiguous',
+      settlementError,
+      executionError,
+    );
+  }
 }
