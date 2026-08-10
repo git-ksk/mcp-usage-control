@@ -4,8 +4,11 @@ import {
   RemoteCloudflareUsageStore,
 } from '../dist/index.js';
 
-const endpoint = 'http://127.0.0.1:8799/v1/usage-store';
-const authHeaders = { authorization: 'Bearer local-integration-token' };
+const endpoint =
+  process.env.MCP_USAGE_CLOUDFLARE_URL ?? 'http://127.0.0.1:8799/v1/usage-store';
+const token = process.env.MCP_USAGE_CLOUDFLARE_TOKEN ?? 'local-integration-token';
+const oldToken = process.env.MCP_USAGE_CLOUDFLARE_OLD_TOKEN;
+const authHeaders = { authorization: `Bearer ${token}` };
 const store = new RemoteCloudflareUsageStore({ endpoint, headers: authHeaders });
 const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -30,6 +33,18 @@ await assert.rejects(
   () => reserve(new RemoteCloudflareUsageStore({ endpoint }), 'unauthorized', 'auth', 1),
   error => error instanceof CloudflareUsageTransportError && error.code === 'unauthorized',
 );
+
+// Optional credential-rotation check for deployed dogfood: the previous token must be rejected.
+if (oldToken) {
+  const staleCredentialStore = new RemoteCloudflareUsageStore({
+    endpoint,
+    headers: { authorization: `Bearer ${oldToken}` },
+  });
+  await assert.rejects(
+    () => reserve(staleCredentialStore, 'stale-credential', 'stale-credential', 1),
+    error => error instanceof CloudflareUsageTransportError && error.code === 'unauthorized',
+  );
+}
 
 // 100-way contention: one shared remaining unit admits exactly one caller.
 const concurrent = await Promise.all(
@@ -224,4 +239,4 @@ const observerFixture = await reserve(
 );
 assert.equal(observerFixture.accepted, true);
 
-console.log('Cloudflare Durable Objects integration: PASS');
+console.log(`Cloudflare Durable Objects integration: PASS (${endpoint})`);
