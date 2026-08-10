@@ -147,7 +147,7 @@ class FakeStorage {
           const table = this.tables.get(name);
           return table ? [{ name, type: 'table', sql: table.sql }] : [];
         });
-      return new Cursor<T>(rows as T[]);
+      return new Cursor<T>(rows as unknown as T[]);
     }
 
     if (normalized.startsWith('create table budgets')) {
@@ -190,7 +190,7 @@ class FakeStorage {
     ) {
       const name = String(bindings[0]);
       const sql = this.indexes.get(name);
-      return new Cursor<T>((sql ? [{ name, type: 'index', sql }] : []) as T[]);
+      return new Cursor<T>((sql ? [{ name, type: 'index', sql }] : []) as unknown as T[]);
     }
 
     if (/^(insert|update|delete)\s+(into\s+)?(budgets|reservations)\b/.test(normalized)) {
