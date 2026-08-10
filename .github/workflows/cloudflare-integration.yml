@@ -1,0 +1,62 @@
+name: Cloudflare Integration
+
+on:
+  pull_request:
+    paths:
+      - 'packages/cloudflare/**'
+      - 'packages/core/**'
+      - '.github/workflows/cloudflare-integration.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.json'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/cloudflare/**'
+      - 'packages/core/**'
+      - '.github/workflows/cloudflare-integration.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig.json'
+
+permissions:
+  contents: read
+
+jobs:
+  workerd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Run Durable Objects integration against local workerd
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm dlx wrangler@4.114.0 dev --local \
+            --config packages/cloudflare/wrangler.test.jsonc \
+            --port 8799 >/tmp/muc-cloudflare-wrangler.log 2>&1 &
+          WRANGLER_PID=$!
+          trap 'kill "$WRANGLER_PID" 2>/dev/null || true; cat /tmp/muc-cloudflare-wrangler.log || true' EXIT
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -sS http://127.0.0.1:8799/health >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'local workerd did not become ready' >&2
+            exit 1
+          fi
+
+          node packages/cloudflare/test/integration.mjs
