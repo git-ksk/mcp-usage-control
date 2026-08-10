@@ -14,9 +14,9 @@
       "default": "./dist/index.js"
     },
     "./worker": {
-      "types": "./dist/worker.d.ts",
-      "import": "./dist/worker.js",
-      "default": "./dist/worker.js"
+      "types": "./dist/versioned-worker.d.ts",
+      "import": "./dist/versioned-worker.js",
+      "default": "./dist/versioned-worker.js"
     }
   },
   "files": [
@@ -28,6 +28,14 @@
     "dist/worker.js.map",
     "dist/worker.d.ts",
     "dist/worker.d.ts.map",
+    "dist/schema.js",
+    "dist/schema.js.map",
+    "dist/schema.d.ts",
+    "dist/schema.d.ts.map",
+    "dist/versioned-worker.js",
+    "dist/versioned-worker.js.map",
+    "dist/versioned-worker.d.ts",
+    "dist/versioned-worker.d.ts.map",
     "README.md",
     "LICENSE"
   ],
