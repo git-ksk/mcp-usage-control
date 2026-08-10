@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/wrangler.json",
   "name": "mcp-usage-control-cloudflare-test",
   "main": "./test/worker.ts",
-  "compatibility_date": "2026-08-10",
+  "compatibility_date": "2026-07-29",
   "durable_objects": {
     "bindings": [
       {
