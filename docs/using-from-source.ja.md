@@ -18,8 +18,9 @@ pnpm check
 - Node.js 20+
 - repository開発ではpnpm 10.15.x
 - Redis adapterのtest / 利用ではRedis 7
+- Cloudflare専用integration pathを実行する場合のみWrangler / workerd
 
-## 2. 3 packageをローカルpack
+## 2. 4 packageをローカルpack
 
 repository rootで実行します。
 
@@ -29,6 +30,7 @@ mkdir -p .packs
 pnpm --dir packages/core pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/mcp pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/redis pack --pack-destination "$PWD/.packs"
+pnpm --dir packages/cloudflare pack --pack-destination "$PWD/.packs"
 ```
 
 次のtarballが生成されます。
@@ -37,9 +39,10 @@ pnpm --dir packages/redis pack --pack-destination "$PWD/.packs"
 .packs/mcp-usage-control-0.1.0.tgz
 .packs/mcp-usage-control-mcp-0.1.0.tgz
 .packs/mcp-usage-control-redis-0.1.0.tgz
+.packs/mcp-usage-control-cloudflare-0.1.0.tgz
 ```
 
-現時点では、このtarballが将来のnpm packageに最も近い利用形態です。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証しています。
+現時点では、このtarballが将来のnpm packageに最も近い利用形態です。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証します。
 
 ## 3. 別projectへinstall
 
@@ -69,13 +72,22 @@ npm install \
   redis@6.2.0
 ```
 
-3 packageすべて:
+Core + Cloudflare adapter:
+
+```console
+npm install \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz
+```
+
+4 packageすべて:
 
 ```console
 npm install \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.1.0.tgz \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz \
   @modelcontextprotocol/server@2.0.0 \
   redis@6.2.0
 ```
@@ -87,14 +99,17 @@ node --input-type=module <<'NODE'
 import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
 import { protectTool } from 'mcp-usage-control-mcp';
 import { RedisUsageStore } from 'mcp-usage-control-redis';
+import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
 
-if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore].every(Boolean)) {
+if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore].every(Boolean)) {
   throw new Error('mcp-usage-control local package import failed');
 }
 
 console.log('mcp-usage-control local packages are ready');
 NODE
 ```
+
+plain Node processから `mcp-usage-control-cloudflare/worker` をimportしないでください。このsubpathはCloudflare Workers runtime向けです。Cloudflare packageのmain entry pointはremote client用途としてNodeからimportできます。
 
 一部packageだけinstallした場合は、そのpackageだけimportしてください。
 
@@ -106,7 +121,7 @@ runtime自体を変更するときはrepository内で作業し、次を実行し
 pnpm check
 ```
 
-in-memory storeはtest / local development向けです。distributed enforcementの確認ではRedis adapterを使ってください。
+in-memory storeはtest / local development向けです。distributed enforcementの確認ではRedis adapterまたはCloudflare専用workerd integration workflowを使います。
 
 ## npm公開後
 
