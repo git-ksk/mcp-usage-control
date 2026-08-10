@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryUsageStore, UsageControl, type UsagePolicy } from './index.js';
 
 const policy: UsagePolicy = {
@@ -19,6 +19,10 @@ function request(operationId: string) {
     args: {},
   };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('UsageControl', () => {
   it('prevents parallel oversubscription', async () => {
@@ -60,5 +64,39 @@ describe('UsageControl', () => {
     const first = await admission.lease.settle(1, 'success');
     const second = await admission.lease.settle(1, 'success');
     expect(second).toEqual(first);
+  });
+
+  it('keeps an active reservation allocated when its lease is renewed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+
+    const expiringPolicy: UsagePolicy = {
+      quote(request) {
+        return {
+          decision: 'allow',
+          units: 1,
+          budget: { key: `monthly:${request.principal.id}`, limit: 1 },
+          reservationTtlMs: 30,
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), expiringPolicy);
+    const first = await control.reserve(request('op-a'));
+    if (!first.allowed) throw new Error('expected admission');
+
+    await vi.advanceTimersByTimeAsync(20);
+    await first.lease.renew(50);
+    await vi.advanceTimersByTimeAsync(20);
+
+    const duringRenewedLease = await control.reserve(request('op-b'));
+    expect(duringRenewedLease).toEqual({
+      allowed: false,
+      reason: 'quota_exceeded',
+      remaining: 0,
+    });
+
+    await vi.advanceTimersByTimeAsync(40);
+    const afterRenewedLease = await control.reserve(request('op-c'));
+    expect(afterRenewedLease.allowed).toBe(true);
   });
 });
