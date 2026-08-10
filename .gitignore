@@ -3,3 +3,14 @@ dist/
 coverage/
 *.tsbuildinfo
 .DS_Store
+
+# Local environment / credentials
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+.npmrc
+
+# Cloudflare / Wrangler local state
+.wrangler/
