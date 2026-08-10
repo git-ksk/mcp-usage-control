@@ -2,9 +2,7 @@
 
 MCP TypeScript SDK v2 adapter for `mcp-usage-control`.
 
-```console
-npm install mcp-usage-control-mcp @modelcontextprotocol/server
-```
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or locally packed `mcp-usage-control` + `mcp-usage-control-mcp` tarballs. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
 
 ## English
 
@@ -16,6 +14,7 @@ It distinguishes normal success, `{ isError: true }`, and thrown errors. Invalid
 
 **v0.1 intentionally does not support MCP v2 `input_required` multi-round flows.** Such a result is conservatively settled and rejected with `UnsupportedMcpUsageFlowError` until suspend/resume semantics are implemented (issue #14).
 
+- [Current source/tarball usage](../../docs/using-from-source.md)
 - [MCP integration](../../docs/mcp-integration.md)
 - [API reference](../../docs/api-reference.md)
 - [Architecture](../../docs/architecture.md)
@@ -32,6 +31,7 @@ normal success、`{ isError: true }`、thrown errorを区別します。classifi
 
 **v0.1はMCP v2 `input_required` multi-round flowを意図的に未対応とします。** 該当resultは保守的にsettleした後 `UnsupportedMcpUsageFlowError` でrejectし、suspend/resume semanticsはIssue #14で追跡します。
 
+- [現在のsource / tarball利用手順](../../docs/using-from-source.ja.md)
 - [MCP integration](../../docs/mcp-integration.ja.md)
 - [API reference](../../docs/api-reference.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
