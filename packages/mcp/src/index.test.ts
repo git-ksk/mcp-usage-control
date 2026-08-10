@@ -58,7 +58,7 @@ describe('protectTool', () => {
       },
     );
 
-    await expect(protectedHandler({}, ctx)).rejects.toThrow('upstream timeout');
+    await expect(protectedHandler(ctx)).rejects.toThrow('upstream timeout');
     const next = await control.reserve({
       operationId: 'op-b',
       principal: { id: 'user-1' },
@@ -83,7 +83,7 @@ describe('protectTool', () => {
       },
     );
 
-    await expect(protectedHandler({}, ctx)).rejects.toThrow();
+    await expect(protectedHandler(ctx)).rejects.toThrow();
     const next = await control.reserve({
       operationId: 'op-b',
       principal: { id: 'user-1' },
@@ -110,7 +110,7 @@ describe('protectTool', () => {
       async () => result,
     );
 
-    await expect(protectedHandler({}, ctx)).resolves.toBe(result);
+    await expect(protectedHandler(ctx)).resolves.toBe(result);
     expect(toolErrorUnits).toHaveBeenCalledOnce();
     expect(successUnits).not.toHaveBeenCalled();
     const next = await control.reserve({
@@ -137,7 +137,7 @@ describe('protectTool', () => {
       async () => 'ok',
     );
 
-    await expect(protectedHandler({}, ctx)).rejects.toBeInstanceOf(UsageClassificationError);
+    await expect(protectedHandler(ctx)).rejects.toBeInstanceOf(UsageClassificationError);
     const next = await control.reserve({
       operationId: 'op-b',
       principal: { id: 'user-1' },
@@ -160,7 +160,7 @@ describe('protectTool', () => {
       async () => 'ok',
     );
 
-    await expect(protectedHandler({}, ctx)).rejects.toBeInstanceOf(UsageClassificationError);
+    await expect(protectedHandler(ctx)).rejects.toBeInstanceOf(UsageClassificationError);
     const next = await control.reserve({
       operationId: 'op-b',
       principal: { id: 'user-1' },
@@ -182,7 +182,7 @@ describe('protectTool', () => {
       async () => ({ resultType: 'input_required', inputRequests: {} }),
     );
 
-    await expect(protectedHandler({}, ctx)).rejects.toBeInstanceOf(UnsupportedMcpUsageFlowError);
+    await expect(protectedHandler(ctx)).rejects.toBeInstanceOf(UnsupportedMcpUsageFlowError);
     const next = await control.reserve({
       operationId: 'op-b',
       principal: { id: 'user-1' },
@@ -205,7 +205,7 @@ describe('protectTool', () => {
       handler,
     );
 
-    await expect(protectedHandler({}, ctx)).rejects.toThrow('mark-liable unavailable');
+    await expect(protectedHandler(ctx)).rejects.toThrow('mark-liable unavailable');
     expect(handler).not.toHaveBeenCalled();
   });
 
@@ -224,7 +224,7 @@ describe('protectTool', () => {
       async () => 'ok',
     );
 
-    await expect(protectedHandler({}, ctx)).rejects.toBeInstanceOf(UsageSettlementError);
+    await expect(protectedHandler(ctx)).rejects.toBeInstanceOf(UsageSettlementError);
     expect(store.settleCalls).toBe(1);
     expect(errorUnits).not.toHaveBeenCalled();
   });
@@ -247,7 +247,7 @@ describe('protectTool', () => {
 
     let caught: unknown;
     try {
-      await protectedHandler({}, ctx);
+      await protectedHandler(ctx);
     } catch (error) {
       caught = error;
     }
@@ -283,7 +283,7 @@ describe('protectTool', () => {
       () => new Promise<string>(resolve => setTimeout(() => resolve('done'), 100)),
     );
 
-    const running = protectedHandler({}, ctx);
+    const running = protectedHandler(ctx);
     await vi.advanceTimersByTimeAsync(40);
 
     const concurrent = await control.reserve({
