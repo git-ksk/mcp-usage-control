@@ -18,6 +18,9 @@
 - `(tenantId, principal.id, tool, operationId)` 単位のreplay protection。
 - bounded settled idempotency tombstone。Memory / Redisのdefaultは24時間。
 - `MemoryUsageStore` reference implementation。
+- admission / settlement / expiry recovery / policy・store error向けprovider-neutral `UsageObserver` lifecycle hook。
+- explicit opt-in event metadata。tool arguments / raw exception messageは自動収集しない。
+- enforcement stateを変更しないbest-effort / non-blocking observer delivery。
 - `@modelcontextprotocol/server` v2 single-round tool向け `mcp-usage-control-mcp` adapter。
 - normal success、`{ isError: true }`、thrown errorを区別するMCP result classification。
 - classifier failure時のconservative settlementと `UsageClassificationError`。
@@ -26,12 +29,13 @@
 - Redis-side Luaでmulti-budget reserve、liability、renew、settlement、expiry recovery、tombstoneをatomicに処理する `mcp-usage-control-redis`。
 - Redis server timeによるlease / tombstone判定。
 - multi-budget expiryをreservation単位で1回だけ回収するglobal Redis lease index。
+- telemetryのためだけにraw request identityを永続化せず、Redis expiry recoveryをaggregate通知するobservability。
 - Redis Cluster compatible single-hash-slot transaction domain。
-- 実Redis 7 concurrency / crash / ACK-loss integration test。
+- 実Redis 7 concurrency / crash / ACK-loss / recovery-observability integration test。
 - 公式MCP SDK v2 `Client + createMcpHandler` protocol integration test。
 - Node.js 20 / 22のfrozen `pnpm-lock.yaml` CI。
 - exports / files / license / workspace protocol除去を確認するpackage tarball smoke test。
-- 英日user / architecture / Redis / MCP integration / API / release / security / support / contribution docs。
+- 英日user / architecture / Redis / MCP integration / observability / API / release / security / support / contribution docs。
 
 ### Safety behavior
 
@@ -42,6 +46,7 @@
 - settlement ACK ambiguityをblind retryせず、Redisではidentical replayをidempotent化。
 - Redis lease / tombstone timeはapplication hostではなくRedis serverをauthorityとする。
 - admission storage failureをallowへfail openしない。
+- observer failureをquota stateから隔離し、error / denyをallowへ変換しない。
 
 ### Known limitations
 
@@ -50,7 +55,7 @@
 - Redis transactional stateは1つのconfigured Redis Cluster hash slotを利用。
 - Redis atomicityはfinancial-ledger durabilityを意味せず、persistence / HAはdeployment-specific。
 - generic lease renewalはlease loss後のprovider-specific fencingではない。
-- provider-neutral observability hookはv0.1に含まない。
+- observabilityはbest-effort / non-durableで、transactional quota ledgerではない。vendor-specific telemetry adapterはcore packageの責務外。
 
 ### Compatibility
 
