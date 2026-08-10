@@ -6,11 +6,24 @@
 
 **Concurrency-safe usage enforcement for MCP tool execution.**
 
-> Status: pre-alpha. The API and package names are not stable yet. Workspace packages are intentionally not published to npm yet.
+`mcp-usage-control` is a provider-neutral runtime for enforcing entitlements and usage budgets around Model Context Protocol (MCP) tool execution. v0.1 focuses on correct admission and settlement under concurrency, retries, failures, long-running handlers, and process loss.
 
-`mcp-usage-control` is a provider-neutral runtime for enforcing entitlements and usage budgets around Model Context Protocol (MCP) tool execution.
+It is not a payment processor, MCP gateway, OAuth provider, billing dashboard, or generic rate limiter.
 
-It is deliberately not a payment processor, MCP gateway, OAuth provider, or generic rate limiter. The target problem is safe admission and settlement when agents retry, execute tools concurrently, time out, run for a long time, fail after upstream cost, or disappear before settlement.
+## Install
+
+```console
+npm install mcp-usage-control
+```
+
+Optional adapters:
+
+```console
+npm install mcp-usage-control-mcp @modelcontextprotocol/server
+npm install mcp-usage-control-redis redis
+```
+
+Requirements: Node.js 20+. The repository CI tests Node.js 20 and 22, Redis 7, and the official MCP TypeScript SDK v2 client/handler path.
 
 ## Core lifecycle
 
@@ -20,133 +33,172 @@ principal -> policy/entitlement -> quote -> atomic reserve -> mark liable -> exe
                                                 |----------- renew --------|
 ```
 
-The key distinction is **settlement**, not automatic rollback. A failed tool call may still have consumed an upstream API, database, or compute resource.
+The important distinction is **settlement, not automatic rollback**. A failed tool call may already have consumed an upstream API, database, compute resource, or other metered resource.
 
-A reservation starts pending. The execution boundary then marks it cost-liable. If a pending lease expires before execution starts, it can be released; if a cost-liable lease expires after execution starts, the full reservation is conservatively retained. This prevents a process crash after upstream work from becoming a refund.
+A reservation starts `pending`. Immediately before metered execution, it becomes `cost-liable`. If a pending lease expires, its reservation can be released. If a cost-liable lease expires after execution started, the full reservation is conservatively retained so a process crash cannot become a refund.
 
-## Current packages
+## Packages
 
-- `@mcp-usage-control/core`
-  - policy-driven credit quotes and principal-scoped admission
-  - atomic reservation contract
-  - pending -> cost-liable transition
-  - renewable leases
-  - explicit outcome-aware settlement
-  - duplicate operation protection
-  - in-memory reference store
-- `@mcp-usage-control/mcp`
-  - adapter for `@modelcontextprotocol/server` v2 **single-round** tool handlers
-  - marks execution cost-liable before handler entry
-  - automatic lease heartbeat by default
-  - distinguishes normal success, MCP `isError: true`, and thrown errors
-  - classifier failures fall back to a full conservative charge
-  - ambiguous settlement failures are not blindly retried
-  - MCP v2 `input_required` is explicitly unsupported until suspend/resume accounting lands
-- `@mcp-usage-control/redis`
-  - atomic Lua reserve / mark-liable / renew / settle transitions
-  - Redis-server-time lease decisions; application clock skew is not used
-  - state-dependent expiry recovery
-  - bounded expiry and idempotency cleanup
-  - collision-safe tuple encoding before operation hashing
-  - Redis Cluster-compatible single hash-slot transaction domain
-  - real Redis integration tests in CI
+- **`mcp-usage-control`** — core policy, atomic admission contract, renewable leases, settlement, idempotency, and the in-memory reference store.
+- **`mcp-usage-control-mcp`** — adapter for `@modelcontextprotocol/server` v2 single-round tool handlers.
+- **`mcp-usage-control-redis`** — atomic Redis store using Lua and Redis server time.
 
-Workspace packages remain `private: true` during pre-alpha so names and public contracts can be finalized before the first registry release.
+All three packages are ESM and require Node.js 20+.
 
-## Documentation
+## Multi-budget admission
 
-- **Start here:** [Getting started](docs/getting-started.md)
-- **Using MCP SDK v2:** [MCP integration](docs/mcp-integration.md)
-- **Design and invariants:** [Architecture](docs/architecture.md)
-- **Production storage:** [Redis adapter](docs/redis.md)
-- **API:** [API reference](docs/api-reference.md)
-- **Release compatibility:** [Release policy](docs/releasing.md)
-- **All docs:** [Documentation index](docs/README.md)
-
-Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
-
-## Quick start from source
-
-```console
-git clone https://github.com/git-ksk/mcp-usage-control.git
-cd mcp-usage-control
-pnpm install
-pnpm check
-```
-
-Requires Node.js 20+ and pnpm 10. CI tests Node.js 20 and 22, including real Redis 7 integration tests and official MCP SDK client/handler integration coverage.
-
-## Example
+One logical invocation can reserve the same unit cost against several applicable budgets atomically, for example a user daily limit plus a user monthly limit plus a tenant monthly limit:
 
 ```ts
-const control = new UsageControl(
-  new MemoryUsageStore(),
-  {
-    quote(request) {
-      return {
-        decision: 'allow',
-        units: request.tool === 'full_export' ? 5 : 1,
-        budget: {
-          key: `month:${request.principal.id}:2026-08`,
-          limit: request.principal.plan === 'pro' ? 2000 : 100,
-        },
-      };
-    },
+import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
+
+const policy: UsagePolicy = {
+  quote(request) {
+    const tenant = request.principal.tenantId ?? 'personal';
+    return {
+      decision: 'allow',
+      units: request.tool === 'full_export' ? 5 : 1,
+      budgets: [
+        { key: `day:user:${request.principal.id}:2026-08-10`, limit: 20 },
+        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
+        { key: `month:tenant:${tenant}:2026-08`, limit: 2_000 },
+      ],
+    };
   },
+};
+
+const control = new UsageControl(new MemoryUsageStore(), policy);
+```
+
+Admission is **all-or-nothing**. If any participating budget cannot admit the quoted units, no budget is partially reserved.
+
+The single `budget` form is also accepted as a convenience for one-budget policies.
+
+## Idempotency scope
+
+Replay protection is scoped to the tuple:
+
+```text
+(tenantId, principal.id, tool, operationId)
+```
+
+Use a stable `operationId` for retries of the same logical invocation. It is an idempotency input, not an authentication or authorization credential.
+
+Settled operations remain replay-protected for a bounded tombstone period. `MemoryUsageStore` and `RedisUsageStore` default to 24 hours (`idempotencyTtlMs`). Pending reservations that expire before becoming cost-liable release capacity and may be retried after recovery.
+
+## Direct core example
+
+```ts
+const admission = await control.reserve({
+  operationId: 'logical-request-123',
+  principal: { id: 'user-42', tenantId: 'org-7', plan: 'free' },
+  tool: 'search',
+  args: { query: 'example' },
+});
+
+if (!admission.allowed) {
+  throw new Error(`usage denied: ${admission.reason}`);
+}
+
+await admission.lease.markLiable();
+try {
+  const result = await performMeteredWork();
+  await admission.lease.settle(1, 'success');
+  return result;
+} catch (error) {
+  // Charge the incurred amount. Use zero only when you can prove that no
+  // metered resource was consumed.
+  await admission.lease.settle(admission.lease.reservedUnits, 'error');
+  throw error;
+}
+```
+
+Long-running work must renew its active lease. The MCP adapter provides a heartbeat by default; direct core users must renew explicitly when needed.
+
+## MCP SDK v2 adapter
+
+```ts
+import { protectTool } from 'mcp-usage-control-mcp';
+
+server.registerTool(
+  'search',
+  { /* input schema, description, ... */ },
+  protectTool(
+    {
+      control,
+      tool: 'search',
+      principal: ctx => ({ id: ctx.http.authInfo.subject }),
+      operationId: (_args, ctx) => String(ctx.mcpReq.id),
+    },
+    async (args, ctx) => search(args, ctx),
+  ),
 );
 ```
 
-For MCP single-round tool handlers, `protectTool()` reserves, marks the lease cost-liable, renews it while the handler runs, classifies the result, and settles afterwards. Unclassified errors and classifier failures charge conservatively.
+For a tool with **no input schema**, set `noInput: true`. This is explicit because MCP SDK v2's public callback type and observed runtime dispatch shape differ for no-input tools, and an empty object can also be legitimate input for an empty schema.
 
-For production Redis storage:
+`protectTool()`:
+
+- reserves before execution;
+- marks the lease cost-liable before handler entry;
+- renews the lease while the handler runs by default;
+- distinguishes success, MCP `{ isError: true }`, and thrown errors;
+- settles classifier failures conservatively with the full reservation before surfacing the classification error;
+- does not blindly retry ambiguous settlement failures.
+
+### `input_required` support boundary
+
+v0.1 intentionally does **not** support MCP v2 multi-round `input_required` flows in `protectTool()`. A correct implementation needs reservation suspend/resume semantics across fresh requests. The adapter detects this result, settles conservatively, and raises `UnsupportedMcpUsageFlowError` instead of silently double-charging rounds or deadlocking replay protection. See issue #14 for the future design.
+
+## Redis production store
 
 ```ts
 import { createClient } from 'redis';
-import { RedisUsageStore } from '@mcp-usage-control/redis';
+import { RedisUsageStore } from 'mcp-usage-control-redis';
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
+
 const store = new RedisUsageStore(redis);
 ```
 
-See [Redis adapter](docs/redis.md) before production use. Lua atomicity does not by itself guarantee persistence/failover durability; choose Redis HA/persistence to match your accounting requirements.
+The v0.1 Redis store performs multi-budget reserve, `markLiable`, renew, settlement, expiry recovery, and replay protection inside one Redis Cluster transaction domain. It uses Redis server `TIME`, not application `Date.now()`, for lease/tombstone decisions.
+
+Lua atomicity is **not** the same as persistence/failover durability. Configure Redis HA and persistence to match the loss tolerance of your enforcement system. If you need a financial-grade durable ledger, reconcile enforcement state to a separate durable system.
+
+See [Redis adapter](docs/redis.md) before production use.
 
 ## Safety invariants
 
 1. Quota comparison and reservation are one store operation; `check -> execute -> record` is not the model.
-2. The same principal/operation ID cannot obtain two reservations during the replay-protection window.
-3. Entering the metered execution boundary marks the lease cost-liable.
-4. Expired pending reservations release capacity; expired cost-liable reservations retain the full charge.
-5. Active long-running leases are renewable rather than reclaimed solely because the initial TTL elapsed.
-6. `actualUnits` cannot exceed the amount reserved in the current model.
-7. Repeating the same settlement is idempotent; conflicting settlements fail.
-8. MCP `isError: true` results are not classified as success.
-9. Cost-classification failures settle conservatively before surfacing an error.
-10. Ambiguous settlement failures are surfaced and are not blindly retried.
-11. Storage failures do not turn into an allow decision for new admission.
-12. Redis lease time comes from Redis, not the application host clock.
+2. Every applicable budget reserves atomically or none does.
+3. Replay protection uses `(tenantId, principal.id, tool, operationId)`.
+4. Entering the metered execution boundary marks a reservation cost-liable.
+5. Expired pending reservations release capacity; expired cost-liable reservations retain the full charge.
+6. Long-running active leases are renewable.
+7. `actualUnits` cannot exceed the reserved units in v0.1.
+8. Identical settlement replay is idempotent; conflicting settlement fails.
+9. MCP `isError: true` is not classified as success.
+10. Cost-classification failures settle conservatively before surfacing an error.
+11. Ambiguous settlement failures are surfaced and are not blindly retried.
+12. Storage failures do not turn into an allow decision.
+13. Redis lease/tombstone time comes from Redis, not the application clock.
 
-See [Architecture](docs/architecture.md) for full design boundaries and distributed-lease limitations.
+## Documentation
 
-## Important current limitation: `input_required`
+- [Getting started](docs/getting-started.md)
+- [MCP SDK v2 integration](docs/mcp-integration.md)
+- [Architecture and invariants](docs/architecture.md)
+- [Redis adapter](docs/redis.md)
+- [API reference](docs/api-reference.md)
+- [Release policy](docs/releasing.md)
+- [Documentation index](docs/README.md)
 
-MCP v2 multi-round `input_required` flows need reservation suspend/resume semantics across fresh requests. `protectTool()` currently rejects those flows explicitly rather than silently charging every round or deadlocking on duplicate operation IDs. Do not wrap production `input_required` tools until dedicated support lands.
+Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
 
-## Planned v0.1
+## Scope after v0.1
 
-- atomic multi-budget admission (for example daily + monthly + tenant budgets)
-- finalized operation tombstone / principal-tenant scope semantics
-- MCP `input_required` suspend/resume accounting or an intentionally finalized support boundary
-- observability hooks
-- committed `pnpm-lock.yaml`, frozen CI, package pack tests, and npm release workflow
-
-Billing providers, OAuth providers, dashboards, and payment protocols remain out of scope for the core. OpenMeter, Unkey, Stripe, RevenueCat, and x402 are integration candidates rather than dependencies.
-
-## Contributing
-
-Contributions are welcome. Changes to reservation, liability, retry, expiry, or settlement behavior are correctness/security sensitive and should include concurrency and failure tests. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-For vulnerabilities that could enable quota bypass, double spending, cross-tenant leakage, replay abuse, or inconsistent settlement, do not open a public issue; follow [SECURITY.md](SECURITY.md).
+Tracked follow-up work includes provider-neutral observability hooks and real `input_required` suspend/resume accounting. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
 
 ## License
 
