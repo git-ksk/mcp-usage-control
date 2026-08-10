@@ -43,7 +43,8 @@ Keep storage-, protocol-, billing-, and provider-specific concerns outside `core
 - Treat active reservations as renewable leases; do not reclaim legitimate long-running work solely because its initial TTL elapsed.
 - Do not blindly retry ambiguous writes.
 - Storage errors must not silently become an allow decision.
-- MCP adapters must cover both SDK callback forms: `(ctx)` for no-input-schema tools and `(args, ctx)` when an input schema exists.
+- For MCP tools without an input schema, require an explicit `noInput: true` mode rather than guessing from `{}` at runtime. Cover both the SDK's public no-input callback type and actual dispatch behavior in protocol tests.
+- For MCP tools with an input schema, preserve validated `(args, ctx)` behavior.
 - Do not treat MCP `{ isError: true }` as normal success.
 - Do not add `input_required` support without explicit multi-round suspend/resume accounting semantics.
 - Keep Redis atomicity and durability claims separate.
