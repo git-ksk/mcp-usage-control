@@ -8,7 +8,11 @@ const integration = redisUrl ? describe : describe.skip;
 const client = createClient({ url: redisUrl ?? 'redis://127.0.0.1:6379', database: 15 });
 
 const observerEvents: UsageEvent[] = [];
-const observer: UsageObserver = { onEvent: event => observerEvents.push(event) };
+const observer: UsageObserver = {
+  onEvent(event) {
+    observerEvents.push(event);
+  },
+};
 
 const policy: UsagePolicy = {
   quote(req) {
