@@ -31,7 +31,8 @@ The first release is considered ready only when:
 - pending -> cost-liable -> settled crash semantics are tested;
 - MCP success, `isError`, thrown errors, classifier failure, and settlement ambiguity are tested directly and through the official SDK path;
 - `input_required` has an explicit v0.1 support boundary;
-- provider-neutral observability is best-effort, non-blocking, secret-conscious, and isolated from enforcement state;
+- provider-neutral observability is best-effort, not awaited for returned promises, secret-conscious, and isolated from enforcement state;
+- synchronous observer work is documented as inline/lightweight and replay de-duplication semantics are explicit;
 - Memory/Redis expiry recovery observability and high-cardinality guidance are documented/tested;
 - Redis server-time behavior and durability limitations are documented;
 - package names/exports/files are verified;
