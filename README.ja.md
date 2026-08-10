@@ -10,18 +10,20 @@
 
 payment processor、MCP Gateway、OAuth provider、billing dashboard、一般的なrate limiter自体は対象外です。
 
-## Install
+## 現在の配布状況
+
+**packageはまだnpmへ公開していません。** 初回registry publishが完了するまでは、repository checkoutまたはローカルでpackしたtarballを使ってください。現時点では `mcp-usage-control` / `mcp-usage-control-mcp` / `mcp-usage-control-redis` をregistryからinstallできる前提にはしていません。
+
+sourceからの簡易確認:
 
 ```console
-npm install mcp-usage-control
+git clone https://github.com/git-ksk/mcp-usage-control.git
+cd mcp-usage-control
+pnpm install --frozen-lockfile
+pnpm check
 ```
 
-必要なadapterだけ追加します。
-
-```console
-npm install mcp-usage-control-mcp @modelcontextprotocol/server
-npm install mcp-usage-control-redis redis
-```
+別projectから現在のpackageを使う場合は、ローカルで`.tgz`を生成してinstallします。正確な手順は **[Source / local tarballから使う](docs/using-from-source.ja.md)** を参照してください。CIでも同じtarballをcleanなconsumer projectへinstallして検証しています。
 
 Node.js 20+が必要です。repository CIではNode.js 20 / 22、Redis 7、公式MCP TypeScript SDK v2のclient/handler pathをtestします。
 
@@ -185,6 +187,7 @@ production利用前に [Redis adapter](docs/redis.ja.md) を確認してくだ�
 
 ## Documentation
 
+- [Source / local tarballから使う](docs/using-from-source.ja.md)
 - [Getting started](docs/getting-started.ja.md)
 - [MCP SDK v2 integration](docs/mcp-integration.ja.md)
 - [Architecture / invariant](docs/architecture.ja.md)
