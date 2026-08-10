@@ -4,9 +4,7 @@
 
 `mcp-usage-control-mcp` はcore lifecycleを `@modelcontextprotocol/server` v2の **single-round** tool handlerへ接続するadapterです。
 
-```console
-npm install mcp-usage-control-mcp @modelcontextprotocol/server
-```
+> **現在の配布状況:** adapterはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) に従ってlocal core + MCP tarballをinstallし、`@modelcontextprotocol/server@2.0.0` を組み合わせてください。
 
 adapter自体はauthenticationやsubscription判定を行いません。application側でtrustedな `Principal` とlogical `operationId` を導出します。
 
@@ -71,6 +69,12 @@ reserve -> markLiable -> heartbeat -> handler -> stop heartbeat -> classify -> s
 ```
 
 liability boundaryはapplication handler entry直前です。generic adapterはprovider-specificな実コスト発生点を知らないため保守的な境界を採用します。より遅いprovider-awareな `markLiable()` が必要ならcore lifecycleを直接利用してください。
+
+## Observability
+
+MCP adapter側で別のtelemetry systemを定義しません。`protectTool()` が使う `UsageControl` へprovider-neutralな `UsageObserver` を設定すると、direct coreと同じlifecycleでreserve / denial / settlement / error eventを受け取れます。storeがRedisの場合は同じobserverを `RedisUsageStore` にも渡すとexpiry recovery eventも含められます。
+
+tool argumentsはusage eventへ自動コピーしません。privacy、cardinality、metadata、delivery semanticsは [Observability](observability.ja.md) を参照してください。
 
 ## Principal trust
 
