@@ -31,6 +31,8 @@
 - Redis server timeによるlease / tombstone判定。
 - multi-budget expiryをreservation単位で1回だけ回収するglobal Redis lease index。
 - telemetryのためだけにraw request identityを永続化せず、Redis expiry recoveryをaggregate通知するobservability。
+- SQLite-backed Durable Objects、Worker-local / authenticated remote UsageStore、hashed transport identifier、lazy expiry recovery、明示的ACK ambiguity behaviorを持つ `mcp-usage-control-cloudflare`。
+- Cloudflare concurrency、multi-budget atomicity、replay、expiry、renewal、lost ACK、authentication、observer isolationをlocal workerdで検証するintegration coverage。
 - Redis Cluster compatible single-hash-slot transaction domain。
 - 実Redis 7 concurrency / crash / ACK-loss / recovery-observability integration test。
 - 公式MCP SDK v2 `Client + createMcpHandler` protocol integration test。

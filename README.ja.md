@@ -12,7 +12,7 @@ payment processor、MCP Gateway、OAuth provider、billing dashboard、一般的
 
 ## 現在の配布状況
 
-**packageはまだnpmへ公開していません。** 初回registry publishが完了するまでは、repository checkoutまたはローカルでpackしたtarballを使ってください。現時点では `mcp-usage-control` / `mcp-usage-control-mcp` / `mcp-usage-control-redis` をregistryからinstallできる前提にはしていません。
+**packageはまだnpmへ公開していません。** 初回registry publishが完了するまでは、repository checkoutまたはローカルでpackしたtarballを使ってください。現時点では `mcp-usage-control` / `mcp-usage-control-mcp` / `mcp-usage-control-redis` / `mcp-usage-control-cloudflare` をregistryからinstallできる前提にはしていません。
 
 sourceからの簡易確認:
 
@@ -44,8 +44,9 @@ reservationは最初 `pending` です。metered execution直前に `cost-liable`
 - **`mcp-usage-control`** — core policy、atomic admission contract、renewable lease、settlement、idempotency、provider-neutral observability hook、in-memory reference store。
 - **`mcp-usage-control-mcp`** — `@modelcontextprotocol/server` v2 single-round tool handler adapter。
 - **`mcp-usage-control-redis`** — LuaとRedis server timeを使うatomic Redis store。optionalなexpiry-recovery observabilityにも対応。
+- **`mcp-usage-control-cloudflare`** — Cloudflare Durable Objects + SQLite store。Worker-localとauthenticated remote-client pathを提供。
 
-3 packageともESM / Node.js 20+です。
+4 packageともESM / Node.js 20+です。
 
 ## Atomic multi-budget admission
 
@@ -195,6 +196,12 @@ Lua atomicityとpersistence / failover durabilityは別です。必要なaccount
 
 production利用前に [Redis adapter](docs/redis.ja.md) を確認してください。
 
+## Cloudflare Durable Objects store
+
+`mcp-usage-control-cloudflare` はSQLite-backed Durable Objectをtransaction domainとして使います。Worker内では `CloudflareUsageStore`、Cloudflare外のapplicationでは明示認証付きWorker gateway経由の `RemoteCloudflareUsageStore` を利用できます。operation / budget / outcome identifierはCloudflare boundary前にhash化し、tool argumentsは送りません。remote timeout / ACK ambiguityはblind retryせず表面化します。
+
+Worker設定、privacy、cleanup / cost behavior、GCP等からの利用は [Cloudflare adapter](docs/cloudflare.ja.md) を参照してください。
+
 ## Safety invariants
 
 1. quota比較とreservation作成を1つのstore operationで行います。`check -> execute -> record` にはしません。
@@ -220,6 +227,7 @@ production利用前に [Redis adapter](docs/redis.ja.md) を確認してくだ�
 - [Observability](docs/observability.ja.md)
 - [Architecture / invariant](docs/architecture.ja.md)
 - [Redis adapter](docs/redis.ja.md)
+- [Cloudflare adapter](docs/cloudflare.ja.md)
 - [API reference](docs/api-reference.ja.md)
 - [Release policy](docs/releasing.ja.md)
 - [Documentation index](docs/README.ja.md)

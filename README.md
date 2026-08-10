@@ -12,7 +12,7 @@ It is not a payment processor, MCP gateway, OAuth provider, billing dashboard, o
 
 ## Current distribution status
 
-**The packages are not published to npm yet.** Until the first registry publish completes, use a repository checkout or locally packed tarballs. Do not expect registry installation of `mcp-usage-control`, `mcp-usage-control-mcp`, or `mcp-usage-control-redis` to work yet.
+**The packages are not published to npm yet.** Until the first registry publish completes, use a repository checkout or locally packed tarballs. Do not expect registry installation of `mcp-usage-control`, `mcp-usage-control-mcp`, `mcp-usage-control-redis`, or `mcp-usage-control-cloudflare` to work yet.
 
 Quick verification from source:
 
@@ -44,8 +44,9 @@ A reservation starts `pending`. Immediately before metered execution, it becomes
 - **`mcp-usage-control`** — core policy, atomic admission contract, renewable leases, settlement, idempotency, provider-neutral observability hooks, and the in-memory reference store.
 - **`mcp-usage-control-mcp`** — adapter for `@modelcontextprotocol/server` v2 single-round tool handlers.
 - **`mcp-usage-control-redis`** — atomic Redis store using Lua and Redis server time, with optional expiry-recovery observability.
+- **`mcp-usage-control-cloudflare`** — Cloudflare Durable Objects + SQLite store with Worker-local and authenticated remote-client paths.
 
-All three packages are ESM and require Node.js 20+.
+All four packages are ESM and require Node.js 20+.
 
 ## Multi-budget admission
 
@@ -196,6 +197,12 @@ Lua atomicity is **not** the same as persistence/failover durability. Configure 
 
 See [Redis adapter](docs/redis.md) before production use.
 
+## Cloudflare Durable Objects store
+
+`mcp-usage-control-cloudflare` provides a SQLite-backed Durable Object transaction domain. Workers can use `CloudflareUsageStore` directly; applications outside Cloudflare can use `RemoteCloudflareUsageStore` through an explicitly authenticated Worker gateway. The adapter hashes operation/budget/outcome identifiers before the Cloudflare boundary and does not send tool arguments. Remote timeout/ACK ambiguity is surfaced rather than blindly retried.
+
+See [Cloudflare adapter](docs/cloudflare.md) for Worker configuration, privacy, cleanup/cost behavior, and GCP/external usage.
+
 ## Safety invariants
 
 1. Quota comparison and reservation are one store operation; `check -> execute -> record` is not the model.
@@ -221,6 +228,7 @@ See [Redis adapter](docs/redis.md) before production use.
 - [Observability](docs/observability.md)
 - [Architecture and invariants](docs/architecture.md)
 - [Redis adapter](docs/redis.md)
+- [Cloudflare adapter](docs/cloudflare.md)
 - [API reference](docs/api-reference.md)
 - [Release policy](docs/releasing.md)
 - [Documentation index](docs/README.md)

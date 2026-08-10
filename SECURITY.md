@@ -69,6 +69,12 @@ Redis lazy recovery intentionally does not persist raw request identities solely
 
 The v0.1 MCP adapter does not support v2 `input_required` multi-round tool flows. It rejects them explicitly. Do not work around this by generating a new operation ID for every round or by reusing a settled operation ID; either approach can defeat intended accounting semantics. Dedicated suspend/resume support must preserve idempotency and liability across rounds.
 
+## Cloudflare remote-store boundary
+
+The Cloudflare adapter's public HTTP gateway requires an application-defined authorization callback; it has no unauthenticated default. Non-local remote clients require HTTPS and embedded URL credentials are rejected. Timeout/lost-ack failures are ambiguous and must not be hidden by blind automatic retries.
+
+The adapter hashes operation, budget, and settlement-outcome identifiers before the Cloudflare backend boundary and does not send tool arguments. Hashing is not encryption and does not make secret-bearing identifiers safe.
+
 ## Redis durability boundary
 
 Redis Lua provides atomic transitions, not financial-ledger durability. Persistence, replication and failover settings can change whether acknowledged accounting state survives infrastructure failures.

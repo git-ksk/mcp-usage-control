@@ -31,6 +31,8 @@ Initial public release.
 - Redis server-time lease/tombstone decisions.
 - Global Redis lease index so multi-budget expiry recovery happens once per reservation.
 - Aggregate Redis expiry-recovery observability without persisting raw request identities solely for telemetry.
+- `mcp-usage-control-cloudflare` with SQLite-backed Durable Objects, Worker-local and authenticated remote UsageStore clients, hashed transport identifiers, lazy expiry recovery, and explicit ACK-ambiguity behavior.
+- Real local workerd integration coverage for Cloudflare concurrency, multi-budget atomicity, replay, expiry, renewal, lost acknowledgements, authentication, and observer isolation.
 - Redis Cluster-compatible single-hash-slot transaction domain.
 - Real Redis 7 concurrency/crash/ACK-loss/recovery-observability integration tests.
 - Official MCP SDK v2 `Client + createMcpHandler` protocol integration tests.

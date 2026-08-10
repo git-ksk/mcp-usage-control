@@ -133,6 +133,10 @@ The event stream is suitable for deriving bounded operational counters such as:
 
 Apply replay deduplication where needed. Do not use these counters as the transactional quota balance. They are operational views over enforcement events.
 
+## Cloudflare recovery telemetry
+
+`CloudflareUsageStore` / `RemoteCloudflareUsageStore` can emit `reservation.recovered` with `store: 'cloudflare'`. Lazy cleanup emits aggregate counts/units; directly addressed expiry can include only the opaque hashed reservation ID. Raw principal, tenant, tool, operation, budget, and tool-argument values are not persisted by the Cloudflare backend solely for recovery telemetry.
+
 ## Vendor adapters
 
 The core runtime does not depend on OpenTelemetry, OpenMeter, Datadog, Cloud Monitoring, GA4, or any billing provider. Add those integrations in application code or future optional adapters.
