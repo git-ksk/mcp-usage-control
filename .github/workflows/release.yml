@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish/retry (for example v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 10
+    env:
+      REDIS_URL: redis://127.0.0.1:6379
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag='${{ inputs.tag }}'
+          else
+            tag='${{ github.ref_name }}'
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid release tag: $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Use an npm CLI with Trusted Publishing support
+        run: npm install --global npm@11.15.0
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+      - name: Verify package versions match tag
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for dir in packages/core packages/mcp packages/redis; do
+            actual="$(node -p "require('./${dir}/package.json').version")"
+            if [[ "$actual" != "$VERSION" ]]; then
+              echo "$dir version $actual does not match tag $VERSION" >&2
+              exit 1
+            fi
+          done
+
+      - name: Pack packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/muc-packs
+          mkdir -p /tmp/muc-packs
+          pnpm --dir packages/core pack --pack-destination /tmp/muc-packs
+          pnpm --dir packages/mcp pack --pack-destination /tmp/muc-packs
+          pnpm --dir packages/redis pack --pack-destination /tmp/muc-packs
+          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 3
+          for archive in /tmp/muc-packs/*.tgz; do
+            listing="$(tar -tzf "$archive")"
+            grep -qx 'package/dist/index.js' <<<"$listing"
+            grep -qx 'package/dist/index.d.ts' <<<"$listing"
+            grep -qx 'package/README.md' <<<"$listing"
+            grep -qx 'package/LICENSE' <<<"$listing"
+            ! grep -q '^package/src/' <<<"$listing"
+            ! tar -xOf "$archive" package/package.json | grep -q 'workspace:'
+          done
+
+      - name: Publish packages in dependency order
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # First publication of a brand-new npm package cannot be bootstrapped
+          # by Trusted Publishing alone because the package has no trusted
+          # publisher configuration yet. If NPM_TOKEN is present, use it only as
+          # the bootstrap credential. Otherwise leave NODE_AUTH_TOKEN unset so
+          # npm can use GitHub OIDC Trusted Publishing for already-configured packages.
+          if [[ -n "${NPM_TOKEN:-}" ]]; then
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          else
+            unset NODE_AUTH_TOKEN || true
+          fi
+
+          publish_one() {
+            local name="$1"
+            local archive="$2"
+            if npm view "${name}@${VERSION}" version --json >/dev/null 2>&1; then
+              echo "${name}@${VERSION} is already published; skipping"
+              return 0
+            fi
+            npm publish "$archive" --access public
+          }
+
+          publish_one mcp-usage-control "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz"
+          publish_one mcp-usage-control-mcp "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz"
+          publish_one mcp-usage-control-redis "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz"
+
+      - name: Verify registry versions
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          for name in mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis; do
+            published="$(npm view "${name}@${VERSION}" version)"
+            test "$published" = "$VERSION"
+          done
+
+      - name: Create GitHub Release after registry success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "GitHub Release $TAG already exists; skipping"
+          else
+            gh release create "$TAG" \
+              --verify-tag \
+              --title "$TAG" \
+              --notes-file CHANGELOG.md
+          fi
