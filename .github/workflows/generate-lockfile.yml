@@ -1,0 +1,27 @@
+name: Generate lockfile
+
+on:
+  push:
+    branches: [feat/v0.1-release]
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Print lockfile for review
+        run: |
+          echo '__LOCKFILE_BEGIN__'
+          cat pnpm-lock.yaml
+          echo '__LOCKFILE_END__'
