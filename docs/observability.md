@@ -32,7 +32,9 @@ const control = new UsageControl(store, policy, {
 });
 ```
 
-`metadata` is explicit opt-in data. It can also be a callback receiving the usage request. Do not put secrets, tokens, raw tool arguments, or unbounded user content in metadata.
+`metadata` is explicit opt-in data. It can also be a callback receiving the usage request. Do not put secrets, tokens, raw tool arguments, provider payloads, or unbounded user content in metadata.
+
+Policy denial `reason` values are also application-defined and are copied into `reserve.denied`. Treat them as bounded non-secret reason codes, not free-form diagnostic text.
 
 The legacy numeric third constructor argument remains accepted:
 
@@ -56,7 +58,7 @@ Quota denial may include `limitingBudgetKey` and `remaining`.
 
 ### `settlement.completed`
 
-Emitted after a successful store settlement, including idempotent settlement replay.
+Emitted after a successful store settlement, including an identical idempotent settlement replay.
 
 Includes reserved, actual, and released units plus the settlement outcome.
 
@@ -73,22 +75,35 @@ The memory reference store can report the local reservation/request identifiers 
 
 Emitted when policy quote or store reserve/mark-liable/renew/settle throws.
 
-Only the error class/name is included. Raw exception messages are deliberately omitted because they can contain credentials, internal URLs, query text, or provider response bodies.
+Only a bounded constructor class name is included. Raw exception messages and mutable `Error.name` values are deliberately omitted because they can contain credentials, internal URLs, query text, provider response bodies, or unbounded high-cardinality text.
 
 ## Delivery semantics
 
 Observer delivery is:
 
 - best-effort;
-- non-blocking;
+- outside the enforcement outcome;
+- not awaited when `onEvent()` returns a promise;
 - not ordered across concurrent calls;
 - not retried by the runtime;
 - not durable;
 - never allowed to change an admission or settlement result.
 
-Synchronous observer throws and asynchronous promise rejections are swallowed. If durable analytics or billing reconciliation is required, send events to a durable queue/ledger from application code and monitor that pipeline independently.
+`onEvent()` is invoked inline. Keep synchronous work lightweight; offload network calls, durable writes, and expensive serialization to an application-owned queue or telemetry pipeline. A returned promise is not awaited. Synchronous throws and asynchronous promise rejections are swallowed.
 
-The usage store remains the source of enforcement truth.
+If durable analytics or billing reconciliation is required, send events to a durable queue/ledger from application code and monitor that pipeline independently. The usage store remains the source of enforcement truth.
+
+## Replay and deduplication
+
+Observability is **at-least-possibly-repeated**, not exactly-once. For example, Redis makes an identical settlement replay idempotent at the enforcement state layer, but calling `settle()` again can emit another identical `settlement.completed` event.
+
+If a downstream counter or durable pipeline must avoid double counting, deduplicate settlement events using a stable application key such as:
+
+```text
+(reservationId, actualUnits, outcome)
+```
+
+Keep the dedupe horizon at least as long as the retry/reconciliation horizon relevant to that pipeline. Do not infer quota truth by counting events; query/reconcile the enforcement or durable accounting state instead.
 
 ## Privacy and cardinality
 
@@ -99,14 +114,14 @@ Runtime events can contain `principalId`, `tenantId`, `operationId`, `reservatio
 Recommended usage:
 
 - structured logs / traces: IDs may be useful when allowed by your privacy policy;
-- metrics: use bounded dimensions such as tool, outcome, plan, or error class;
+- metrics: use bounded dimensions such as tool, outcome, plan, denial reason code, or error class;
 - **do not** promote unique principal, operation, reservation, or user-specific budget IDs into metric labels/tags.
 
 This avoids cardinality explosions in Prometheus, Cloud Monitoring, Datadog, OpenTelemetry metric backends, and similar systems.
 
 ## Suggested counters
 
-The event stream is suitable for deriving bounded counters such as:
+The event stream is suitable for deriving bounded operational counters such as:
 
 - accepted calls by tool/plan;
 - denied calls by reason/tool/plan;
@@ -116,7 +131,7 @@ The event stream is suitable for deriving bounded counters such as:
 - liable-expiry retained units;
 - store/state errors by phase/error class.
 
-Do not use these counters as the transactional quota balance. They are operational views over enforcement events.
+Apply replay deduplication where needed. Do not use these counters as the transactional quota balance. They are operational views over enforcement events.
 
 ## Vendor adapters
 
