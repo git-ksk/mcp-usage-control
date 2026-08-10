@@ -37,14 +37,21 @@ jobs:
           package-manager-cache: false
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - name: Pack public packages
+      - name: Pack public packages with npm
+        shell: bash
         run: |
+          set -euo pipefail
           rm -rf /tmp/muc-packs
           mkdir -p /tmp/muc-packs
-          pnpm --dir packages/core pack --pack-destination /tmp/muc-packs
-          pnpm --dir packages/mcp pack --pack-destination /tmp/muc-packs
-          pnpm --dir packages/redis pack --pack-destination /tmp/muc-packs
-          pnpm --dir packages/cloudflare pack --pack-destination /tmp/muc-packs
+          (cd packages/core && npm pack --pack-destination /tmp/muc-packs)
+          (cd packages/mcp && npm pack --pack-destination /tmp/muc-packs)
+          (cd packages/redis && npm pack --pack-destination /tmp/muc-packs)
+          (cd packages/cloudflare && npm pack --pack-destination /tmp/muc-packs)
+          git diff --exit-code -- \
+            packages/core/package.json \
+            packages/mcp/package.json \
+            packages/redis/package.json \
+            packages/cloudflare/package.json
       - name: Verify package contents
         shell: bash
         run: |
@@ -61,8 +68,13 @@ jobs:
               printf '%s\n' "$listing" >&2
               exit 1
             fi
-            if tar -xOf "$archive" package/package.json | grep -q 'workspace:'; then
+            manifest="$(tar -xOf "$archive" package/package.json)"
+            if grep -q 'workspace:' <<<"$manifest"; then
               echo "workspace protocol leaked into $archive" >&2
+              exit 1
+            fi
+            if grep -q 'pack-workspace-deps' <<<"$manifest"; then
+              echo "prepack helper leaked into packed manifest for $archive" >&2
               exit 1
             fi
           done
