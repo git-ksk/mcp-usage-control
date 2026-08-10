@@ -2,52 +2,64 @@
 
 [English](CHANGELOG.md) | [日本語](CHANGELOG.ja.md)
 
-主なproject changeをここへ記録します。現在はpre-alphaで、最初のpackage releaseはまだ公開していません。
+主なproject changeを記録します。
 
-## Unreleased
+## [0.1.0] - 2026-08-10
+
+最初のpublic releaseです。
 
 ### Added
 
-- provider-neutralな `@mcp-usage-control/core` usage-control contract。
-- explicit settlementを使うatomic reserve-before-execute lifecycle。
-- `markLiable()` によるpending -> cost-liable lease transition。
-- renewable reservation lease / renewal API。
-- execution開始後crashでfull reservationを保守的に維持するrecovery。
-- concurrency / idempotency / liability test付きin-memory reference store。
-- `@modelcontextprotocol/server` v2 single-round tool向け `@mcp-usage-control/mcp` adapter。
-- normal result、`{ isError: true }` tool error、thrown errorを区別するMCP-aware classification。
-- cost classifier failure / invalid units時のconservative full settlementと `UsageClassificationError`。
-- ambiguous settlement向け `UsageSettlementError`。
-- 現在未対応のMCP v2 `input_required` multi-round result向け `UnsupportedMcpUsageFlowError`。
-- Redis-side Lua transitionを使うproduction-oriented `@mcp-usage-control/redis` adapter。
-- application `Date.now()` ではなくRedis server timeによるlease / tombstone判定。
-- state-dependent Redis expiry recovery / bounded idempotency tombstone。
-- Redis Cluster compatibleなsingle-hash-slot transaction domain。
-- 実Redisによるcrash recovery、application clock非依存、ambiguous ACK fault injection test。
-- 公式MCP SDK v2 `Client + createMcpHandler` in-process protocol integration test。
-- 英日project / architecture / Redis / integration / API / security / support / contribution / release documentation。
-- bilingual GitHub Issue form / Pull Request template。
+- provider-neutralなusage policy / store contractを持つ `mcp-usage-control` core runtime。
+- 適用される全budgetをreserveするか、どれもreserveしないatomic **multi-budget** admission。
+- `markLiable()` を使うpending -> cost-liable -> settled lifecycle。
+- long-running work向けrenewable lease。
+- `actualUnits <= reservedUnits` のexplicit outcome-aware settlement。
+- `(tenantId, principal.id, tool, operationId)` 単位のreplay protection。
+- bounded settled idempotency tombstone。Memory / Redisのdefaultは24時間。
+- `MemoryUsageStore` reference implementation。
+- `@modelcontextprotocol/server` v2 single-round tool向け `mcp-usage-control-mcp` adapter。
+- normal success、`{ isError: true }`、thrown errorを区別するMCP result classification。
+- classifier failure時のconservative settlementと `UsageClassificationError`。
+- ambiguous settlement state向け `UsageSettlementError`。
+- v0.1 `input_required` support boundary向け `UnsupportedMcpUsageFlowError`。
+- Redis-side Luaでmulti-budget reserve、liability、renew、settlement、expiry recovery、tombstoneをatomicに処理する `mcp-usage-control-redis`。
+- Redis server timeによるlease / tombstone判定。
+- multi-budget expiryをreservation単位で1回だけ回収するglobal Redis lease index。
+- Redis Cluster compatible single-hash-slot transaction domain。
+- 実Redis 7 concurrency / crash / ACK-loss integration test。
+- 公式MCP SDK v2 `Client + createMcpHandler` protocol integration test。
+- Node.js 20 / 22のfrozen `pnpm-lock.yaml` CI。
+- exports / files / license / workspace protocol除去を確認するpackage tarball smoke test。
+- 英日user / architecture / Redis / MCP integration / API / release / security / support / contribution docs。
 
-### Changed
+### Safety behavior
 
-- delimiter ambiguityを避けるためoperation key inputをhash/string storage前にtuple encode。
-- `UsageDeniedError` は詳細 `.reason` をprogrammaticに保持しつつ、MCPへの意図しない露出を避けるためhuman-readable messageをgeneric化。
-- cost-liable lease expiryはreserved unitsをreleaseせずconservative charge。
-- Redis lease timingのauthorityをapplication instanceではなくRedis serverへ移動。
-- Redis docsでLua atomicityとpersistence / failover durabilityを分離し、lazy cleanup backlogも明記。
-- release gateにcrash semantics、MCP result semantics、protocol integration coverage、`input_required` support decisionを追加。
+- quota compare + reserveをatomic化し、`check -> execute -> record` raceを作らない。
+- execution開始後のprocess lossをautomatic refundにしない。
+- pending expiryは参加する全budgetを解放し、liable expiryはfull reservationを保守的に維持。
+- classifier failure / invalid units時はclassification error表面化前にfull settlement。
+- settlement ACK ambiguityをblind retryせず、Redisではidentical replayをidempotent化。
+- Redis lease / tombstone timeはapplication hostではなくRedis serverをauthorityとする。
+- admission storage failureをallowへfail openしない。
 
-### Known pre-alpha limitations
+### Known limitations
 
-- 1 reservationにつき1 budget。atomic multi-budget admissionはv0.1向けに予定。
-- MCP v2 `input_required` multi-round suspend/resume accountingは未実装。
-- principal / tenant / tool idempotency scopingは確定作業中。
-- package名 / public APIは変更される可能性あり。
-- workspace packageはprivate / unpublished。
-- `pnpm-lock.yaml` は未commit。frozen reproducible installはv0.1 release gate。
-- generic lease renewalはlease loss後のprovider-specific fencingを提供しない。
-- Redis atomicityはfinancial-ledger durabilityを意味しない。
+- MCP v2 multi-round `input_required` はv0.1 `protectTool()` で意図的に未対応。Issue #14でsuspend/resume accountingを追跡。
+- 1 reservationに参加する全budgetは同じquoted / actual unit countを消費。
+- Redis transactional stateは1つのconfigured Redis Cluster hash slotを利用。
+- Redis atomicityはfinancial-ledger durabilityを意味せず、persistence / HAはdeployment-specific。
+- generic lease renewalはlease loss後のprovider-specific fencingではない。
+- provider-neutral observability hookはv0.1に含まない。
 
-## Release entries
+### Compatibility
 
-tagged release開始後はrelease date、breaking change、invariant change、storage/migration note、supported runtime dependencyを各entryへ含めます。詳しくは [Release policy](docs/releasing.ja.md) を参照してください。
+- Node.js 20+
+- ESM
+- `@modelcontextprotocol/server` v2（CIでは現在2.0.0）
+- Redis 7 integration behavior
+- node-redis `redis` 6.2.x
+
+## Unreleased
+
+未releaseのuser-visible changeは現在ありません。

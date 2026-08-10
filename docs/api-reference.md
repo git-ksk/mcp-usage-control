@@ -1,10 +1,8 @@
-# API reference
+# API reference — v0.1
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-> Pre-alpha: this reference describes the current development API. Names and signatures may change before v0.1.
-
-## `@mcp-usage-control/core`
+## `mcp-usage-control`
 
 ### `Principal`
 
@@ -16,7 +14,7 @@ interface Principal {
 }
 ```
 
-Accounting identity supplied by the application. It is not an authentication primitive.
+Trusted accounting identity supplied by the application. It is not an authentication primitive.
 
 ### `UsageRequest<TArgs>`
 
@@ -29,7 +27,7 @@ interface UsageRequest<TArgs = unknown> {
 }
 ```
 
-One logical usage-controlled invocation. `operationId` is used for duplicate protection and should be stable across retries of the same logical invocation.
+Replay protection is scoped by `(tenantId, principal.id, tool, operationId)`. Use a stable `operationId` across retries of one logical invocation.
 
 ### `Budget`
 
@@ -40,12 +38,18 @@ interface Budget {
 }
 ```
 
-A policy-defined accounting bucket. Use explicit window-qualified keys for time windows.
+A policy-defined accounting bucket. Keys must be non-empty strings. Limits are non-negative safe integers. For daily/monthly windows, encode the window explicitly into the key.
 
 ### `UsageQuote` / `UsagePolicy`
 
 ```ts
 type UsageQuote =
+  | {
+      decision: 'allow';
+      units: number;
+      budgets: readonly Budget[];
+      reservationTtlMs?: number;
+    }
   | {
       decision: 'allow';
       units: number;
@@ -59,6 +63,8 @@ interface UsagePolicy {
 }
 ```
 
+`budgets` is the v0.1 multi-budget form. Admission reserves the same quoted units against every listed budget atomically. The one-budget `budget` form is a convenience alias. Empty lists and duplicate budget keys are rejected.
+
 ### `UsageStore`
 
 ```ts
@@ -66,7 +72,7 @@ interface UsageStore {
   reserve(input: {
     request: UsageRequest;
     units: number;
-    budget: Budget;
+    budgets: readonly Budget[];
     ttlMs: number;
   }): Promise<StoreReserveResult>;
 
@@ -76,7 +82,7 @@ interface UsageStore {
 }
 ```
 
-Production implementations must preserve the atomicity and failure invariants in [Architecture](architecture.md).
+Production implementations must make multi-budget admission all-or-nothing and preserve the lifecycle/failure invariants in [Architecture](architecture.md).
 
 ### `UsageControl`
 
@@ -84,17 +90,39 @@ Production implementations must preserve the atomicity and failure invariants in
 new UsageControl(store, policy, defaultReservationTtlMs?);
 ```
 
-Default reservation TTL is 60,000 ms. `reserve(request)` evaluates policy, validates the quote, asks the store for atomic admission, and returns an `AdmissionResult`.
+Default reservation TTL: `60_000` ms.
+
+`reserve(request)` evaluates policy, validates/canonicalizes budgets, and calls the store for atomic admission.
 
 ### `AdmissionResult`
 
 ```ts
 type AdmissionResult =
   | { allowed: true; lease: UsageLease }
-  | { allowed: false; reason: string; remaining?: number };
+  | {
+      allowed: false;
+      reason: string;
+      limitingBudgetKey?: string;
+      remaining?: number;
+    };
 ```
 
-Built-in store denial reasons currently include `quota_exceeded` and `duplicate_operation`; a policy may provide its own denial reason.
+Store denial reasons are `quota_exceeded` and `duplicate_operation`. `quota_exceeded` can identify the limiting budget and its remaining units. Policy denials use the policy-provided reason.
+
+### `ReservationRecord`
+
+```ts
+interface ReservationRecord {
+  id: string;
+  operationId: string;
+  principalId: string;
+  tenantId?: string;
+  tool: string;
+  budgetKeys: string[];
+  reservedUnits: number;
+  expiresAt: number;
+}
+```
 
 ### `UsageLease`
 
@@ -107,23 +135,9 @@ await lease.renew(ttlMs?)
 await lease.settle(actualUnits, outcome)
 ```
 
-`markLiable()` declares that the metered execution boundary has been entered. If that active lease later expires before settlement, production stores should conservatively retain the reservation as consumed rather than refunding it.
+`markLiable()` declares entry into the metered execution boundary. Pending expiry can release reservation capacity; cost-liable expiry conservatively retains the full charge.
 
-`renew()` extends an active lease. `settle()` finalizes actual usage. The current contract requires `actualUnits <= reservedUnits`.
-
-### `ReservationRecord`
-
-```ts
-interface ReservationRecord {
-  id: string;
-  operationId: string;
-  principalId: string;
-  tool: string;
-  budgetKey: string;
-  reservedUnits: number;
-  expiresAt: number;
-}
-```
+`renew()` extends an active lease. `settle()` finalizes the same actual unit count across all budgets participating in the reservation. v0.1 requires `actualUnits <= reservedUnits`.
 
 ### `SettlementResult`
 
@@ -137,19 +151,28 @@ interface SettlementResult {
 }
 ```
 
-### Errors
-
-`UsageStateError` indicates an invalid, expired, or conflicting store state.
-
-`UsageDeniedError` exposes a programmatic `.reason`, but its thrown message is intentionally generic (`Usage denied by usage policy`) so internal policy details are not automatically surfaced by MCP SDK error conversion.
+Identical settlement replay is idempotent during tombstone retention. A conflicting actual-unit/outcome replay fails.
 
 ### `MemoryUsageStore`
 
-Reference implementation for tests and local development. It supports pending/cost-liable/settled lifecycle behavior but is process-local and is not a production distributed store.
+```ts
+new MemoryUsageStore({ idempotencyTtlMs? })
+```
 
-## `@mcp-usage-control/mcp`
+Process-local reference store for tests and development. Default settled replay tombstone retention: `86_400_000` ms (24 hours).
+
+Pending expired operations release all participating budgets and become reusable. Cost-liable expiry consumes the full reservation and leaves a bounded settled tombstone.
+
+### Core errors
+
+- `UsageStateError` — invalid/expired/conflicting store state.
+- `UsageDeniedError` — programmatic `.reason`; generic thrown message to avoid accidental disclosure through MCP SDK error conversion.
+
+## `mcp-usage-control-mcp`
 
 ### `ProtectToolOptions<TArgs, TResult>`
+
+Important fields:
 
 ```ts
 interface ProtectToolOptions<TArgs, TResult> {
@@ -159,98 +182,47 @@ interface ProtectToolOptions<TArgs, TResult> {
   principal(ctx: ServerContext): Principal | Promise<Principal>;
   operationId(args: TArgs, ctx: ServerContext): string | Promise<string>;
   leaseHeartbeat?: boolean;
-  successUnits?(input: {
-    result: TResult;
-    args: TArgs;
-    ctx: ServerContext;
-    lease: UsageLease;
-  }): number | Promise<number>;
-  toolErrorUnits?(input: {
-    result: TResult;
-    args: TArgs;
-    ctx: ServerContext;
-    lease: UsageLease;
-  }): number | Promise<number>;
-  errorUnits?(input: {
-    error: unknown;
-    args: TArgs;
-    ctx: ServerContext;
-    lease: UsageLease;
-  }): number | Promise<number>;
+  successUnits?(...): number | Promise<number>;
+  toolErrorUnits?(...): number | Promise<number>;
+  errorUnits?(...): number | Promise<number>;
 }
 ```
 
-For a tool with no input schema, use `noInput: true`. For a tool with an input schema, omit `noInput` or set it to false.
-
-The explicit flag is intentional: the SDK's public type models no-input callbacks as `(ctx)`, but current dispatch paths may invoke them at runtime as `({}, ctx)`. `{}` is also valid real input for an empty object schema, so the adapter does not guess from runtime values.
-
-In `noInput: true` mode, the policy request, hooks, operation-ID callback, and wrapped application handler receive `args === undefined` and the real `ServerContext`.
+For tools with no input schema, `noInput: true` is required. For input-schema tools, omit it or use false. In no-input mode the wrapper normalizes both the SDK public `(ctx)` callback shape and the observed runtime `({}, ctx)` dispatch to `args === undefined` for policy/hooks/application handler.
 
 ### `protectTool(options, handler)`
 
-Wraps a **single-round** `@modelcontextprotocol/server` v2 tool handler with reserve, cost-liable activation, heartbeat, execution classification, and settlement.
-
-The public overloads are conceptually:
-
-```ts
-protectTool<TResult>(
-  options: ProtectToolOptions<undefined, TResult> & { noInput: true },
-  handler: (args: undefined, ctx: ServerContext) => TResult | Promise<TResult>,
-): (ctx: ServerContext) => Promise<TResult>;
-
-protectTool<TArgs, TResult>(
-  options: ProtectToolOptions<TArgs, TResult> & { noInput?: false },
-  handler: (args: TArgs, ctx: ServerContext) => TResult | Promise<TResult>,
-): (args: TArgs, ctx: ServerContext) => Promise<TResult>;
-```
-
-At runtime the no-input overload also tolerates the SDK dispatch form `({}, ctx)` and normalizes it internally.
+Wraps a **single-round** MCP TypeScript SDK v2 tool handler with admission and settlement.
 
 Behavior:
 
-- admitted leases are marked cost-liable before entering the handler;
-- `leaseHeartbeat` defaults to enabled;
-- normal successes use `successUnits` or the full reservation;
-- MCP `{ isError: true }` results use `toolErrorUnits` or the full reservation;
-- thrown errors use `errorUnits` or the full reservation;
-- invalid/throwing cost classifiers cause a conservative full settlement followed by `UsageClassificationError`;
-- admission denial throws `UsageDeniedError` before handler execution;
-- settlement failure throws `UsageSettlementError` and is not blindly retried;
-- `resultType: 'input_required'` is currently unsupported and produces `UnsupportedMcpUsageFlowError` after conservative settlement.
+- reserve before the handler;
+- `markLiable()` immediately before application handler entry;
+- heartbeat enabled by default while the handler runs;
+- normal result -> `successUnits` or full reservation;
+- `{ isError: true }` -> `toolErrorUnits` or full reservation;
+- thrown exception -> `errorUnits` or full reservation;
+- invalid/throwing classifier -> full conservative settlement, then `UsageClassificationError`;
+- settlement failure -> `UsageSettlementError`, without blind retry;
+- `resultType: 'input_required'` -> conservative settlement, then `UnsupportedMcpUsageFlowError`.
 
-See [MCP integration](mcp-integration.md).
+v0.1 does not claim multi-round `input_required` support. See [MCP integration](mcp-integration.md) and issue #14.
 
-### `UsageSettlementError`
+### MCP adapter errors
 
-```ts
-settlementError: unknown
-executionError?: unknown
-```
+- `UsageSettlementError` — includes `settlementError` and optional `executionError`.
+- `UsageClassificationError` — includes `classificationError` and optional `executionError`.
+- `UnsupportedMcpUsageFlowError` — v0.1 support-boundary error for multi-round `input_required` results.
 
-Represents an ambiguous or failed accounting settlement.
-
-### `UsageClassificationError`
-
-```ts
-classificationError: unknown
-executionError?: unknown
-```
-
-Raised after the wrapper has conservatively settled the full reservation because a cost classifier failed or returned invalid units.
-
-### `UnsupportedMcpUsageFlowError`
-
-Currently used for MCP v2 `input_required` multi-round tool results. Suspend/resume accounting is not yet implemented.
-
-## `@mcp-usage-control/redis`
+## `mcp-usage-control-redis`
 
 ### `RedisUsageStore`
 
 ```ts
-new RedisUsageStore(client, options?);
+new RedisUsageStore(client, options?)
 ```
 
-The client needs an `eval(script, { keys, arguments })` method compatible with `RedisEvalClient`.
+The client must provide an `eval(script, { keys, arguments })` method compatible with `RedisEvalClient`.
 
 ### `RedisUsageStoreOptions`
 
@@ -270,19 +242,24 @@ Defaults:
 - `cleanupBatchSize`: `256`
 - `idempotencyTtlMs`: `86_400_000` (24 hours)
 
-Lease and tombstone timestamps are calculated from Redis server time inside Lua, not from the application clock. See [Redis adapter](redis.md) for key layout, cleanup, cost-liable expiry, acknowledgement ambiguity, durability boundaries, and Redis Cluster trade-offs.
+The v0.1 Redis store uses one transaction domain containing a used-budget hash, a global lease expiry index, reservation records, operation mappings, and tombstones. Budget IDs and operation identities are hashed before storage identifiers are created.
+
+Lua obtains Redis server `TIME` for lease and tombstone decisions. Multi-budget reserve, release, expiry recovery, renew and settlement do not loop single-budget operations client-side.
+
+See [Redis adapter](redis.md) for durability and Redis Cluster constraints.
 
 ## Numeric validation
 
-Units and limits are JavaScript safe integers. Units/limits must be non-negative; TTL and retention durations must be positive safe integers where accepted. Classifier results must also be `<= reservedUnits`.
+- units and limits: non-negative JavaScript safe integers;
+- TTL/retention durations: positive safe integers;
+- settlement/classifier result: non-negative safe integer and `<= reservedUnits`.
 
-## Compatibility
-
-Current repository targets:
+## Compatibility for v0.1
 
 - Node.js 20+
-- `@modelcontextprotocol/server` v2, currently built/tested against 2.0.0
-- Redis 7 integration behavior
-- node-redis `redis` 6.2.x in the workspace
+- ESM packages
+- `@modelcontextprotocol/server` v2; CI currently resolves `2.0.0`
+- Redis 7 integration tests
+- node-redis `redis` 6.2.x
 
-These are pre-alpha compatibility targets, not yet a long-term support promise.
+Pre-1.0 minor releases may intentionally change APIs; breaking changes are called out in release notes.

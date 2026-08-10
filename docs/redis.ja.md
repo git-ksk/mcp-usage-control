@@ -1,125 +1,171 @@
-# Redis adapter
+# Redis adapter — v0.1
 
 [English](redis.md) | [日本語](redis.ja.md)
 
-`@mcp-usage-control/redis` は `mcp-usage-control` の最初のproduction-store adapterです。
+`mcp-usage-control-redis` は `mcp-usage-control` のdistributed production-store adapterです。
 
-現在のpre-alpha implementationはCIでRedis 7とNode.js 20 / 22を使ってtestしています。node-redisが公開している `eval(script, { keys, arguments })` interfaceを利用し、workspaceでは現在 `redis` 6.2.xを対象にしています。
+```console
+npm install mcp-usage-control-redis redis
+```
 
-## Atomicity model
+v0.1はRedis 7、node-redis 6.2.x、Node.js 20 / 22でtestします。
 
-admissionを `GET -> compare -> SET` のように分割しません。Redis-side Luaがstate transitionをatomicに実行します。
+## Atomic multi-budget model
 
-1. target budgetに属するexpired reservationをbounded batchで回収する。
-2. expired idempotency tombstoneをbounded batchでcleanする。
-3. duplicate principal / operation IDを拒否する。
-4. current usageとbudget limitを比較する。
-5. unitsをreserveし、pending leaseを作成する。
+admissionを `GET -> compare -> SET` に分割せず、multi-budgetもclient-side loopにしません。
 
-`markLiable`、renewal、settlementもそれぞれatomic Lua transitionです。同一settlement replayはidempotent、conflicting replayは拒否します。
+1つのLua scriptで次を行います。
 
-## Pendingとcost-liable expiry
+1. expired leaseをreservation単位でbounded batch回収する。
+2. expired settled tombstoneをbounded batchでcleanする。
+3. duplicate `(tenant, principal, tool, operation)` identityをrejectする。
+4. 参加する全budgetをreadする。
+5. 1 budgetでもdenyならwriteせず終了する。
+6. 全budgetを許可できる場合だけ、全budgetをincrementして1つのpending reservationをatomicに作る。
 
-新規reservationは `pending` です。cost-liableへ遷移する前にexpireした場合、Redisはreserved unitsを解放しoperation recordを削除します。
+`markLiable`、renewal、settlement、expiry recoveryもreservation全体と参加する全budgetに対して処理します。
 
-`markLiable()` 成功後のexpiryは保守的に扱います。Redisはfull reserved unitsを消費済みとして維持し、recordを `lease_expired_after_execution_started` outcomeのsettled stateへ変換し、通常のtombstone mechanismでreplay protectionを維持します。
+これによりdaily / monthly / tenant等の複数budgetに参加するoperationでもpartial reserve / partial releaseを防ぎます。
 
-これによりmetered execution boundaryへ入った後のprocess crashが自動refundになることを防ぎます。一方、generic MCP adapterではhandler entry直後・実provider cost発生前にprocessが消えた場合にover-accountする可能性があります。これは安全側の既定値です。
+## v0.1 key model
+
+transactional keyはすべて1つのconfigurable Redis Cluster hash tagを共有します。default:
+
+```text
+muc:{usage}:used          HASH budgetHash -> used units
+muc:{usage}:leases        ZSET reservationId -> active lease expiry
+muc:{usage}:reservations  HASH reservationId -> reservation record
+muc:{usage}:operations    HASH operationHash -> reservationId
+muc:{usage}:tombstones    ZSET operationHash -> settled replay expiry
+```
+
+global lease indexを1つ使うため、multi-budget reservationのexpiryを複数budget indexから重複回収する構造になりません。
+
+raw principal / tenant / operation / tool / budget identifierはRedis key nameへ直接埋め込みません。logical operation tupleを曖昧性なくencodeしてSHA-256 hash化し、budget keyも別にhashします。hashingはkey name上のidentifier exposureを減らすものでencryptionではありません。
+
+## Redis Cluster transaction domain
+
+上記keyは同じhash slotへ置き、すべてのLua transitionをRedis Cluster上で `CROSSSLOT` なしに実行できるようにします。
+
+v0.1はhorizontal write distributionよりcorrectnessを優先します。将来複数usage domainへshardする場合でも、1 atomic admissionに参加するbudgetは同じtransaction domainに置く必要があります。
+
+## Pending / cost-liable expiry
+
+reservationは `pending` から開始します。
+
+- `markLiable()` 前にexpire -> **全budget**からreserved unitsを解放し、active operation mappingを削除。recovery後はlogical operationをretry可能。
+- `markLiable()` 後にexpire -> 全budgetでfull reserved unitsを維持し、`lease_expired_after_execution_started` でsettled化し、tombstone期間replay protectionを継続。
+
+これによりmetered execution boundaryへ入った後のprocess crashがrefundになりません。
 
 ## Redis server time
 
-lease作成、renewal、expiry check、tombstone expiryはLua script内で取得したRedis server timeを利用します。adapterはこれらのtransitionにapplication側 `Date.now()` を使いません。
+reserve、`markLiable`、renew、settle時のexpiry check、tombstone expiryはLua内のRedis server `TIME` を使います。これらの判定にapplication `Date.now()` は使いません。
 
-そのため複数application instance間のclock skewや、requestがRedis実行前にnetwork上で長く待った場合でも、expiry判定がapplication hostの時計に左右されません。
+複数application instanceのclock skewや、application time取得後にnetwork delayが発生してもexpiry accountingを変えません。
 
-## Redis Cluster hash slot
+## Idempotency
 
-すべてのtransactional keyは、意図的に1つのconfigurable hash tagを共有します。defaultではkeyに `{usage}` が含まれます。
-
-これによりreserve / mark-liable / renew / settle scriptをRedis Cluster上でもatomicに実行でき、将来のmulti-budget transactionでも `CROSSSLOT` を避けられます。一方で、現在の設計ではusage-control writeが1つのRedis Cluster slotへ集中するtrade-offがあります。
-
-correctnessを既定で優先します。将来複数usage-control shardを導入する場合でも、1つのatomic admissionに参加するbudgetは同一transaction domainに置く必要があります。
-
-## Key model
-
-raw principal ID、operation ID、budget keyをRedis key nameへ直接埋め込みません。principal IDとoperation IDは曖昧性のないtupleへencodeした後にSHA-256 hash化し、budget keyは別にhash化します。
-
-conceptual stateは次のとおりです。
+logical operation scope:
 
 ```text
-<prefix>:{<hashTag>}:budget:<budgetHash>:used
-<prefix>:{<hashTag>}:budget:<budgetHash>:pending
-<prefix>:{<hashTag>}:reservations
-<prefix>:{<hashTag>}:operations
-<prefix>:{<hashTag>}:tombstones
+(tenantId, principal.id, tool, operationId)
 ```
 
-reservation recordにはhashed operation identifier、unit count、lease expiry、state、settlement outcomeを保持します。`outcome` はlow-cardinalityかつnon-sensitiveな値にしてください。
+tupleをhashしてRedis operation keyにします。settled operationは `idempotencyTtlMs` の間replay protectionされ、defaultは24時間です。
 
-## Lease heartbeatとpartition
+identical settlement replayはidempotent、actual units / outcomeが異なるreplayはconflictです。
 
-MCP adapterはsingle-round tool handler実行中、active leaseを既定でrenewします。core / Redisを直接使うapplicationは長時間reservationを自分でrenewしてください。
+tombstone cleanupはlazy / boundedです。新規admissionがなければexpired tombstoneが長く残る場合がありますが、operation ID再利用を遅らせる方向であり追加quotaを与えません。
 
-network partitionがdistributed leaseより長く続く可能性は残ります。Redis unavailable中、adapter callはstorage errorをpropagateし、新規admissionをallowへfail openしません。generic heartbeatは任意のupstream resourceをfenceしません。ただしexecution-started leaseはcost-liableなので、expiry時にはrefundせず保守的にchargeします。
+## Lease heartbeat / network partition
 
-## Idempotency tombstone
+MCP adapterはwrapped active leaseをdefaultでrenewします。core / Redisを直接使う場合はlong-running workをapplication側でrenewします。
 
-settled operation IDは `idempotencyTtlMs` の間replay protectionを維持します。defaultは24時間です。cleanupはlazyかつbatch-limitedなので、新規admissionがなければexpired stateがより長く残る場合があります。
+network partitionがdistributed leaseを超える場合はあります。Redis errorはfail openせずpropagateします。generic heartbeatはupstream-resource fencingではありません。leaseがcost-liableならexpiryは保守的にchargeします。
 
-これは安全側の挙動です。stale stateはoperation IDの再利用を遅らせることがありますが、追加quotaを許可する方向には働きません。
+lease ownershipが不明になった時点で即座にworkを止める必要がある場合はprovider-specific cancellation / fencingを実装してください。
 
 ## Lazy cleanup backlog
 
-`cleanupBatchSize` は1回のadmissionで行うexpiry / tombstone cleanup量を制限します。1つのbudgetに1 batchを超えるexpired reservationが溜まると、stale reserved unitsが残り、一時的に保守的なquota denialが発生する場合があります。
+`cleanupBatchSize` は1 admissionあたりのexpired lease / tombstone cleanup量を制限します。stale stateが1 batchを超える場合は一部が次回admissionまで残ります。
 
-これはavailability trade-offでありquota bypassではありません。crash / expiry量が非常に多いoperatorは `cleanupBatchSize` を適切に調整し、stale-state pressureをmonitorしてください。将来はatomic admissionを弱めずにdedicated maintenance / reconciliationを追加する余地があります。
+v0.1はglobal lease indexなのでcleanup backlogはusage domain全体のcapacity recoveryを保守的に遅らせる可能性があります。availability trade-offでありquota bypassではありません。
 
-## Budget key lifecycle
+crash / abandonment量が多い場合はstale-state pressureをmonitorし `cleanupBatchSize` を調整してください。
 
-adapterはbudget windowのreset時刻を推測しません。policy側でwindow-qualified keyを使用してください。
+## Budget window / retention
+
+adapterはreset dateを推測しません。window-qualified budget keyを使います。
 
 ```text
-month:user-123:2026-08
-day:user-123:2026-08-10
+day:user-42:2026-08-10
+month:user-42:2026-08
+month:tenant-org-7:2026-08
 ```
 
-budget keyを変更すると新しいaccounting windowになります。古い `used` keyへadapterが自動TTLを付与しないのは、誤ったretentionによるaccounting corruptionを避けるためです。多数のhistorical windowを持つoperatorは、自身のbudget-key schemeに合ったretention policyを適用してください。
+keyを変えると新accounting bucketになります。v0.1は `used` budget fieldへ自動TTLを付けません。generic retentionでvalid accounting stateを消すことを避けるためです。削除はapplication自身のwindow lifecycle上safeな場合のみ行ってください。
 
 ## Atomicityとdurabilityは別
 
-Lua scriptはRedis内部でatomicなstate transitionを提供します。ただし、それだけでacknowledged writeがあらゆるprocess crash、host failure、failover、persistence設定下で必ず残ることを保証するわけではありません。
+LuaはRedis内部でatomic transitionを提供しますが、acknowledged writeがすべてのcrash / failover configurationで残ることを意味しません。
 
-production enforcementではapplicationが許容できるaccounting state lossに合わせてRedis persistence / HAを選定してください。少なくとも次を確認します。
+production enforcementでは次を明示的に確認してください。
 
-- persistenceが有効か。
-- RDB / AOF policyと許容loss window。
+- persistence enabled / disabled。
+- AOF / RDB設定と許容loss window。
 - replication / failover behavior。
 - backup / recovery手順。
-- 利用するRedis serviceがfailover時にacknowledged writeを失う可能性。
+- managed Redis serviceのacknowledged-write-loss behavior。
 
-より強いdurable financial ledgerが必要なら、Redis usage stateをenforcement layerとして扱い、別のdurable ledger / event systemへreconcileしてください。Lua atomicityだけからfinancial-grade durabilityを推論してはいけません。
+financial-grade durable accountingが必要ならRedisはenforcement layerとして利用し、別のdurable ledger / event streamへreconcileします。
 
-## Failure behavior
+## ACK ambiguity
 
-Redis errorはusage allowへ変換しません。reserveやmark-liable writeはclientがACKを受け取れなくても適用済みの可能性があります。同一logical invocationを同じoperation IDでretryすればduplicate protectionが二重reserveを防ぎ、mark-liableの曖昧性もexpiry時には保守的に扱われます。
+Redis writeはcommit済みでもclientがACKを失うことがあります。
 
-settlementも同様にwrite後のACK lossを想定し、同一settlement replayをidempotentにしています。異なるactual units / outcomeでのreplayはconflictとして拒否します。
+v0.1の挙動:
 
-CIでは実Redisに対して100並列reserve、pending expiry recovery、liable crash recovery、renewal、settlement replay/conflict、tombstone expiry、write後のlost acknowledgement、application clock非依存をtestします。
+- admission ACK loss -> 同logical operationのretryはduplicateとしてblock。別operationはreserved capacityを観測。
+- `markLiable` ACK loss -> write済みなら後のexpiryもcost-liableとして保守的charge。
+- settlement ACK loss -> identical settlement replayはidempotent、conflicting replayはfail。
+
+CIで実Redisへfault injectionして確認します。
 
 ## Configuration
 
-- `prefix`: usage-control keyのprefix。Redis hash-tag braceは指定できません。
-- `hashTag`: transactional keyを同じRedis Cluster slotへ置くためのhash tag。
-- `cleanupBatchSize`: 1回のreserveで回収するexpired reservation / tombstone数の上限。
-- `idempotencyTtlMs`: settled operation IDをreplay protectionする期間。
+```ts
+interface RedisUsageStoreOptions {
+  prefix?: string;             // default "muc"
+  hashTag?: string;            // default "usage"
+  cleanupBatchSize?: number;   // default 256
+  idempotencyTtlMs?: number;   // default 86_400_000 (24h)
+}
+```
 
-同じlogical usage domainに参加するprocessはcompatibleなprefix / hashTag設定を利用してください。設定が分裂すると別accounting stateとして扱われます。
+同じlogical usage domainに参加するprocessは同じcompatibleなprefix / hashTag設定を利用してください。
+
+## Tested invariants
+
+CIの実Redis 7 test:
+
+- remaining 1 unitへ100 concurrent caller -> exactly 1 admission。
+- 1 tenant budgetを共有する100 user -> exactly 1 admission。
+- multi-budget denialでpartial reservationなし。
+- unused settlementで全budgetをrelease。
+- 全budgetに対するpending / liable expiry。
+- lease renewal。
+- scoped replay protection / tombstone expiry。
+- settlement replay / conflict。
+- admission / mark-liable / settlementのlost ACK。
+- application clockから独立したRedis server time。
+- Redis unavailable -> admission fail closed。
 
 ## Current limits
 
-- 1 reservationにつき1 budget。atomic multi-budget admissionは別途追跡中です。
-- settlementは `actualUnits <= reservedUnits` が必要です。
-- cleanupはadmissionごとのlazy / bounded方式です。
-- Redis durability policyはdeployment-specificで、adapter自体は強制しません。
+- `actualUnits <= reservedUnits`。
+- 1 reservationの全budgetは同じquoted / actual unit countを消費。
+- configured usage-control transaction domainにつきRedis hash slot 1つ。
+- cleanupはlazy / bounded。
+- Redis durability policyはdeployment-specific。
 - billing、payment、authentication、analytics backendは内蔵しません。

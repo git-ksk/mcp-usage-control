@@ -8,7 +8,7 @@ import {
   type SettleInput,
   type SettlementResult,
   type UsagePolicy,
-} from '@mcp-usage-control/core';
+} from 'mcp-usage-control';
 import {
   protectTool,
   UnsupportedMcpUsageFlowError,
@@ -48,6 +48,13 @@ function nextAdmission(control: UsageControl) {
   });
 }
 
+const exhausted = {
+  allowed: false as const,
+  reason: 'quota_exceeded',
+  limitingBudgetKey: 'monthly:user-1',
+  remaining: 0,
+};
+
 afterEach(() => vi.useRealTimers());
 
 describe('protectTool', () => {
@@ -61,11 +68,7 @@ describe('protectTool', () => {
     );
 
     await expect(protectedHandler(ctx)).rejects.toThrow('upstream timeout');
-    await expect(nextAdmission(control)).resolves.toEqual({
-      allowed: false,
-      reason: 'quota_exceeded',
-      remaining: 0,
-    });
+    await expect(nextAdmission(control)).resolves.toEqual(exhausted);
   });
 
   it('allows an explicit zero-cost thrown-error classification', async () => {
@@ -130,11 +133,7 @@ describe('protectTool', () => {
     );
 
     await expect(protectedHandler(ctx)).rejects.toBeInstanceOf(UsageClassificationError);
-    await expect(nextAdmission(control)).resolves.toEqual({
-      allowed: false,
-      reason: 'quota_exceeded',
-      remaining: 0,
-    });
+    await expect(nextAdmission(control)).resolves.toEqual(exhausted);
   });
 
   it('rejects input_required instead of silently mis-accounting it', async () => {
@@ -145,11 +144,7 @@ describe('protectTool', () => {
     );
 
     await expect(protectedHandler(ctx)).rejects.toBeInstanceOf(UnsupportedMcpUsageFlowError);
-    await expect(nextAdmission(control)).resolves.toEqual({
-      allowed: false,
-      reason: 'quota_exceeded',
-      remaining: 0,
-    });
+    await expect(nextAdmission(control)).resolves.toEqual(exhausted);
   });
 
   it('does not enter the handler if markLiable fails', async () => {
@@ -242,7 +237,7 @@ describe('protectTool', () => {
         tool: 'slow_tool',
         args: {},
       }),
-    ).resolves.toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+    ).resolves.toEqual(exhausted);
 
     await vi.advanceTimersByTimeAsync(60);
     await expect(running).resolves.toBe('done');

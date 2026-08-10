@@ -1,29 +1,37 @@
-# @mcp-usage-control/redis
+# mcp-usage-control-redis
 
-> Pre-alpha. This workspace package is currently private and not published to npm.
+Atomic Redis store for `mcp-usage-control`.
+
+```console
+npm install mcp-usage-control-redis redis
+```
 
 ## English
 
-Production-oriented `UsageStore` adapter backed by Redis-side Lua transitions for atomic reserve, pending -> cost-liable activation, renew, settlement, state-dependent expiry recovery, and idempotency state.
+v0.1 implements all-or-nothing multi-budget reserve, pending -> cost-liable activation, renewal, settlement, state-dependent expiry recovery, and bounded replay tombstones with Redis-side Lua.
 
-Lease/tombstone timestamps are computed from Redis server time inside Lua rather than application `Date.now()`. Expired pending reservations release capacity; expired cost-liable reservations conservatively retain the full charge.
+Lease/tombstone timestamps come from Redis server `TIME`, not application `Date.now()`. One global lease index ensures an expired reservation affecting several budgets is recovered once. Transactional state intentionally shares one configurable Redis Cluster hash slot.
+
+Pending expiry releases every participating budget. Cost-liable expiry conservatively keeps the full charge. Identical settlement replay is idempotent; conflicting replay fails. The logical replay scope is `(tenantId, principal.id, tool, operationId)`.
 
 - [Redis adapter](../../docs/redis.md)
 - [Getting started](../../docs/getting-started.md)
 - [API reference](../../docs/api-reference.md)
 - [Architecture](../../docs/architecture.md)
 
-The adapter intentionally uses one configurable Redis Cluster hash slot for transactional state. Lua atomicity is not the same as persistence/failover durability; review the documented HA, durability, cleanup-backlog, and scaling trade-offs before production use.
+Lua atomicity is not persistence/failover durability. Review HA, persistence, cleanup backlog, acknowledgement ambiguity, and single-slot scaling trade-offs before production use.
 
 ## 日本語
 
-Redis-side Lua transitionでatomic reserve、pending -> cost-liable activation、renew、settlement、state-dependent expiry recovery、idempotency stateを実装するproduction-oriented `UsageStore` adapterです。
+v0.1はRedis-side Luaでall-or-nothing multi-budget reserve、pending -> cost-liable activation、renewal、settlement、state-dependent expiry recovery、bounded replay tombstoneを実装します。
 
-lease / tombstone timestampはapplication `Date.now()` ではなくLua内のRedis server timeから計算します。expired pending reservationはcapacityを解放し、expired cost-liable reservationはfull chargeを保守的に維持します。
+lease / tombstone時刻はapplication `Date.now()` ではなくRedis server `TIME` を使います。global lease indexを1つ使うため、複数budgetに影響するexpired reservationを1回だけrecoveryします。transactional stateは意図的に1つのconfigurable Redis Cluster hash slotを共有します。
+
+pending expiryは参加する全budgetを解放し、cost-liable expiryはfull chargeを保守的に維持します。identical settlement replayはidempotent、conflicting replayはfailします。logical replay scopeは `(tenantId, principal.id, tool, operationId)` です。
 
 - [Redis adapter](../../docs/redis.ja.md)
 - [Getting started](../../docs/getting-started.ja.md)
 - [API reference](../../docs/api-reference.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 
-transactional stateは意図的に1つのconfigurable Redis Cluster hash slotへ置きます。Lua atomicityとpersistence / failover durabilityは同じではありません。production利用前にHA、durability、cleanup backlog、scaling trade-offを確認してください。
+Lua atomicityはpersistence / failover durabilityと同一ではありません。production利用前にHA、persistence、cleanup backlog、ACK ambiguity、single-slot scaling trade-offを確認してください。

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   UsageStateError,
   type Budget,
+  type BudgetRemaining,
   type MarkLiableInput,
   type MarkLiableResult,
   type RenewInput,
@@ -11,7 +12,7 @@ import {
   type StoreReserveResult,
   type UsageRequest,
   type UsageStore,
-} from '@mcp-usage-control/core';
+} from 'mcp-usage-control';
 import { MARK_LIABLE_SCRIPT, RENEW_SCRIPT, RESERVE_SCRIPT, SETTLE_SCRIPT } from './scripts.js';
 
 export interface RedisEvalClient {
@@ -34,17 +35,13 @@ export interface RedisUsageStoreOptions {
 
 interface RedisKeys {
   used: string;
-  pending: string;
+  leases: string;
   reservations: string;
   operations: string;
   tombstones: string;
 }
 
-interface ParsedReservationId {
-  budgetHash: string;
-}
-
-const RESERVATION_ID_PATTERN = /^r1\.([a-f0-9]{64})\.([a-f0-9]{64})$/;
+const RESERVATION_ID_PATTERN = /^r2\.([a-f0-9]{64})$/;
 
 export class RedisUsageStore implements UsageStore {
   private readonly prefix: string;
@@ -74,56 +71,98 @@ export class RedisUsageStore implements UsageStore {
   async reserve(input: {
     request: UsageRequest;
     units: number;
-    budget: Budget;
+    budgets: readonly Budget[];
     ttlMs: number;
   }): Promise<StoreReserveResult> {
     assertNonNegativeInteger(input.units, 'units');
-    assertNonNegativeInteger(input.budget.limit, 'budget.limit');
     assertPositiveInteger(input.ttlMs, 'ttlMs');
+    const budgets = canonicalizeBudgets(input.budgets);
+    validateRequestIdentity(input.request);
 
-    const budgetHash = digest(input.budget.key);
-    const operationKey = digest(JSON.stringify([input.request.principal.id, input.request.operationId]));
-    const reservationId = `r1.${budgetHash}.${operationKey}`;
-    const keys = this.keys(budgetHash);
+    const operationKey = digest(
+      JSON.stringify([
+        input.request.principal.tenantId ?? null,
+        input.request.principal.id,
+        input.request.tool,
+        input.request.operationId,
+      ]),
+    );
+    const reservationId = `r2.${operationKey}`;
+    const keys = this.keys();
+    const budgetByHash = new Map<string, Budget>();
+    const encodedBudgets = budgets.map(budget => {
+      const hash = digest(budget.key);
+      budgetByHash.set(hash, budget);
+      return { hash, limit: budget.limit };
+    });
 
     const reply = parseReply(
       await this.client.eval(RESERVE_SCRIPT, {
-        keys: [keys.used, keys.pending, keys.reservations, keys.operations, keys.tombstones],
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
         arguments: [
           String(input.units),
-          String(input.budget.limit),
           String(input.ttlMs),
           reservationId,
           operationKey,
           String(this.cleanupBatchSize),
           String(this.idempotencyTtlMs),
+          JSON.stringify(encodedBudgets),
         ],
       }),
     );
 
     switch (reply[0]) {
       case 'accepted': {
-        const expiresAt = parseInteger(reply[2], 'expiresAt');
+        const expiresAt = parseInteger(reply[1], 'expiresAt');
+        const remainingByBudget: BudgetRemaining[] = [];
+        for (let index = 2; index < reply.length; index += 2) {
+          const hash = reply[index];
+          const remainingRaw = reply[index + 1];
+          if (!hash || remainingRaw === undefined) {
+            throw new UsageStateError('Redis reserve reply contained an incomplete budget balance');
+          }
+          const budget = budgetByHash.get(hash);
+          if (!budget) throw new UsageStateError('Redis reserve reply referenced an unknown budget');
+          remainingByBudget.push({
+            key: budget.key,
+            remaining: parseInteger(remainingRaw, `remaining (${budget.key})`),
+          });
+        }
+        if (remainingByBudget.length !== budgets.length) {
+          throw new UsageStateError('Redis reserve reply omitted a budget balance');
+        }
         return {
           accepted: true,
           reservation: {
             id: reservationId,
             operationId: input.request.operationId,
             principalId: input.request.principal.id,
+            ...(input.request.principal.tenantId === undefined
+              ? {}
+              : { tenantId: input.request.principal.tenantId }),
             tool: input.request.tool,
-            budgetKey: input.budget.key,
+            budgetKeys: budgets.map(budget => budget.key),
             reservedUnits: input.units,
             expiresAt,
           },
-          remaining: parseInteger(reply[1], 'remaining'),
+          remainingByBudget,
         };
       }
-      case 'quota_exceeded':
+      case 'quota_exceeded': {
+        const budgetHash = reply[1];
+        const remainingRaw = reply[2];
+        if (!budgetHash || remainingRaw === undefined) {
+          throw new UsageStateError('Redis quota reply was incomplete');
+        }
+        const budget = budgetByHash.get(budgetHash);
+        if (!budget) throw new UsageStateError('Redis quota reply referenced an unknown budget');
         return {
           accepted: false,
           reason: 'quota_exceeded',
-          remaining: parseInteger(reply[1], 'remaining'),
+          limitingBudgetKey: budget.key,
+          remaining: parseInteger(remainingRaw, 'remaining'),
         };
+      }
       case 'duplicate_operation':
         return { accepted: false, reason: 'duplicate_operation' };
       default:
@@ -132,11 +171,11 @@ export class RedisUsageStore implements UsageStore {
   }
 
   async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
-    const { budgetHash } = parseReservationId(input.reservationId);
-    const keys = this.keys(budgetHash);
+    assertReservationId(input.reservationId);
+    const keys = this.keys();
     const reply = parseReply(
       await this.client.eval(MARK_LIABLE_SCRIPT, {
-        keys: [keys.used, keys.pending, keys.reservations, keys.operations, keys.tombstones],
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
         arguments: [input.reservationId, String(this.idempotencyTtlMs)],
       }),
     );
@@ -155,12 +194,12 @@ export class RedisUsageStore implements UsageStore {
 
   async renew(input: RenewInput): Promise<RenewResult> {
     assertPositiveInteger(input.ttlMs, 'ttlMs');
-    const { budgetHash } = parseReservationId(input.reservationId);
-    const keys = this.keys(budgetHash);
+    assertReservationId(input.reservationId);
+    const keys = this.keys();
 
     const reply = parseReply(
       await this.client.eval(RENEW_SCRIPT, {
-        keys: [keys.used, keys.pending, keys.reservations, keys.operations, keys.tombstones],
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
         arguments: [String(input.ttlMs), input.reservationId, String(this.idempotencyTtlMs)],
       }),
     );
@@ -181,12 +220,12 @@ export class RedisUsageStore implements UsageStore {
 
   async settle(input: SettleInput): Promise<SettlementResult> {
     assertNonNegativeInteger(input.actualUnits, 'actualUnits');
-    const { budgetHash } = parseReservationId(input.reservationId);
-    const keys = this.keys(budgetHash);
+    assertReservationId(input.reservationId);
+    const keys = this.keys();
 
     const reply = parseReply(
       await this.client.eval(SETTLE_SCRIPT, {
-        keys: [keys.used, keys.pending, keys.reservations, keys.operations, keys.tombstones],
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
         arguments: [
           input.reservationId,
           String(input.actualUnits),
@@ -219,11 +258,11 @@ export class RedisUsageStore implements UsageStore {
     throw new UsageStateError(`Unexpected Redis settle reply: ${reply[0] ?? '<empty>'}`);
   }
 
-  private keys(budgetHash: string): RedisKeys {
+  private keys(): RedisKeys {
     const base = `${this.prefix}:{${this.hashTag}}`;
     return {
-      used: `${base}:budget:${budgetHash}:used`,
-      pending: `${base}:budget:${budgetHash}:pending`,
+      used: `${base}:used`,
+      leases: `${base}:leases`,
       reservations: `${base}:reservations`,
       operations: `${base}:operations`,
       tombstones: `${base}:tombstones`,
@@ -231,10 +270,34 @@ export class RedisUsageStore implements UsageStore {
   }
 }
 
-function parseReservationId(reservationId: string): ParsedReservationId {
-  const match = RESERVATION_ID_PATTERN.exec(reservationId);
-  if (!match?.[1]) throw new UsageStateError('Invalid Redis reservation ID');
-  return { budgetHash: match[1] };
+function assertReservationId(reservationId: string): void {
+  if (!RESERVATION_ID_PATTERN.test(reservationId)) {
+    throw new UsageStateError('Invalid Redis reservation ID');
+  }
+}
+
+function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
+  if (budgets.length === 0) throw new RangeError('budgets must contain at least one budget');
+  const normalized = budgets.map(budget => {
+    if (typeof budget.key !== 'string' || budget.key.length === 0) {
+      throw new RangeError('budget.key must be a non-empty string');
+    }
+    assertNonNegativeInteger(budget.limit, `budget.limit (${budget.key})`);
+    return { key: budget.key, limit: budget.limit };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  for (let index = 1; index < normalized.length; index += 1) {
+    if (normalized[index - 1]!.key === normalized[index]!.key) {
+      throw new RangeError(`duplicate budget key: ${normalized[index]!.key}`);
+    }
+  }
+  return normalized;
+}
+
+function validateRequestIdentity(request: UsageRequest): void {
+  if (!request.operationId) throw new RangeError('operationId must be non-empty');
+  if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
+  if (!request.tool) throw new RangeError('tool must be non-empty');
 }
 
 function digest(value: string): string {

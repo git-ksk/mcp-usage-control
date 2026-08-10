@@ -1,35 +1,39 @@
-# @mcp-usage-control/mcp
+# mcp-usage-control-mcp
 
-> Pre-alpha. This workspace package is currently private and not published to npm.
+MCP TypeScript SDK v2 adapter for `mcp-usage-control`.
+
+```console
+npm install mcp-usage-control-mcp @modelcontextprotocol/server
+```
 
 ## English
 
-Adapter for `@modelcontextprotocol/server` v2 **single-round** tool handlers. `protectTool()` surrounds a handler with usage admission, cost-liable activation, renewable lease heartbeat, MCP-aware result classification, conservative fallback charging, and explicit settlement-failure handling.
+`protectTool()` wraps **single-round** `@modelcontextprotocol/server` v2 tool handlers with admission, cost-liable activation, lease heartbeat, MCP-aware result classification, and explicit settlement.
 
-For a tool with no input schema, set `noInput: true`. The adapter then normalizes the SDK's no-input dispatch behavior to `args === undefined` and the real `ServerContext`. For a tool with an input schema, omit `noInput` and validated args are preserved.
+For a tool with no input schema, set `noInput: true`. For input-schema tools, omit it. The adapter normalizes the SDK no-input callback/runtime shape without guessing whether `{}` is real input.
 
-It distinguishes normal success, MCP `{ isError: true }`, and thrown errors. If a cost classifier fails or returns invalid units, the full reservation is settled before `UsageClassificationError` is surfaced.
+It distinguishes normal success, `{ isError: true }`, and thrown errors. Invalid/throwing cost classifiers cause the full reservation to be settled before `UsageClassificationError` is surfaced. Ambiguous settlement failures are surfaced as `UsageSettlementError` and are not blindly retried.
 
-MCP v2 `input_required` multi-round flows are intentionally unsupported until reservation suspend/resume semantics are implemented; the wrapper rejects them explicitly rather than silently mis-accounting retries/rounds.
+**v0.1 intentionally does not support MCP v2 `input_required` multi-round flows.** Such a result is conservatively settled and rejected with `UnsupportedMcpUsageFlowError` until suspend/resume semantics are implemented (issue #14).
 
 - [MCP integration](../../docs/mcp-integration.md)
 - [API reference](../../docs/api-reference.md)
 - [Architecture](../../docs/architecture.md)
 
-The application remains responsible for trusted principal derivation, authentication/authorization, stable logical operation IDs, and provider-specific fencing after lease loss.
+The application remains responsible for trusted principal/tenant derivation, authentication/authorization, retry-stable logical operation IDs, and provider-specific fencing after lease loss.
 
 ## 日本語
 
-`@modelcontextprotocol/server` v2の **single-round** tool handler向けadapterです。`protectTool()` がusage admission、cost-liable activation、renewable lease heartbeat、MCP-aware result classification、conservative fallback charge、明示的なsettlement failure handlingでhandlerをwrapします。
+`protectTool()` は `@modelcontextprotocol/server` v2の **single-round** tool handlerをusage admission、cost-liable activation、lease heartbeat、MCP-aware result classification、explicit settlementでwrapします。
 
-input schemaがないtoolでは `noInput: true` を指定します。adapterがSDKのno-input dispatch behaviorを `args === undefined` と正しい `ServerContext` へnormalizeします。input schemaがあるtoolでは `noInput` を省略し、validated argsを維持します。
+input schemaがないtoolでは `noInput: true` を指定し、input schemaありでは省略します。SDKのno-input callback / runtime shapeをnormalizeしますが、`{}` がreal inputかどうかを推測しません。
 
-normal success、MCP `{ isError: true }`、thrown errorを区別します。cost classifierが失敗またはinvalid unitsを返した場合はfull reservationをsettleした後 `UsageClassificationError` を表面化します。
+normal success、`{ isError: true }`、thrown errorを区別します。classifierがthrow / invalid unitsを返した場合はfull reservationをsettleしてから `UsageClassificationError` を表面化します。ambiguous settlement failureは `UsageSettlementError` として表面化しblind retryしません。
 
-MCP v2 `input_required` multi-round flowはreservation suspend/resume semantics実装まで意図的に未対応です。retry / roundをsilentに誤accountingせず明示的にrejectします。
+**v0.1はMCP v2 `input_required` multi-round flowを意図的に未対応とします。** 該当resultは保守的にsettleした後 `UnsupportedMcpUsageFlowError` でrejectし、suspend/resume semanticsはIssue #14で追跡します。
 
 - [MCP integration](../../docs/mcp-integration.ja.md)
 - [API reference](../../docs/api-reference.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 
-信頼できるprincipal derivation、authentication / authorization、stable logical operation ID、lease loss後のprovider-specific fencingはapplication側の責務です。
+trustedなprincipal / tenant derivation、authentication / authorization、retry-stable logical operation ID、lease loss後のprovider-specific fencingはapplication側の責務です。

@@ -2,19 +2,17 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-This directory contains the maintained documentation for `mcp-usage-control`.
-
-> Status: pre-alpha. Public APIs and package names may still change before v0.1.
+Maintained documentation for `mcp-usage-control` v0.1.
 
 ## Start here
 
-- [Getting started](getting-started.md) — repository setup, the core lifecycle, and a minimal local example.
-- [MCP integration](mcp-integration.md) — wrapping `@modelcontextprotocol/server` v2 tool handlers with usage control.
-- [API reference](api-reference.md) — current core, MCP, and Redis public surface and defaults.
-- [Architecture](architecture.md) — invariants, renewable leases, settlement semantics, and design boundaries.
-- [Redis adapter](redis.md) — atomic Lua transitions, key model, expiry, idempotency, and Redis Cluster trade-offs.
-- [Release policy](releasing.md) — pre-1.0 compatibility and publication expectations.
-- [Changelog](../CHANGELOG.md) — notable changes and current pre-alpha limitations.
+- [Getting started](getting-started.md) — npm/source setup, multi-budget policy, core lifecycle, Redis and MCP examples.
+- [MCP integration](mcp-integration.md) — `@modelcontextprotocol/server` v2 single-round usage control and the `input_required` support boundary.
+- [API reference](api-reference.md) — v0.1 core, MCP, and Redis public surface/defaults.
+- [Architecture](architecture.md) — safety invariants, multi-budget atomicity, liability, idempotency, settlement, trust boundaries.
+- [Redis adapter](redis.md) — v0.1 Lua transaction model, key layout, expiry, replay, Redis Cluster and durability trade-offs.
+- [Release policy](releasing.md) — package/version/release procedure and pre-1.0 compatibility policy.
+- [Changelog](../CHANGELOG.md) — released features, safety behavior, compatibility and known limitations.
 
 ## Project policies
 
@@ -26,19 +24,12 @@ This directory contains the maintained documentation for `mcp-usage-control`.
 
 ## Package entry points
 
-- [`@mcp-usage-control/core`](../packages/core/README.md)
-- [`@mcp-usage-control/mcp`](../packages/mcp/README.md)
-- [`@mcp-usage-control/redis`](../packages/redis/README.md)
+- [`mcp-usage-control`](../packages/core/README.md)
+- [`mcp-usage-control-mcp`](../packages/mcp/README.md)
+- [`mcp-usage-control-redis`](../packages/redis/README.md)
 
 ## Documentation rules
 
-English is the canonical language for public API names and source-code identifiers. User-facing documentation is maintained in English and Japanese.
+English is canonical for public API names/source identifiers. User-facing documentation is maintained in English and Japanese. Paired Japanese documents use `.ja.md`.
 
-For paired documents, the Japanese version uses the same base filename with `.ja` before `.md`, for example:
-
-```text
-architecture.md
-architecture.ja.md
-```
-
-When a behavior or invariant changes, update both language versions in the same pull request whenever practical. Code examples should remain equivalent across translations.
+When behavior or an accounting/security invariant changes, update both language versions in the same pull request. Examples and support boundaries should remain semantically equivalent across translations.

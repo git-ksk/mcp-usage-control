@@ -1,106 +1,143 @@
-# Architecture
+# Architecture — v0.1
 
 [English](architecture.md) | [日本語](architecture.ja.md)
 
 ## Scope
 
-`mcp-usage-control` owns the runtime boundary between an authenticated principal and a metered tool execution:
+`mcp-usage-control` owns the enforcement boundary between a trusted accounting principal and metered tool execution:
 
 ```text
-identity -> entitlement/policy -> quote -> reserve -> mark liable -> execute -> settle
-                                                   ^                 |
-                                                   |------ renew -----|
+identity -> entitlement/policy -> quote -> atomic reserve -> mark liable -> execute -> settle
+                                                          ^                 |
+                                                          |------ renew -----|
 ```
 
-It does not own authentication, subscription billing, payment collection, dashboards, or upstream API pricing.
+It does not own authentication, subscription billing, payment collection, dashboards, generic rate limiting, or upstream pricing.
 
 ## Why reserve before execution
 
-A `check -> execute -> record` design has a time-of-check/time-of-use race. When several agent tool calls arrive concurrently, each can observe the same remaining balance and all start before any usage is recorded.
+`check -> execute -> record` has a time-of-check/time-of-use race. Concurrent agent calls can all observe the same remaining balance and start before any one call records usage.
 
-The store therefore exposes a single `reserve()` operation. A production store must make quota comparison, duplicate-operation detection, and reservation creation atomic.
+`UsageStore.reserve()` therefore performs duplicate detection, quota comparison, and reservation creation as one atomic store operation.
+
+## Multi-budget admission
+
+A policy can apply several budgets to one invocation, for example:
+
+```text
+user daily
+user monthly
+tenant monthly
+```
+
+v0.1 uses one unit quote for the invocation and reserves that amount against **every participating budget atomically**. A production store must provide all-or-nothing semantics: if any budget denies, no other participating budget may be left partially reserved.
+
+Budget keys are canonicalized before admission. Empty budget lists and duplicate budget keys are rejected. The one-budget `budget` quote form is normalized to a one-element budget list.
+
+Burst rate limits and concurrency caps are separate concerns in v0.1 unless an application models them explicitly as usage budgets.
 
 ## Pending vs cost-liable leases
 
-A reservation starts in a **pending** state. Pending means capacity is reserved but the metered execution boundary has not yet been entered. If a pending lease expires, its units may be released because no metered work was declared liable.
+A reservation begins **pending**: capacity is reserved, but the metered execution boundary has not yet been entered.
 
-Before metered execution begins, the caller moves the lease to **cost-liable** with `UsageLease.markLiable()`. The MCP adapter does this immediately before entering the application handler. Once a lease is liable, expiry is conservative: the full reservation remains charged and the operation becomes settled with `lease_expired_after_execution_started`.
+Before metered work begins, call `UsageLease.markLiable()`. The MCP adapter does this immediately before application handler entry.
 
-This distinction closes a crash-after-cost gap. Without it, a process could call an upstream API, disappear before settlement, and later have the lease reclaimed as if no work occurred.
+Expiry behavior is state-dependent:
 
-The generic MCP wrapper marks liability at handler entry because it cannot know the exact provider-specific point where cost starts. This may over-account a crash that happens inside the handler before real upstream cost is incurred, but it avoids under-accounting by default. Applications that need a later and more precise cost-liability boundary should use the core lifecycle directly or a provider-specific adapter rather than weakening the generic wrapper.
+- **pending expiry** — release the reservation from every participating budget and remove active replay protection for that abandoned operation;
+- **cost-liable expiry** — retain the full reservation across every participating budget, settle with `lease_expired_after_execution_started`, and keep replay protection through the idempotency tombstone period.
 
-## Reservations are renewable leases
+This closes the crash-after-cost refund gap. The generic MCP wrapper uses handler entry as the liability boundary because it cannot know a provider-specific point of cost. This can conservatively over-account a crash between handler entry and real upstream cost; applications needing a more precise boundary should use the core lifecycle directly.
 
-Reservation expiry exists to recover capacity after a worker disappears, but a fixed TTL is unsafe for legitimate long-running tools. If an active tool runs past its TTL and another admission reclaims the reservation, both operations can consume the same budget.
+## Renewable leases
 
-`UsageStore.renew()` atomically extends the expiry while a reservation remains active. The MCP adapter enables a heartbeat by default and renews at approximately one third of the lease TTL while the handler is in flight. It stops and waits for any in-flight renewal before final settlement so renewal and settlement do not race each other.
+A fixed reservation TTL is unsafe for legitimate long-running work. If an active reservation is reclaimed while its operation is still running, another operation can reuse the same budget capacity.
 
-A sufficiently long storage/network partition can still outlive a distributed lease. The built-in heartbeat is renewal convenience, not provider-specific fencing. Renewal errors do not automatically cancel arbitrary upstream work. Because the lease is already cost-liable, expiry is conservative rather than refunding the work; final settlement will surface a lost/expired lease if ownership was lost.
+`UsageStore.renew()` atomically extends an active lease. `mcp-usage-control-mcp` enables a heartbeat by default while a wrapped handler runs and stops/waits for any in-flight renewal before settlement.
 
-Applications that require immediate cancellation after lease loss must fence or cancel at the metered resource boundary.
+A storage/network partition can still outlive a lease. Renewal is not provider-specific fencing. Applications requiring immediate cancellation after lease loss must implement fencing/cancellation at the metered resource boundary.
 
-## Why settlement is not rollback
+## Settlement, not rollback
 
-A tool can fail after an upstream resource was consumed. Automatically refunding every exception creates an abuse path where a caller repeatedly triggers post-cost failures.
+A tool can fail after consuming a metered resource. Automatically refunding all errors creates an abuse path.
 
-The runtime uses explicit settlement:
+v0.1 settlement rules are explicit:
 
-- success: normally settle the actual consumed units;
-- pre-cost failure: the application may settle zero when it can prove no metered resource was consumed;
-- post-cost failure: settle the units already incurred;
-- unclassified failure: the MCP adapter defaults to the full reservation;
-- cost-classification failure: the MCP adapter settles the full reservation before surfacing `UsageClassificationError`.
+- successful work -> settle actual consumed units;
+- proven pre-cost failure -> zero is allowed;
+- post-cost failure -> settle incurred units;
+- unclassified MCP failure -> full reservation by default;
+- cost classifier failure -> full reservation is settled before `UsageClassificationError` is surfaced.
 
-The current contract requires `actualUnits <= reservedUnits`. Dynamic-cost tools should reserve their safe maximum before execution, then release the unused portion at settlement.
+`actualUnits` must be a non-negative safe integer and cannot exceed `reservedUnits`. Dynamic-cost tools should reserve a safe maximum and release unused units at settlement.
 
-## MCP tool-result semantics
+Settlement applies the same actual unit count to all budgets that participated in the reservation.
 
-MCP has more than one failure/result shape. The adapter treats an explicit `{ isError: true }` tool result as a tool error, not success. A separate `toolErrorUnits` hook can classify its actual cost; the conservative default remains the full reservation.
+## Idempotency and replay protection
 
-MCP v2 also supports `input_required`, where the client gathers input and invokes the handler again in a fresh request. Correct accounting needs suspend/resume semantics across rounds. The pre-alpha `protectTool()` wrapper therefore **does not support `input_required` yet**. If a wrapped handler returns it, the reservation is conservatively settled and `UnsupportedMcpUsageFlowError` is surfaced rather than silently double-charging or deadlocking on duplicate operation IDs.
+The v0.1 logical operation scope is:
 
-True multi-round reservation resume is tracked as a separate v0.1 design item.
+```text
+(tenantId, principal.id, tool, operationId)
+```
 
-## Idempotency
+`operationId` is application-provided and must be stable across retries of the same logical invocation. It is not authentication proof.
 
-`operationId` is supplied by the application. The current store scopes it to the principal and rejects a duplicate reservation. Internal operation keys use unambiguous tuple encoding before storage/hashing so delimiter-containing identifiers cannot collide.
+Identifiers are encoded as an unambiguous tuple before hashing/storage so delimiter-containing values do not collide.
 
-The in-memory reference store keeps settled operation IDs for the process lifetime. The Redis store keeps settled operation IDs behind a longer, configurable idempotency tombstone retention period that is separate from the renewable lease TTL.
+Active operations reject duplicate reservation attempts. Settled operations remain protected by a bounded tombstone period; Memory and Redis stores default to 24 hours. After tombstone expiry, the same operation ID may be reused in the same scope.
 
-Settlement itself is idempotent when the same `actualUnits` and `outcome` are repeated. A conflicting second settlement is rejected.
-
-Principal/tenant/tool scoping semantics remain intentionally under review before v0.1; `operationId` is an idempotency input, never authentication proof.
+Settlement replay is separately idempotent: identical `actualUnits` + `outcome` returns the previous settlement; a conflicting replay fails.
 
 ## Store contract
 
-`UsageStore` is intentionally independent of MCP and storage vendors. The in-memory implementation is for tests and local development.
+Core is independent of MCP and storage vendors. A production `UsageStore` must provide:
 
-A production store must provide:
-
-- atomic reserve;
+- all-or-nothing atomic multi-budget reserve;
 - atomic pending -> cost-liable transition;
-- atomic lease renewal for active reservations;
-- atomic settlement and unused-unit release;
-- state-dependent expiry recovery;
-- duplicate operation protection;
-- bounded idempotency retention;
-- no fail-open behavior on ambiguous storage failures by default.
+- atomic active-lease renewal;
+- atomic settlement and release across all budgets;
+- exactly-once-style expiry recovery for one reservation even when it affects several budgets;
+- scoped duplicate-operation protection;
+- bounded settled replay retention;
+- conservative behavior on ambiguous storage failures.
 
-`@mcp-usage-control/redis` implements these transitions with Redis-side Lua rather than client-side read/modify/write sequences. All transactional keys share one configurable Redis Cluster hash slot so the scripts remain atomic. Lease timestamps are derived from Redis server time inside the Lua scripts so application-host clock skew does not change expiry decisions.
+`MemoryUsageStore` is the reference semantics, not a distributed production store.
 
-Atomicity is not the same as durability. Redis persistence, replication, failover and acknowledged-write-loss windows are deployment concerns and must be chosen to match the accounting guarantees required by the application. See [Redis adapter](redis.md).
+`mcp-usage-control-redis` implements the contract with Redis-side Lua in one configurable Redis Cluster hash slot. Lease/tombstone decisions use Redis server `TIME` so application host clock skew does not change accounting.
 
-## MCP adapter
+## Redis atomicity vs durability
 
-`@mcp-usage-control/mcp` targets the public `@modelcontextprotocol/server` v2 API for single-round tool handlers. The core package never imports the MCP SDK, which keeps protocol/SDK churn isolated to the adapter.
+Lua provides atomic transitions inside Redis. It does not by itself guarantee persistence across every crash, failover, or acknowledged-write-loss window. Production deployments must configure persistence, replication, failover, backup, and recovery according to their acceptable accounting-loss budget.
 
-The adapter keeps execution errors, classification errors and settlement errors distinct. An ambiguous settlement is never blindly retried because a storage write may already have been applied even when its acknowledgement was lost.
+When a stronger financial ledger is required, Redis should remain the enforcement state and be reconciled to a separate durable ledger/event system.
 
-The repository also exercises the adapter through the official SDK `Client + createMcpHandler` in-process path so SDK error/result conversion is covered in addition to direct wrapper tests.
+## MCP result semantics
 
-## Future multi-budget admission
+`mcp-usage-control-mcp` targets `@modelcontextprotocol/server` v2 **single-round** tool handlers while core remains SDK-independent.
 
-A production SaaS commonly needs several constraints at once, for example user monthly credits, daily credits, tenant monthly credits, and burst/concurrency controls.
+The adapter distinguishes:
 
-The current pre-alpha store has one budget per reservation. Multi-budget atomic admission is planned before v0.1 so all applicable budgets succeed or fail as one transaction.
+- normal result;
+- explicit `{ isError: true }` tool result;
+- thrown execution error;
+- cost-classification error;
+- settlement error.
+
+Ambiguous settlement is not blindly retried because the store write may already have committed even when the acknowledgement was lost.
+
+The repository tests both the wrapper directly and through the official SDK `Client + createMcpHandler` path.
+
+### `input_required`
+
+MCP v2 `input_required` crosses request boundaries. Correct accounting requires reservation suspend/resume semantics, replay identity across rounds, abandonment recovery, and integrity rules for client-carried state.
+
+v0.1 therefore makes an explicit support-boundary decision: `protectTool()` does **not** support `input_required`. If a wrapped handler returns it, the current reservation is conservatively settled and `UnsupportedMcpUsageFlowError` is surfaced. True suspend/resume support remains tracked in issue #14.
+
+## Trust boundaries
+
+- principal/tenant identity must come from trusted server-side authentication/application context;
+- `clientInfo`, tool arguments, request-state blobs, and operation IDs are not authorization proof;
+- policy denial details should not contain secrets intended for end users/models;
+- budget keys and outcome labels should be low-cardinality and non-sensitive when exported to logs/metrics;
+- Redis hashing reduces identifier exposure in key names but is not encryption.

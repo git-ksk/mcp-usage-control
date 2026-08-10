@@ -4,7 +4,7 @@ import {
   type Principal,
   type UsageControl,
   type UsageLease,
-} from '@mcp-usage-control/core';
+} from 'mcp-usage-control';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -114,9 +114,9 @@ export function protectTool<TArgs, TResult>(
  *
  * MCP `isError: true` results are classified as tool errors rather than success.
  * MCP v2 `input_required` multi-round-trip results are intentionally rejected in
- * this pre-alpha adapter because correct suspend/resume accounting requires a
- * dedicated reservation-resume contract. The reservation is conservatively
- * settled before the unsupported-flow error is surfaced.
+ * v0.1 because correct suspend/resume accounting requires a dedicated
+ * reservation-resume contract. The reservation is conservatively settled before
+ * the unsupported-flow error is surfaced.
  */
 export function protectTool<TArgs, TResult>(
   options: ProtectToolOptions<TArgs, TResult>,
@@ -130,9 +130,6 @@ export function protectTool<TArgs, TResult>(
     let ctx: ServerContext;
 
     if (options.noInput === true) {
-      // The public SDK type models a no-input callback as `(ctx)`, but current
-      // dispatch paths may call it as `({}, ctx)`. Explicit noInput mode lets us
-      // normalize both forms without confusing `{}` with a real empty-schema arg.
       args = undefined as TArgs;
       ctx = (maybeCtx ?? argsOrCtx) as ServerContext;
     } else {
@@ -191,7 +188,7 @@ export function protectTool<TArgs, TResult>(
     if (isInputRequiredResult(result)) {
       await settleOnce(lease, lease.reservedUnits, 'unsupported_input_required');
       throw new UnsupportedMcpUsageFlowError(
-        'MCP input_required multi-round tool flows are not yet supported by protectTool()',
+        'MCP input_required multi-round tool flows are not supported by protectTool() in v0.1',
       );
     }
 

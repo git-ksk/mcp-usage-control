@@ -1,16 +1,24 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from 'redis';
-import { UsageControl, type UsagePolicy } from '@mcp-usage-control/core';
+import { UsageControl, type UsagePolicy } from 'mcp-usage-control';
 import { RedisUsageStore, type RedisEvalClient } from './index.js';
 
 const redisUrl = process.env.REDIS_URL;
 const integration = redisUrl ? describe : describe.skip;
 const client = createClient({ url: redisUrl ?? 'redis://127.0.0.1:6379' });
 
-const request = (operationId: string) => ({
+const request = (
+  operationId: string,
+  principalId = 'user-1',
+  overrides: Partial<{ tenantId: string; tool: string }> = {},
+) => ({
   operationId,
-  principal: { id: 'user-1', plan: 'free' },
-  tool: 'search',
+  principal: {
+    id: principalId,
+    plan: 'free',
+    ...(overrides.tenantId === undefined ? {} : { tenantId: overrides.tenantId }),
+  },
+  tool: overrides.tool ?? 'search',
   args: {},
 });
 
@@ -20,7 +28,23 @@ function policy(limit = 1, reservationTtlMs = 5_000): UsagePolicy {
       return {
         decision: 'allow',
         units: 1,
-        budget: { key: 'month:user-1:2026-08', limit },
+        budgets: [{ key: 'month:user-1:2026-08', limit }],
+        reservationTtlMs,
+      };
+    },
+  };
+}
+
+function multiPolicy(limit = 1, reservationTtlMs = 5_000): UsagePolicy {
+  return {
+    quote(req) {
+      return {
+        decision: 'allow',
+        units: 1,
+        budgets: [
+          { key: `tenant:${req.principal.tenantId}:monthly`, limit },
+          { key: `user:${req.principal.id}:daily`, limit: 10 },
+        ],
         reservationTtlMs,
       };
     },
@@ -29,9 +53,7 @@ function policy(limit = 1, reservationTtlMs = 5_000): UsagePolicy {
 
 class LoseNextReplyClient implements RedisEvalClient {
   loseNextReply = false;
-
   constructor(private readonly inner: RedisEvalClient) {}
-
   async eval(script: string, options: { keys: string[]; arguments: string[] }): Promise<unknown> {
     const reply = await this.inner.eval(script, options);
     if (this.loseNextReply) {
@@ -43,59 +65,78 @@ class LoseNextReplyClient implements RedisEvalClient {
 }
 
 integration('RedisUsageStore', () => {
-  beforeAll(async () => {
-    await client.connect();
-  });
-
-  beforeEach(async () => {
-    vi.restoreAllMocks();
-    await client.flushDb();
-  });
-
-  afterAll(async () => {
-    await client.quit();
-  });
+  beforeAll(async () => { await client.connect(); });
+  beforeEach(async () => { vi.restoreAllMocks(); await client.flushDb(); });
+  afterAll(async () => { await client.quit(); });
 
   it('admits exactly one of 100 concurrent calls when one unit remains', async () => {
     const control = new UsageControl(new RedisUsageStore(client), policy(1));
     const results = await Promise.all(
       Array.from({ length: 100 }, (_, index) => control.reserve(request(`op-${index}`))),
     );
-
     expect(results.filter(result => result.allowed)).toHaveLength(1);
     expect(results.filter(result => !result.allowed && result.reason === 'quota_exceeded')).toHaveLength(99);
   });
 
-  it('rejects a duplicate operation ID', async () => {
-    const control = new UsageControl(new RedisUsageStore(client), policy(2));
-    const first = await control.reserve(request('same-op'));
-    expect(first.allowed).toBe(true);
-
-    const duplicate = await control.reserve(request('same-op'));
-    expect(duplicate).toEqual({ allowed: false, reason: 'duplicate_operation' });
+  it('atomically protects an overlapping shared tenant budget across 100 users', async () => {
+    const control = new UsageControl(new RedisUsageStore(client), multiPolicy(1));
+    const results = await Promise.all(
+      Array.from({ length: 100 }, (_, index) =>
+        control.reserve(request(`op-${index}`, `user-${index}`, { tenantId: 'tenant-a' })),
+      ),
+    );
+    expect(results.filter(result => result.allowed)).toHaveLength(1);
+    const denied = results.filter(result => !result.allowed);
+    expect(denied).toHaveLength(99);
+    expect(denied.every(result => !result.allowed && result.limitingBudgetKey === 'tenant:tenant-a:monthly')).toBe(true);
   });
 
-  it('releases unused units during settlement', async () => {
-    const control = new UsageControl(new RedisUsageStore(client), policy(1));
-    const first = await control.reserve(request('op-a'));
-    if (!first.allowed) throw new Error('expected admission');
+  it('does not leave a partial reservation when one of several budgets denies', async () => {
+    const store = new RedisUsageStore(client);
+    const deniedControl = new UsageControl(store, {
+      quote() {
+        return {
+          decision: 'allow', units: 1,
+          budgets: [{ key: 'a:user-budget', limit: 1 }, { key: 'b:tenant-budget', limit: 0 }],
+        };
+      },
+    });
+    expect(await deniedControl.reserve(request('denied'))).toEqual({
+      allowed: false, reason: 'quota_exceeded', limitingBudgetKey: 'b:tenant-budget', remaining: 0,
+    });
 
+    const userOnly = new UsageControl(store, {
+      quote() { return { decision: 'allow', units: 1, budgets: [{ key: 'a:user-budget', limit: 1 }] }; },
+    });
+    expect((await userOnly.reserve(request('after-denial'))).allowed).toBe(true);
+  });
+
+  it('rejects a duplicate operation ID within the full identity scope', async () => {
+    const zeroPolicy: UsagePolicy = {
+      quote() { return { decision: 'allow', units: 0, budgets: [{ key: 'shared', limit: 10 }] }; },
+    };
+    const control = new UsageControl(new RedisUsageStore(client), zeroPolicy);
+    expect((await control.reserve(request('same-op', 'user-1', { tenantId: 't1', tool: 'read' }))).allowed).toBe(true);
+    expect(await control.reserve(request('same-op', 'user-1', { tenantId: 't1', tool: 'read' }))).toEqual({ allowed: false, reason: 'duplicate_operation' });
+    expect((await control.reserve(request('same-op', 'user-1', { tenantId: 't2', tool: 'read' }))).allowed).toBe(true);
+    expect((await control.reserve(request('same-op', 'user-1', { tenantId: 't1', tool: 'write' }))).allowed).toBe(true);
+  });
+
+  it('releases unused units from every budget during settlement', async () => {
+    const control = new UsageControl(new RedisUsageStore(client), multiPolicy(1));
+    const first = await control.reserve(request('op-a', 'user-1', { tenantId: 'tenant-a' }));
+    if (!first.allowed) throw new Error('expected admission');
     await first.lease.settle(0, 'pre_execution_failure');
-    const second = await control.reserve(request('op-b'));
-    expect(second.allowed).toBe(true);
+    expect((await control.reserve(request('op-b', 'user-2', { tenantId: 'tenant-a' }))).allowed).toBe(true);
   });
 
   it('makes identical settlement replay idempotent and rejects conflicts', async () => {
     const control = new UsageControl(new RedisUsageStore(client), policy(2));
     const admission = await control.reserve(request('op-a'));
     if (!admission.allowed) throw new Error('expected admission');
-
     const first = await admission.lease.settle(1, 'success');
-    const replay = await admission.lease.settle(1, 'success');
-    expect(replay).toEqual(first);
-    await expect(admission.lease.settle(0, 'success')).rejects.toThrow(
-      'already settled with a different result',
-    );
+    expect(await admission.lease.settle(1, 'success')).toEqual(first);
+    await expect(admission.lease.settle(0, 'success')).rejects.toThrow('already settled with a different result');
   });
 
   it('keeps settlement idempotent when Redis applied the write but its acknowledgement was lost', async () => {
@@ -103,63 +144,41 @@ integration('RedisUsageStore', () => {
     const control = new UsageControl(new RedisUsageStore(lossyClient), policy(2));
     const admission = await control.reserve(request('op-a'));
     if (!admission.allowed) throw new Error('expected admission');
-
     lossyClient.loseNextReply = true;
-    await expect(admission.lease.settle(1, 'success')).rejects.toThrow(
-      'simulated lost Redis acknowledgement',
-    );
-
-    const replay = await admission.lease.settle(1, 'success');
-    expect(replay).toEqual({
-      reservationId: admission.lease.reservation.id,
-      reservedUnits: 1,
-      actualUnits: 1,
-      releasedUnits: 0,
-      outcome: 'success',
+    await expect(admission.lease.settle(1, 'success')).rejects.toThrow('simulated lost Redis acknowledgement');
+    expect(await admission.lease.settle(1, 'success')).toEqual({
+      reservationId: admission.lease.reservation.id, reservedUnits: 1, actualUnits: 1, releasedUnits: 0, outcome: 'success',
     });
   });
 
   it('fails closed after an admission write whose acknowledgement was lost', async () => {
     const lossyClient = new LoseNextReplyClient(client);
     const control = new UsageControl(new RedisUsageStore(lossyClient), policy(1));
-
     lossyClient.loseNextReply = true;
-    await expect(control.reserve(request('op-a'))).rejects.toThrow(
-      'simulated lost Redis acknowledgement',
-    );
-
-    const sameOperation = await control.reserve(request('op-a'));
-    expect(sameOperation).toEqual({ allowed: false, reason: 'duplicate_operation' });
-
-    const differentOperation = await control.reserve(request('op-b'));
-    expect(differentOperation).toEqual({
-      allowed: false,
-      reason: 'quota_exceeded',
-      remaining: 0,
+    await expect(control.reserve(request('op-a'))).rejects.toThrow('simulated lost Redis acknowledgement');
+    expect(await control.reserve(request('op-a'))).toEqual({ allowed: false, reason: 'duplicate_operation' });
+    expect(await control.reserve(request('op-b'))).toEqual({
+      allowed: false, reason: 'quota_exceeded', limitingBudgetKey: 'month:user-1:2026-08', remaining: 0,
     });
   });
 
-  it('reclaims an abandoned reservation after its lease expires', async () => {
-    const control = new UsageControl(new RedisUsageStore(client), policy(1, 40));
-    const first = await control.reserve(request('op-a'));
-    expect(first.allowed).toBe(true);
-
+  it('reclaims an abandoned pending reservation from every budget after lease expiry', async () => {
+    const control = new UsageControl(new RedisUsageStore(client), multiPolicy(1, 40));
+    expect((await control.reserve(request('op-a', 'user-1', { tenantId: 'tenant-a' }))).allowed).toBe(true);
     await sleep(80);
-    const second = await control.reserve(request('op-b'));
-    expect(second.allowed).toBe(true);
+    expect((await control.reserve(request('op-b', 'user-2', { tenantId: 'tenant-a' }))).allowed).toBe(true);
   });
 
-  it('charges a cost-liable reservation if the process disappears before settlement', async () => {
-    const control = new UsageControl(new RedisUsageStore(client), policy(1, 40));
-    const first = await control.reserve(request('op-a'));
+  it('charges every budget when a cost-liable reservation expires before settlement', async () => {
+    const control = new UsageControl(new RedisUsageStore(client), multiPolicy(1, 40));
+    const first = await control.reserve(request('op-a', 'user-1', { tenantId: 'tenant-a' }));
     if (!first.allowed) throw new Error('expected admission');
     await first.lease.markLiable();
-
     await sleep(80);
-    const second = await control.reserve(request('op-b'));
-    expect(second).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
-    const retry = await control.reserve(request('op-a'));
-    expect(retry).toEqual({ allowed: false, reason: 'duplicate_operation' });
+    expect(await control.reserve(request('op-b', 'user-2', { tenantId: 'tenant-a' }))).toEqual({
+      allowed: false, reason: 'quota_exceeded', limitingBudgetKey: 'tenant:tenant-a:monthly', remaining: 0,
+    });
+    expect(await control.reserve(request('op-a', 'user-1', { tenantId: 'tenant-a' }))).toEqual({ allowed: false, reason: 'duplicate_operation' });
   });
 
   it('fails safely if mark-liable was applied but its acknowledgement was lost', async () => {
@@ -167,22 +186,18 @@ integration('RedisUsageStore', () => {
     const control = new UsageControl(new RedisUsageStore(lossyClient), policy(1, 40));
     const first = await control.reserve(request('op-a'));
     if (!first.allowed) throw new Error('expected admission');
-
     lossyClient.loseNextReply = true;
     await expect(first.lease.markLiable()).rejects.toThrow('simulated lost Redis acknowledgement');
     await sleep(80);
-
-    const second = await control.reserve(request('op-b'));
-    expect(second).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+    expect(await control.reserve(request('op-b'))).toEqual({
+      allowed: false, reason: 'quota_exceeded', limitingBudgetKey: 'month:user-1:2026-08', remaining: 0,
+    });
   });
 
   it('does not use the application clock for lease expiry calculations', async () => {
-    const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => {
-      throw new Error('application clock must not be used by RedisUsageStore');
-    });
+    const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => { throw new Error('application clock must not be used by RedisUsageStore'); });
     const control = new UsageControl(new RedisUsageStore(client), policy(1, 200));
-    const first = await control.reserve(request('op-a'));
-    expect(first.allowed).toBe(true);
+    expect((await control.reserve(request('op-a'))).allowed).toBe(true);
     expect(dateNow).not.toHaveBeenCalled();
   });
 
@@ -190,43 +205,32 @@ integration('RedisUsageStore', () => {
     const control = new UsageControl(new RedisUsageStore(client), policy(1, 50));
     const first = await control.reserve(request('op-a'));
     if (!first.allowed) throw new Error('expected admission');
-
     await sleep(30);
     await first.lease.renew(120);
     await sleep(50);
-
-    const second = await control.reserve(request('op-b'));
-    expect(second).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+    expect(await control.reserve(request('op-b'))).toEqual({
+      allowed: false, reason: 'quota_exceeded', limitingBudgetKey: 'month:user-1:2026-08', remaining: 0,
+    });
   });
 
-  it('expires settled idempotency tombstones after the configured retention', async () => {
-    const control = new UsageControl(
-      new RedisUsageStore(client, { idempotencyTtlMs: 40 }),
-      policy(2),
-    );
+  it('expires settled idempotency tombstones after configured retention', async () => {
+    const zeroPolicy: UsagePolicy = {
+      quote() { return { decision: 'allow', units: 0, budgets: [{ key: 'shared', limit: 1 }] }; },
+    };
+    const control = new UsageControl(new RedisUsageStore(client, { idempotencyTtlMs: 40 }), zeroPolicy);
     const first = await control.reserve(request('reusable-op'));
     if (!first.allowed) throw new Error('expected admission');
-    await first.lease.settle(1, 'success');
-
-    const immediate = await control.reserve(request('reusable-op'));
-    expect(immediate).toEqual({ allowed: false, reason: 'duplicate_operation' });
-
+    await first.lease.settle(0, 'success');
+    expect(await control.reserve(request('reusable-op'))).toEqual({ allowed: false, reason: 'duplicate_operation' });
     await sleep(80);
-    const afterRetention = await control.reserve(request('reusable-op'));
-    expect(afterRetention.allowed).toBe(true);
+    expect((await control.reserve(request('reusable-op'))).allowed).toBe(true);
   });
 });
 
 describe('RedisUsageStore failure behavior', () => {
   it('fails closed when Redis admission is unavailable', async () => {
-    const store = new RedisUsageStore({
-      async eval() {
-        throw new Error('Redis unavailable');
-      },
-    });
-    const control = new UsageControl(store, policy(1));
-
-    await expect(control.reserve(request('op-a'))).rejects.toThrow('Redis unavailable');
+    const store = new RedisUsageStore({ async eval() { throw new Error('Redis unavailable'); } });
+    await expect(new UsageControl(store, policy(1)).reserve(request('op-a'))).rejects.toThrow('Redis unavailable');
   });
 });
 

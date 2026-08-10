@@ -1,17 +1,36 @@
 {
-  "name": "@mcp-usage-control/mcp",
-  "version": "0.0.0",
-  "private": true,
+  "name": "mcp-usage-control-mcp",
+  "version": "0.1.0",
+  "description": "MCP TypeScript SDK v2 adapter for mcp-usage-control.",
   "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": "./dist/index.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
+    "directory": "packages/mcp"
+  },
+  "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
+  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
+  "keywords": ["mcp", "model-context-protocol", "usage", "quota", "middleware"],
+  "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@mcp-usage-control/core": "workspace:*"
+    "mcp-usage-control": "workspace:^"
   },
   "peerDependencies": {
     "@modelcontextprotocol/server": "^2.0.0"

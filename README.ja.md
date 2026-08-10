@@ -1,14 +1,29 @@
 # mcp-usage-control
 
+[![CI](https://github.com/git-ksk/mcp-usage-control/actions/workflows/ci.yml/badge.svg)](https://github.com/git-ksk/mcp-usage-control/actions/workflows/ci.yml)
+
 [English](README.md) | [日本語](README.ja.md)
 
 **MCP tool実行向けの、同時実行に強いusage enforcement runtimeです。**
 
-> Status: pre-alpha。APIとpackage名はまだ固定していません。workspace packageは意図的にnpm未公開です。
+`mcp-usage-control` は、Model Context Protocol (MCP) のtool実行を対象に、entitlement・usage budget・credit消費を安全に制御するprovider-neutral runtimeです。v0.1では、parallel call、retry、failure、長時間handler、process消失があってもadmission / settlementを壊しにくいことを中心にしています。
 
-`mcp-usage-control` は、Model Context Protocol (MCP) のtool実行を対象に、entitlement・usage budget・credit消費を安全に制御するprovider-neutralなruntimeです。
+payment processor、MCP Gateway、OAuth provider、billing dashboard、一般的なrate limiter自体は対象外です。
 
-payment processor、MCP Gateway、OAuth provider、一般的なrate limiter自体を目的にはしていません。agentのretry、parallel tool call、timeout、長時間実行、upstream cost発生後のfailure、settlement前のprocess消失でもusage accountingを壊さないことを狙います。
+## Install
+
+```console
+npm install mcp-usage-control
+```
+
+必要なadapterだけ追加します。
+
+```console
+npm install mcp-usage-control-mcp @modelcontextprotocol/server
+npm install mcp-usage-control-redis redis
+```
+
+Node.js 20+が必要です。repository CIではNode.js 20 / 22、Redis 7、公式MCP TypeScript SDK v2のclient/handler pathをtestします。
 
 ## Core lifecycle
 
@@ -18,133 +33,171 @@ principal -> policy/entitlement -> quote -> atomic reserve -> mark liable -> exe
                                                 |----------- renew --------|
 ```
 
-重要なのはautomatic rollbackではなく **settlement** です。toolが失敗しても、その前に外部API・DB・compute resourceを消費している場合があります。
+重要なのはautomatic rollbackではなく **settlement** です。toolが失敗しても、その前に外部API、DB、compute resourceなどのmetered resourceを消費している場合があります。
 
-reservationは最初pendingです。metered execution boundaryへ入る直前にcost-liableへ遷移します。pending leaseが実行前にexpireした場合はcapacityを解放できますが、cost-liable leaseが実行開始後にexpireした場合はfull reservationを保守的に消費済みとして維持します。これによりupstream work後のprocess crashがrefundになることを防ぎます。
+reservationは最初 `pending` です。metered execution直前に `cost-liable` へ遷移します。pending leaseがexpireした場合はcapacityを解放できますが、cost-liable leaseがexecution開始後にexpireした場合はfull reservationを保守的に維持し、process crashがrefundになることを防ぎます。
 
-## 現在のpackage
+## Packages
 
-- `@mcp-usage-control/core`
-  - policy-driven credit quote / principal-scoped admission
-  - atomic reservation contract
-  - pending -> cost-liable transition
-  - renewable lease
-  - outcome-aware settlement
-  - duplicate operation protection
-  - in-memory reference store
-- `@mcp-usage-control/mcp`
-  - `@modelcontextprotocol/server` v2 **single-round** tool handler adapter
-  - handler entry前にleaseをcost-liable化
-  - automatic lease heartbeat
-  - normal success / MCP `isError: true` / thrown errorを区別
-  - classifier失敗時はfull reservationを保守的にcharge
-  - ambiguous settlement failureをblind retryしない
-  - MCP v2 `input_required` はsuspend/resume accounting実装まで明示的に未対応
-- `@mcp-usage-control/redis`
-  - Luaによるatomic reserve / mark-liable / renew / settle
-  - Redis server timeによるlease判定。application clock skew非依存
-  - state-dependent expiry recovery
-  - bounded expiry / idempotency cleanup
-  - operation IDをcollision-safe tuple encodeしてからhash化
-  - Redis Clusterで同一hash-slotに収まるtransaction domain
-  - CIで実Redis integration test
+- **`mcp-usage-control`** — core policy、atomic admission contract、renewable lease、settlement、idempotency、in-memory reference store。
+- **`mcp-usage-control-mcp`** — `@modelcontextprotocol/server` v2 single-round tool handler adapter。
+- **`mcp-usage-control-redis`** — LuaとRedis server timeを使うatomic Redis store。
 
-pre-alpha中はpackage名とpublic contract確定前の誤publishを防ぐため、workspace packageを `private: true` にしています。
+3 packageともESM / Node.js 20+です。
 
-## Documentation
+## Atomic multi-budget admission
 
-- **はじめに:** [Getting started](docs/getting-started.ja.md)
-- **MCP SDK v2 integration:** [MCP integration](docs/mcp-integration.ja.md)
-- **設計とinvariant:** [Architecture](docs/architecture.ja.md)
-- **Production storage:** [Redis adapter](docs/redis.ja.md)
-- **API:** [API reference](docs/api-reference.ja.md)
-- **Release policy:** [Release policy](docs/releasing.ja.md)
-- **一覧:** [Documentation index](docs/README.ja.md)
-
-Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md) · [Support](SUPPORT.ja.md) · [Code of Conduct](CODE_OF_CONDUCT.ja.md)
-
-## Sourceから確認
-
-```console
-git clone https://github.com/git-ksk/mcp-usage-control.git
-cd mcp-usage-control
-pnpm install
-pnpm check
-```
-
-Node.js 20+ / pnpm 10が必要です。CIではNode.js 20 / 22、実Redis 7、公式MCP SDKのClient/handler integration pathまでtestします。
-
-## Example
+1つのlogical invocationで、同じcostを複数budgetへ同時にreserveできます。例えばuser daily + user monthly + tenant monthlyです。
 
 ```ts
-const control = new UsageControl(
-  new MemoryUsageStore(),
-  {
-    quote(request) {
-      return {
-        decision: 'allow',
-        units: request.tool === 'full_export' ? 5 : 1,
-        budget: {
-          key: `month:${request.principal.id}:2026-08`,
-          limit: request.principal.plan === 'pro' ? 2000 : 100,
-        },
-      };
-    },
+import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
+
+const policy: UsagePolicy = {
+  quote(request) {
+    const tenant = request.principal.tenantId ?? 'personal';
+    return {
+      decision: 'allow',
+      units: request.tool === 'full_export' ? 5 : 1,
+      budgets: [
+        { key: `day:user:${request.principal.id}:2026-08-10`, limit: 20 },
+        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
+        { key: `month:tenant:${tenant}:2026-08`, limit: 2_000 },
+      ],
+    };
   },
+};
+
+const control = new UsageControl(new MemoryUsageStore(), policy);
+```
+
+admissionは**all-or-nothing**です。参加budgetの1つでもquoted unitsを許可できなければ、他budgetだけがpartial reserveされることはありません。
+
+1 budgetだけの場合は、簡易形として `budget` も利用できます。
+
+## Idempotency scope
+
+replay protectionは次のtuple単位です。
+
+```text
+(tenantId, principal.id, tool, operationId)
+```
+
+同じlogical invocationのretryではstableな `operationId` を使ってください。これはidempotency inputであり、authentication / authorization credentialではありません。
+
+settled operationは有限期間tombstoneとしてreplay protectionされます。`MemoryUsageStore` / `RedisUsageStore` のdefault `idempotencyTtlMs` は24時間です。cost-liableになる前のpending reservationがexpireした場合はcapacityを解放し、recovery後にoperation IDを再利用できます。
+
+## Coreを直接使う例
+
+```ts
+const admission = await control.reserve({
+  operationId: 'logical-request-123',
+  principal: { id: 'user-42', tenantId: 'org-7', plan: 'free' },
+  tool: 'search',
+  args: { query: 'example' },
+});
+
+if (!admission.allowed) {
+  throw new Error(`usage denied: ${admission.reason}`);
+}
+
+await admission.lease.markLiable();
+try {
+  const result = await performMeteredWork();
+  await admission.lease.settle(1, 'success');
+  return result;
+} catch (error) {
+  // actualに発生したcostをsettleします。metered resource未消費を
+  // 証明できる場合のみ0を使います。
+  await admission.lease.settle(admission.lease.reservedUnits, 'error');
+  throw error;
+}
+```
+
+長時間実行ではactive leaseをrenewする必要があります。MCP adapterはdefaultでheartbeatを行います。coreを直接利用する場合は必要に応じて明示的にrenewしてください。
+
+## MCP SDK v2 adapter
+
+```ts
+import { protectTool } from 'mcp-usage-control-mcp';
+
+server.registerTool(
+  'search',
+  { /* input schema, description, ... */ },
+  protectTool(
+    {
+      control,
+      tool: 'search',
+      principal: ctx => ({ id: ctx.http.authInfo.subject }),
+      operationId: (_args, ctx) => String(ctx.mcpReq.id),
+    },
+    async (args, ctx) => search(args, ctx),
+  ),
 );
 ```
 
-MCP single-round tool handlerでは `protectTool()` がreserve、cost-liable化、handler実行中のrenew、result classification、settlementまでを扱います。未分類errorやclassifier failureは保守的にchargeします。
+**input schemaがないtool**では `noInput: true` を指定します。MCP SDK v2のpublic callback typeと実runtime dispatch shapeに差があり、さらにempty objectはempty schemaの正当なinputにもなり得るため、自動推測はしません。
 
-Production Redis:
+`protectTool()` は以下をhandler boundaryで扱います。
+
+- execution前のreserve。
+- handler entry直前のcost-liable化。
+- handler実行中のlease heartbeat。
+- normal success / MCP `{ isError: true }` / thrown errorの区別。
+- classifier failure時のfull reservationによる保守的settlement。
+- ambiguous settlement failureをblind retryしないこと。
+
+### `input_required` のsupport boundary
+
+v0.1の `protectTool()` はMCP v2 multi-round `input_required` flowを**意図的に未対応**とします。fresh requestをまたぐ正しいreservation suspend/resume semanticsが必要なためです。adapterはsilentなroundごとの二重課金やreplay deadlockを避けるため、該当resultを検出すると保守的にsettleして `UnsupportedMcpUsageFlowError` を返します。将来設計はIssue #14で追跡します。
+
+## Redis production store
 
 ```ts
 import { createClient } from 'redis';
-import { RedisUsageStore } from '@mcp-usage-control/redis';
+import { RedisUsageStore } from 'mcp-usage-control-redis';
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
 const store = new RedisUsageStore(redis);
 ```
 
-production利用前に [Redis adapter](docs/redis.ja.md) を確認してください。Lua atomicityだけではpersistence / failover durabilityは保証されません。必要なaccounting guaranteeに合わせてRedis HA / persistenceを選定します。
+v0.1 Redis storeはmulti-budget reserve、`markLiable`、renew、settlement、expiry recovery、replay protectionを1つのRedis Cluster transaction domain内で処理します。lease / tombstoneの時刻はapplication `Date.now()` ではなくRedis server `TIME` を使います。
+
+Lua atomicityとpersistence / failover durabilityは別です。必要なaccounting loss toleranceに合わせてRedis HA / persistenceを設定してください。financial-gradeなdurable ledgerが必要なら、enforcement stateを別のdurable systemへreconcileします。
+
+production利用前に [Redis adapter](docs/redis.ja.md) を確認してください。
 
 ## Safety invariants
 
-1. quota比較とreservation作成は1 store operationです。`check -> execute -> record` にはしません。
-2. 同じprincipal / operation IDはreplay protection期間中に2つのreservationを取得できません。
-3. metered execution boundaryへ入る時点でleaseをcost-liableへ遷移します。
-4. expired pending reservationはcapacityを解放し、expired cost-liable reservationはfull chargeを維持します。
-5. active long-running leaseはrenew可能です。
-6. 現行modelでは `actualUnits <= reservedUnits` が必要です。
-7. 同じsettlement replayはidempotent、異なるsettlementはerrorです。
-8. MCP `isError: true` resultをsuccessとして扱いません。
-9. cost-classification failureではfull reservationをsettleしてからerrorを表面化します。
-10. ambiguous settlement failureは表面化し、blind retryしません。
-11. storage failureを新規admissionのallowへ変換しません。
-12. Redis lease時刻はapplication hostではなくRedisから取得します。
+1. quota比較とreservation作成を1つのstore operationで行います。`check -> execute -> record` にはしません。
+2. 適用されるすべてのbudgetをatomicにreserveするか、どれもreserveしません。
+3. replay protectionは `(tenantId, principal.id, tool, operationId)` 単位です。
+4. metered execution boundaryへ入る時点でcost-liableへ遷移します。
+5. expired pending reservationはcapacityを解放し、expired cost-liable reservationはfull chargeを維持します。
+6. long-running active leaseはrenew可能です。
+7. v0.1では `actualUnits <= reservedUnits` が必要です。
+8. identical settlement replayはidempotent、conflicting settlementはfailします。
+9. MCP `isError: true` をsuccessとして分類しません。
+10. cost-classification failureでは保守的settlement後にerrorを表面化します。
+11. ambiguous settlement failureをblind retryしません。
+12. storage failureをadmissionのallowへ変換しません。
+13. Redis lease / tombstone時刻はapplication hostではなくRedisから取得します。
 
-詳しくは [Architecture](docs/architecture.ja.md) を参照してください。
+## Documentation
 
-## 現在の重要な制約: `input_required`
+- [Getting started](docs/getting-started.ja.md)
+- [MCP SDK v2 integration](docs/mcp-integration.ja.md)
+- [Architecture / invariant](docs/architecture.ja.md)
+- [Redis adapter](docs/redis.ja.md)
+- [API reference](docs/api-reference.ja.md)
+- [Release policy](docs/releasing.ja.md)
+- [Documentation index](docs/README.ja.md)
 
-MCP v2 multi-round `input_required` flowではfresh request間でreservationをsuspend/resumeするsemanticsが必要です。現在の `protectTool()` は、roundごとのsilent課金やduplicate operation deadlockを避けるため明示的にrejectします。dedicated supportが入るまでproductionの `input_required` toolにはwrapしないでください。
+Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md) · [Support](SUPPORT.ja.md) · [Code of Conduct](CODE_OF_CONDUCT.ja.md)
 
-## v0.1予定
+## v0.1以降のscope
 
-- daily + monthly + tenant等のatomic multi-budget admission
-- operation tombstone / principal-tenant scope semanticsの確定
-- MCP `input_required` suspend/resume accounting、または意図的に確定したsupport boundary
-- observability hook
-- `pnpm-lock.yaml` commit、frozen CI、package pack test、npm release workflow
-
-OpenMeter、Unkey、Stripe、RevenueCat、x402等はcore dependencyではなくintegration candidateとして扱います。
-
-## Contributing
-
-reservation、liability、retry、expiry、settlement behaviorの変更はcorrectness / security sensitiveです。対応するconcurrency / failure testを含めてください。詳しくは [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照してください。
-
-quota bypass、double spending、cross-tenant leakage、replay abuse、inconsistent settlementにつながる脆弱性はpublic Issueにせず [SECURITY.ja.md](SECURITY.ja.md) に従ってください。
+provider-neutral observability hookと、本物の `input_required` suspend/resume accountingはfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
 
 ## License
 

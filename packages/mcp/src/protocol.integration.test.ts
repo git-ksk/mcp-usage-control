@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
-import { MemoryUsageStore, UsageControl, type UsagePolicy } from '@mcp-usage-control/core';
+import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
 import { protectTool } from './index.js';
 
 type TextToolResult = {
@@ -42,9 +42,7 @@ describe('MCP protocol integration', () => {
   it('normalizes the SDK no-input runtime shape and preserves MCP tool errors', async () => {
     const policy: UsagePolicy = {
       quote(request) {
-        if (request.operationId !== 'after-tool-error') {
-          expect(request.args).toBeUndefined();
-        }
+        if (request.operationId !== 'after-tool-error') expect(request.args).toBeUndefined();
         return { decision: 'allow', units: 1, budget: { key: 'shared', limit: 1 } };
       },
     };
@@ -74,10 +72,7 @@ describe('MCP protocol integration', () => {
           async (args, ctx): Promise<TextToolResult> => {
             expect(args).toBeUndefined();
             expect(ctx.mcpReq.method).toBe('tools/call');
-            return {
-              content: [{ type: 'text', text: 'not found' }],
-              isError: true,
-            };
+            return { content: [{ type: 'text', text: 'not found' }], isError: true };
           },
         ),
       );
@@ -107,10 +102,7 @@ describe('MCP protocol integration', () => {
     const client = await connect(server => {
       server.registerTool(
         'echo',
-        {
-          description: 'Echo a value',
-          inputSchema: z.object({ query: z.string() }),
-        },
+        { description: 'Echo a value', inputSchema: z.object({ query: z.string() }) },
         protectTool<{ query: string }, TextToolResult>(
           {
             control,
@@ -187,10 +179,7 @@ describe('MCP protocol integration', () => {
             operationId: (_args, ctx) => String(ctx.mcpReq.id),
           },
           async (): Promise<TextToolResult> =>
-            ({
-              resultType: 'input_required',
-              inputRequests: {},
-            }) as never,
+            ({ resultType: 'input_required', inputRequests: {} }) as never,
         ),
       );
     });
