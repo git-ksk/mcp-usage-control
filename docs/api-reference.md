@@ -102,11 +102,11 @@ The v0.1 event union contains:
 - `reservation.recovered`
 - `operation.error`
 
-Observer delivery is best-effort and non-blocking. Synchronous observer throws and asynchronous promise rejections are swallowed and never change admission/settlement state. Tool arguments and raw exception messages are not captured automatically.
+Observer delivery is best-effort and outside the enforcement outcome. `onEvent()` is invoked inline, but a returned promise is not awaited. Keep synchronous callback work lightweight and offload network/durable I/O. Synchronous observer throws and asynchronous promise rejections are swallowed and never change admission/settlement state. Tool arguments and raw exception messages are not captured automatically.
 
 `UsageEventMetadata` is an explicit opt-in `Record<string, string | number | boolean | null>`.
 
-See [Observability](observability.md) for event fields, privacy/cardinality guidance, Redis aggregate recovery behavior, and delivery guarantees.
+See [Observability](observability.md) for event fields, privacy/cardinality guidance, replay deduplication, Redis aggregate recovery behavior, and delivery guarantees.
 
 ### `UsageControl`
 
@@ -138,7 +138,7 @@ type AdmissionResult =
     };
 ```
 
-Store denial reasons are `quota_exceeded` and `duplicate_operation`. `quota_exceeded` can identify the limiting budget and its remaining units. Policy denials use the policy-provided reason.
+Store denial reasons are `quota_exceeded` and `duplicate_operation`. `quota_exceeded` can identify the limiting budget and its remaining units. Policy denials use the policy-provided reason. Because policy denial reasons can be emitted to observers, applications should use bounded non-secret reason codes rather than free-form diagnostic text.
 
 ### `ReservationRecord`
 
@@ -185,7 +185,7 @@ interface SettlementResult {
 }
 ```
 
-Identical settlement replay is idempotent during tombstone retention. A conflicting actual-unit/outcome replay fails. Observability is not a durable ledger; consumers that derive counters from events must account for retries and best-effort delivery.
+Identical settlement replay is idempotent during tombstone retention. A conflicting actual-unit/outcome replay fails. Calling an identical idempotent settlement again can emit another identical `settlement.completed` event; downstream consumers that require de-duplication can key on `(reservationId, actualUnits, outcome)`. Observability is not a durable ledger.
 
 ### `MemoryUsageStore`
 
