@@ -39,6 +39,7 @@ jobs:
       - run: pnpm check
       - name: Pack public packages
         run: |
+          rm -rf /tmp/muc-packs
           mkdir -p /tmp/muc-packs
           pnpm --dir packages/core pack --pack-destination /tmp/muc-packs
           pnpm --dir packages/mcp pack --pack-destination /tmp/muc-packs
@@ -64,3 +65,26 @@ jobs:
               exit 1
             fi
           done
+      - name: Install tarballs in a clean consumer project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/muc-consumer
+          mkdir -p /tmp/muc-consumer
+          cd /tmp/muc-consumer
+          npm init -y >/dev/null
+          npm install \
+            /tmp/muc-packs/mcp-usage-control-0.1.0.tgz \
+            /tmp/muc-packs/mcp-usage-control-mcp-0.1.0.tgz \
+            /tmp/muc-packs/mcp-usage-control-redis-0.1.0.tgz \
+            @modelcontextprotocol/server@2.0.0 \
+            redis@6.2.0 \
+            --ignore-scripts
+          node --input-type=module <<'NODE'
+          import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
+          import { protectTool } from 'mcp-usage-control-mcp';
+          import { RedisUsageStore } from 'mcp-usage-control-redis';
+          if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore].every(Boolean)) {
+            throw new Error('public package import smoke test failed');
+          }
+          NODE
