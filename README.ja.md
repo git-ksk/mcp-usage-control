@@ -108,9 +108,11 @@ const control = new UsageControl(store, policy, {
 });
 ```
 
-eventはadmission accepted / denied、settlement completed、expiry recovery、policy / store errorを扱います。observer deliveryは **best-effort / non-blocking** で、observer failureがquota stateを変更することはありません。tool argumentsとraw exception messageは自動収集せず、custom metadataは明示opt-inです。
+eventはadmission accepted / denied、settlement completed、expiry recovery、policy / store errorを扱います。observer deliveryは **best-effortでenforcement outcomeの外側** です。返されたPromiseはawaitせず、observer failureがquota stateを変更することはありません。`onEvent()` 自体はinlineで呼ばれるため、同期処理は軽量にしnetwork / durable I/Oはoffloadしてください。tool argumentsとraw exception messageは自動収集せず、custom metadataは明示opt-inです。
 
-runtime IDはhigh-cardinalityになり得ます。unique principal / operation / reservation / user-specific budget IDをmetric labelへ使わないでください。event field、privacy指針、Redis aggregate recovery、delivery guaranteeは [Observability](docs/observability.ja.md) を参照してください。
+同一内容のidempotent settlement replayでも同じ `settlement.completed` eventが再発火する場合があります。二重計上を避けたいanalyticsは `(reservationId, actualUnits, outcome)` 等のstable keyでdedupeしてください。event stream自体はtransactional ledgerではありません。
+
+runtime IDはhigh-cardinalityになり得ます。unique principal / operation / reservation / user-specific budget IDをmetric labelへ使わないでください。event field、privacy指針、Redis aggregate recovery、replay guidance、delivery guaranteeは [Observability](docs/observability.ja.md) を参照してください。
 
 ## Coreを直接使う例
 
