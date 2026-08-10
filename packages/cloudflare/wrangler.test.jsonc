@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "mcp-usage-control-cloudflare-test",
+  "main": "./test/worker.ts",
+  "compatibility_date": "2026-08-10",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "USAGE_CONTROL",
+        "class_name": "UsageControlDurableObject"
+      }
+    ]
+  },
+  "exports": {
+    "UsageControlDurableObject": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "vars": {
+    "MCP_USAGE_TEST_TOKEN": "local-integration-token"
+  }
+}
