@@ -1,17 +1,36 @@
 {
-  "name": "@mcp-usage-control/redis",
-  "version": "0.0.0",
-  "private": true,
+  "name": "mcp-usage-control-redis",
+  "version": "0.1.0",
+  "description": "Atomic Redis usage store for mcp-usage-control.",
   "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": "./dist/index.js" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
+    "directory": "packages/redis"
+  },
+  "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
+  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
+  "keywords": ["mcp", "redis", "usage", "quota", "credits", "atomic"],
+  "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@mcp-usage-control/core": "workspace:*"
+    "mcp-usage-control": "workspace:^"
   },
   "peerDependencies": {
     "redis": "^6.2.0"
