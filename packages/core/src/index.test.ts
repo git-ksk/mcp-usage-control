@@ -6,16 +6,24 @@ const policy: UsagePolicy = {
     return {
       decision: 'allow',
       units: 1,
-      budget: { key: `monthly:${request.principal.id}`, limit: 1 },
+      budgets: [{ key: `monthly:${request.principal.id}`, limit: 1 }],
     };
   },
 };
 
-function request(operationId: string, principalId = 'user-1') {
+function request(
+  operationId: string,
+  principalId = 'user-1',
+  overrides: Partial<{ tenantId: string; tool: string }> = {},
+) {
   return {
     operationId,
-    principal: { id: principalId, plan: 'free' },
-    tool: 'search',
+    principal: {
+      id: principalId,
+      plan: 'free',
+      ...(overrides.tenantId === undefined ? {} : { tenantId: overrides.tenantId }),
+    },
+    tool: overrides.tool ?? 'search',
     args: {},
   };
 }
@@ -36,8 +44,74 @@ describe('UsageControl', () => {
     expect(results.filter(result => !result.allowed && result.reason === 'quota_exceeded')).toHaveLength(1);
   });
 
-  it('releases unused reserved units on settlement', async () => {
-    const control = new UsageControl(new MemoryUsageStore(), policy);
+  it('admits multiple budgets atomically and never leaves a partial reservation', async () => {
+    const store = new MemoryUsageStore();
+    const multiPolicy: UsagePolicy = {
+      quote(req) {
+        return {
+          decision: 'allow',
+          units: 1,
+          budgets: [
+            { key: `user:${req.principal.id}:daily`, limit: 2 },
+            { key: `tenant:${req.principal.tenantId}:monthly`, limit: 1 },
+          ],
+        };
+      },
+    };
+    const control = new UsageControl(store, multiPolicy);
+
+    const first = await control.reserve(request('op-a', 'user-1', { tenantId: 'tenant-a' }));
+    expect(first.allowed).toBe(true);
+
+    const denied = await control.reserve(request('op-b', 'user-2', { tenantId: 'tenant-a' }));
+    expect(denied).toEqual({
+      allowed: false,
+      reason: 'quota_exceeded',
+      limitingBudgetKey: 'tenant:tenant-a:monthly',
+      remaining: 0,
+    });
+
+    const otherTenant = await control.reserve(request('op-c', 'user-2', { tenantId: 'tenant-b' }));
+    expect(otherTenant.allowed).toBe(true);
+  });
+
+  it('prevents overlapping users from oversubscribing one shared tenant budget', async () => {
+    const sharedPolicy: UsagePolicy = {
+      quote(req) {
+        return {
+          decision: 'allow',
+          units: 1,
+          budgets: [
+            { key: `tenant:${req.principal.tenantId}:monthly`, limit: 1 },
+            { key: `user:${req.principal.id}:monthly`, limit: 10 },
+          ],
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), sharedPolicy);
+    const results = await Promise.all([
+      control.reserve(request('a', 'user-a', { tenantId: 'tenant-1' })),
+      control.reserve(request('b', 'user-b', { tenantId: 'tenant-1' })),
+    ]);
+
+    expect(results.filter(result => result.allowed)).toHaveLength(1);
+    expect(results.filter(result => !result.allowed)).toHaveLength(1);
+  });
+
+  it('releases unused reserved units from every budget on settlement', async () => {
+    const multiPolicy: UsagePolicy = {
+      quote(req) {
+        return {
+          decision: 'allow',
+          units: 1,
+          budgets: [
+            { key: `daily:${req.principal.id}`, limit: 1 },
+            { key: `monthly:${req.principal.id}`, limit: 1 },
+          ],
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), multiPolicy);
     const first = await control.reserve(request('op-a'));
     expect(first.allowed).toBe(true);
     if (!first.allowed) return;
@@ -47,23 +121,38 @@ describe('UsageControl', () => {
     expect(second.allowed).toBe(true);
   });
 
-  it('blocks duplicate operation IDs', async () => {
+  it('blocks duplicate logical operations within tenant/principal/tool scope', async () => {
     const control = new UsageControl(new MemoryUsageStore(), policy);
-    const first = await control.reserve(request('same-op'));
+    const first = await control.reserve(request('same-op', 'user-1', { tenantId: 'tenant-a' }));
     expect(first.allowed).toBe(true);
 
-    const duplicate = await control.reserve(request('same-op'));
+    const duplicate = await control.reserve(request('same-op', 'user-1', { tenantId: 'tenant-a' }));
     expect(duplicate).toEqual({ allowed: false, reason: 'duplicate_operation' });
   });
 
-  it('does not collide when principal and operation IDs contain delimiters', async () => {
-    const store = new MemoryUsageStore();
+  it('allows the same operation ID in a different tenant or tool scope', async () => {
     const widePolicy: UsagePolicy = {
       quote() {
-        return { decision: 'allow', units: 0, budget: { key: 'shared', limit: 10 } };
+        return { decision: 'allow', units: 0, budgets: [{ key: 'shared', limit: 10 }] };
       },
     };
-    const control = new UsageControl(store, widePolicy);
+    const control = new UsageControl(new MemoryUsageStore(), widePolicy);
+
+    const a = await control.reserve(request('same', 'user-1', { tenantId: 'tenant-a', tool: 'read' }));
+    const b = await control.reserve(request('same', 'user-1', { tenantId: 'tenant-b', tool: 'read' }));
+    const c = await control.reserve(request('same', 'user-1', { tenantId: 'tenant-a', tool: 'write' }));
+    expect(a.allowed).toBe(true);
+    expect(b.allowed).toBe(true);
+    expect(c.allowed).toBe(true);
+  });
+
+  it('does not collide when identity components contain delimiters', async () => {
+    const widePolicy: UsagePolicy = {
+      quote() {
+        return { decision: 'allow', units: 0, budgets: [{ key: 'shared', limit: 10 }] };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), widePolicy);
 
     const first = await control.reserve(request('b:c', 'a'));
     const second = await control.reserve(request('c', 'a:b'));
@@ -71,7 +160,24 @@ describe('UsageControl', () => {
     expect(second.allowed).toBe(true);
   });
 
-  it('makes identical settlement idempotent', async () => {
+  it('rejects duplicate budget keys deterministically', async () => {
+    const badPolicy: UsagePolicy = {
+      quote() {
+        return {
+          decision: 'allow',
+          units: 1,
+          budgets: [
+            { key: 'same', limit: 2 },
+            { key: 'same', limit: 3 },
+          ],
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), badPolicy);
+    await expect(control.reserve(request('op'))).rejects.toThrow('duplicate budget key: same');
+  });
+
+  it('makes identical settlement idempotent while the tombstone is retained', async () => {
     const control = new UsageControl(new MemoryUsageStore(), policy);
     const admission = await control.reserve(request('op-a'));
     if (!admission.allowed) throw new Error('expected admission');
@@ -79,6 +185,30 @@ describe('UsageControl', () => {
     const first = await admission.lease.settle(1, 'success');
     const second = await admission.lease.settle(1, 'success');
     expect(second).toEqual(first);
+  });
+
+  it('allows operation ID reuse after the settled idempotency tombstone expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+    const zeroPolicy: UsagePolicy = {
+      quote() {
+        return { decision: 'allow', units: 0, budgets: [{ key: 'shared', limit: 1 }] };
+      },
+    };
+    const control = new UsageControl(
+      new MemoryUsageStore({ idempotencyTtlMs: 50 }),
+      zeroPolicy,
+    );
+    const first = await control.reserve(request('same'));
+    if (!first.allowed) throw new Error('expected admission');
+    await first.lease.settle(0, 'success');
+
+    expect(await control.reserve(request('same'))).toEqual({
+      allowed: false,
+      reason: 'duplicate_operation',
+    });
+    await vi.advanceTimersByTimeAsync(51);
+    expect((await control.reserve(request('same'))).allowed).toBe(true);
   });
 
   it('keeps an active reservation allocated when its lease is renewed', async () => {
@@ -90,7 +220,7 @@ describe('UsageControl', () => {
         return {
           decision: 'allow',
           units: 1,
-          budget: { key: `monthly:${request.principal.id}`, limit: 1 },
+          budgets: [{ key: `monthly:${request.principal.id}`, limit: 1 }],
           reservationTtlMs: 30,
         };
       },
@@ -107,6 +237,7 @@ describe('UsageControl', () => {
     expect(duringRenewedLease).toEqual({
       allowed: false,
       reason: 'quota_exceeded',
+      limitingBudgetKey: 'monthly:user-1',
       remaining: 0,
     });
 
@@ -115,7 +246,7 @@ describe('UsageControl', () => {
     expect(afterRenewedLease.allowed).toBe(true);
   });
 
-  it('releases an expired reservation that never became cost-liable', async () => {
+  it('releases an expired pending reservation across every budget and permits operation reuse', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
     const expiringPolicy: UsagePolicy = {
@@ -123,21 +254,24 @@ describe('UsageControl', () => {
         return {
           decision: 'allow',
           units: 1,
-          budget: { key: 'monthly:user-1', limit: 1 },
+          budgets: [
+            { key: 'daily:user-1', limit: 1 },
+            { key: 'monthly:user-1', limit: 1 },
+          ],
           reservationTtlMs: 30,
         };
       },
     };
     const control = new UsageControl(new MemoryUsageStore(), expiringPolicy);
-    const first = await control.reserve(request('op-a'));
+    const first = await control.reserve(request('same-op'));
     expect(first.allowed).toBe(true);
 
     await vi.advanceTimersByTimeAsync(31);
-    const second = await control.reserve(request('op-b'));
+    const second = await control.reserve(request('same-op'));
     expect(second.allowed).toBe(true);
   });
 
-  it('charges the full reservation if a cost-liable lease expires before settlement', async () => {
+  it('charges every budget in full if a cost-liable lease expires before settlement', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
     const expiringPolicy: UsagePolicy = {
@@ -145,7 +279,10 @@ describe('UsageControl', () => {
         return {
           decision: 'allow',
           units: 1,
-          budget: { key: 'monthly:user-1', limit: 1 },
+          budgets: [
+            { key: 'daily:user-1', limit: 1 },
+            { key: 'monthly:user-1', limit: 1 },
+          ],
           reservationTtlMs: 30,
         };
       },
@@ -157,6 +294,11 @@ describe('UsageControl', () => {
 
     await vi.advanceTimersByTimeAsync(31);
     const second = await control.reserve(request('op-b'));
-    expect(second).toEqual({ allowed: false, reason: 'quota_exceeded', remaining: 0 });
+    expect(second).toEqual({
+      allowed: false,
+      reason: 'quota_exceeded',
+      limitingBudgetKey: 'daily:user-1',
+      remaining: 0,
+    });
   });
 });
