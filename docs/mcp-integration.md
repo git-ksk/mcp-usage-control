@@ -33,6 +33,12 @@ server.registerTool(
 
 The SDK still performs its normal argument validation before the wrapped handler runs.
 
+### Tools without an input schema
+
+The SDK v2 uses two callback invocation shapes: tools with an input schema are invoked as `(args, ctx)`, while tools without an input schema are invoked as `(ctx)`. `protectTool()` accepts both shapes and normalizes the no-input form so its policy/hooks and wrapped handler receive `args === undefined` plus the real `ServerContext`.
+
+This normalization is covered by the protocol integration tests. Do not infer a context from the first argument yourself when using `protectTool()`.
+
 ## Execution lifecycle
 
 For an admitted call, the wrapper performs:
@@ -135,6 +141,7 @@ Treat policy reasons as internal unless you intentionally map them to a safe MCP
 
 The repository tests the wrapper directly and also through the official SDK v2 `Client + createMcpHandler` in-process path. The protocol tests pin:
 
+- both SDK callback shapes, including no-input-schema `(ctx)` normalization;
 - `isError: true` preservation and tool-error accounting;
 - generic denial messages without internal reason disclosure;
 - explicit rejection of unsupported `input_required` flows.
