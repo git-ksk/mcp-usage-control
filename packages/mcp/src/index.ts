@@ -76,6 +76,22 @@ export class UnsupportedMcpUsageFlowError extends Error {
 }
 
 /**
+ * No-input-schema overload. Keeping this overload first lets TypeScript infer
+ * the concrete MCP result type from a zero-argument/two-ignored-argument
+ * application handler instead of widening it to `unknown`.
+ */
+export function protectTool<TResult>(
+  options: ProtectToolOptions<undefined, TResult>,
+  handler: (args: undefined, ctx: ServerContext) => MaybePromise<TResult>,
+): ProtectedToolHandler<undefined, TResult>;
+
+/** Input-schema overload. */
+export function protectTool<TArgs, TResult>(
+  options: ProtectToolOptions<TArgs, TResult>,
+  handler: (args: TArgs, ctx: ServerContext) => MaybePromise<TResult>,
+): ProtectedToolHandler<TArgs, TResult>;
+
+/**
  * Wrap an MCP v2 single-round tool handler with usage admission and settlement.
  *
  * The lease is marked cost-liable immediately before the application handler is
@@ -125,9 +141,6 @@ export function protectTool<TArgs, TResult>(
     }
 
     const { lease } = admission;
-    // This transition is deliberately before the handler. An ambiguous failure
-    // here prevents tool execution; if Redis applied the transition but lost the
-    // acknowledgement, expiry remains conservative rather than under-accounting.
     await lease.markLiable();
 
     const heartbeat = options.leaseHeartbeat === false ? noHeartbeat() : startLeaseHeartbeat(lease);
@@ -223,9 +236,6 @@ function startLeaseHeartbeat(lease: UsageLease): LeaseHeartbeat {
       inFlight = lease
         .renew()
         .then(() => undefined)
-        // Renewal failure does not imply the lease definitely expired. The
-        // reservation is already cost-liable, so expiry is conservative; final
-        // settlement will surface a lost/expired lease if ownership was lost.
         .catch(() => undefined)
         .finally(() => {
           inFlight = undefined;
