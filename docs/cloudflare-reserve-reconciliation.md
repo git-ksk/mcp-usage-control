@@ -45,6 +45,84 @@ const result = await reconcileRemoteCloudflareReserve(
 
 Do not use reconciliation as generic retry middleware. It is an explicit recovery step after a reserve result became ambiguous.
 
+## Canonical lost-ACK flow
+
+The safe consumer sequence is:
+
+```text
+reserve once
+  -> acknowledged success: continue normally
+  -> definite business denial: stop normally
+  -> ambiguous network/timeout: lookup once
+       -> active/pending: reattach the same reservation, then continue once
+       -> active/liable: do not execute again; recover already-started work
+       -> settled: do not execute again
+       -> expired/absent: fail closed according to the application recovery horizon
+       -> lookup transport/protocol failure: fail closed
+```
+
+A concrete `active/pending` recovery can use `UsageControl.resumeLease()` without calling policy or `reserve()` a second time:
+
+```ts
+import { UsageControl } from 'mcp-usage-control';
+import {
+  CloudflareUsageTransportError,
+  RemoteCloudflareUsageStore,
+} from 'mcp-usage-control-cloudflare';
+import { reconcileRemoteCloudflareReserve } from 'mcp-usage-control-cloudflare/reconciliation';
+
+const remoteOptions = {
+  endpoint: process.env.MCP_USAGE_CLOUDFLARE_URL!,
+  headers: () => ({
+    authorization: `Bearer ${process.env.MCP_USAGE_CLOUDFLARE_TOKEN!}`,
+  }),
+};
+const store = new RemoteCloudflareUsageStore(remoteOptions);
+const control = new UsageControl(store, policy);
+
+const reserveInput = {
+  request,
+  units,
+  budgets,
+  ttlMs,
+};
+
+try {
+  const reserved = await store.reserve(reserveInput);
+  // Handle the normal acknowledged StoreReserveResult here.
+  void reserved;
+} catch (error) {
+  const ambiguous =
+    error instanceof CloudflareUsageTransportError &&
+    (error.code === 'network' || error.code === 'timeout');
+  if (!ambiguous) throw error;
+
+  const reconciled = await reconcileRemoteCloudflareReserve(remoteOptions, reserveInput);
+
+  if (reconciled.status === 'active' && reconciled.state === 'pending') {
+    const lease = control.resumeLease({
+      reservation: reconciled.reservation,
+      ttlMs: reserveInput.ttlMs,
+    });
+
+    // Re-check any application-level "work not already started" invariant first.
+    await lease.markLiable();
+    // execute business work exactly once
+    await lease.settle(actualUnits, boundedOutcomeCode);
+  } else if (reconciled.status === 'active' && reconciled.state === 'liable') {
+    // Never execute the business operation again. Reconcile already-started work,
+    // then use the recovered reservation only for renew/settle as appropriate.
+  } else {
+    // settled / expired / absent are not permission to retry execution.
+    throw new Error('reserve reconciliation did not prove a safe pending continuation');
+  }
+}
+```
+
+The explicit branch is intentional. A helper that silently converts every reconciliation state back into a successful reserve would hide ambiguity and make duplicate business execution easier.
+
+A business `duplicate_operation` response is different from a lost ACK. It is a definite store result saying that the logical operation key is already protected; do not interpret it as the original reserve result and do not blindly retry it.
+
 ## Result states
 
 ### `active` / `pending`
@@ -55,7 +133,7 @@ Only resume execution when the application also knows the operation did not star
 
 ### `active` / `liable`
 
-The reservation exists and metered execution may already have started. Do **not** execute the operation again. Continue only through application-specific recovery/reconciliation of the already-started work.
+The reservation exists and metered execution may already have started. Do **not** execute the operation again. Continue only through application-specific recovery/reconciliation of the already-started work. The returned reservation can be reattached server-side when renew/settle is required, but reattachment is not permission to repeat the business side effect.
 
 ### `settled`
 
@@ -97,13 +175,20 @@ reserve -> pending -> liable -> settled
 
 Only normal `reserve`, `markLiable`, `renew`, `settle`, and expiry recovery operations change accounting state.
 
+## Transport behavior
+
+Reconciliation uses the same bounded remote-transport semantics as `RemoteCloudflareUsageStore`: one `timeoutMs` deadline covers asynchronous header resolution, HTTP fetch, response-body decoding, and protocol validation. No state-changing call is automatically retried.
+
+`CloudflareUsageTransportError` retains only bounded transport diagnostics. When an HTTP response exists, `status` is preserved for unauthorized/remote/protocol failures; arbitrary remote response bodies, credentials, and request identity values are never copied into the error.
+
 ## Operational guidance
 
 - reconcile only after an ambiguous reserve transport failure;
 - use the exact original request identity, units, and budgets;
 - do not automatically retry reserve before reconciliation;
+- distinguish `duplicate_operation` from transport ambiguity;
 - reconcile promptly, within the application's idempotency/retry horizon;
 - treat reconciliation transport/protocol failures as fail-closed;
 - never convert an unknown reconciliation state into unmetered execution.
 
-The local workerd integration suite simulates a committed reserve followed by a lost acknowledgement, performs concurrent read-only reconciliation, verifies that the original quota remains reserved, resumes the recovered reservation, settles it, and verifies capacity recovery.
+The local workerd integration suite simulates a committed reserve followed by a lost acknowledgement, performs concurrent read-only reconciliation, verifies that the original quota remains reserved, reattaches the recovered reservation through `UsageControl.resumeLease()`, settles it, and verifies capacity recovery.
