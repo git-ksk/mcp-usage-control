@@ -120,7 +120,7 @@ export interface UsageStore {
 }
 
 export type AdmissionResult =
-  | { allowed: true; lease: UsageLease }
+  | { allowed: true; lease: UsageLease; remainingByBudget: BudgetRemaining[] }
   | {
       allowed: false;
       reason: string;
@@ -393,6 +393,7 @@ export class UsageControl {
     return {
       allowed: true,
       lease: new UsageLease(this.store, result.reservation, ttlMs, this.observer, metadata),
+      remainingByBudget: result.remainingByBudget.map(balance => ({ ...balance })),
     };
   }
 }
