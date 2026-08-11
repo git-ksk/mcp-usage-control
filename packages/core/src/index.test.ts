@@ -301,4 +301,54 @@ describe('UsageControl', () => {
       remaining: 0,
     });
   });
+
+  it('reattaches to a trusted lease snapshot without quoting or reserving twice', async () => {
+    let quoteCalls = 0;
+    const resumablePolicy: UsagePolicy = {
+      quote(req) {
+        quoteCalls += 1;
+        return {
+          decision: 'allow',
+          units: 1,
+          budgets: [{ key: `monthly:${req.principal.id}`, limit: 1 }],
+          reservationTtlMs: 1_000,
+        };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), resumablePolicy);
+    const admission = await control.reserve(request('multi-round'));
+    if (!admission.allowed) throw new Error('expected admission');
+    await admission.lease.markLiable();
+
+    const persisted = JSON.parse(JSON.stringify(admission.lease.toResumeState()));
+    const resumed = control.resumeLease(persisted);
+    expect(quoteCalls).toBe(1);
+    expect(resumed.reservation).toEqual(admission.lease.reservation);
+
+    await resumed.renew(1_000);
+    await resumed.settle(0, 'multi_round_success');
+
+    const next = await control.reserve(request('after-resume'));
+    expect(next.allowed).toBe(true);
+    expect(quoteCalls).toBe(2);
+  });
+
+  it('returns detached resume snapshots and validates restored state', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const admission = await control.reserve(request('snapshot'));
+    if (!admission.allowed) throw new Error('expected admission');
+
+    const snapshot = admission.lease.toResumeState();
+    snapshot.reservation.budgetKeys.push('mutated');
+    expect(admission.lease.reservation.budgetKeys).not.toContain('mutated');
+
+    expect(() => control.resumeLease({ ...snapshot, ttlMs: 0 })).toThrow(/ttlMs/);
+    expect(() =>
+      control.resumeLease({
+        ...snapshot,
+        ttlMs: 1_000,
+        reservation: { ...snapshot.reservation, id: '' },
+      }),
+    ).toThrow(/id/);
+  });
 });
