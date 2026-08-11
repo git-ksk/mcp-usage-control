@@ -149,6 +149,19 @@ export interface UsageControlOptions {
   metadata?: UsageEventMetadata | ((request: UsageRequest) => UsageEventMetadata | undefined);
 }
 
+/**
+ * Serializable server-side state required to reattach to an already-reserved lease.
+ *
+ * This state is trusted application data, not a client credential. Do not send it to
+ * an untrusted client. Adapters that need a client round-trip should keep this state
+ * server-side and expose only an integrity-protected opaque reference.
+ */
+export interface UsageLeaseResumeState {
+  reservation: ReservationRecord;
+  ttlMs: number;
+  metadata?: UsageEventMetadata;
+}
+
 export class UsageLease {
   constructor(
     private readonly store: UsageStore,
@@ -160,6 +173,15 @@ export class UsageLease {
 
   get reservedUnits(): number {
     return this.reservation.reservedUnits;
+  }
+
+  /** Export a detached snapshot for trusted server-side suspend/resume workflows. */
+  toResumeState(): UsageLeaseResumeState {
+    return {
+      reservation: cloneReservationRecord(this.reservation),
+      ttlMs: this.ttlMs,
+      ...(this.metadata === undefined ? {} : { metadata: { ...this.metadata } }),
+    };
   }
 
   async markLiable(): Promise<MarkLiableResult> {
@@ -257,6 +279,25 @@ export class UsageControl {
       this.metadata = optionsOrTtl.metadata;
     }
     assertPositiveInteger(this.defaultReservationTtlMs, 'defaultReservationTtlMs');
+  }
+
+  /**
+   * Reattach to an existing reservation without calling policy.quote() or reserve().
+   *
+   * The caller must obtain `state` from a trusted server-side `UsageLease` snapshot.
+   * The underlying store remains authoritative: the first renew/settle still fails
+   * closed if the reservation expired, was settled, or otherwise conflicts.
+   */
+  resumeLease(state: UsageLeaseResumeState): UsageLease {
+    assertPositiveInteger(state.ttlMs, 'ttlMs');
+    const reservation = cloneReservationRecord(state.reservation);
+    return new UsageLease(
+      this.store,
+      reservation,
+      state.ttlMs,
+      this.observer,
+      state.metadata === undefined ? undefined : { ...state.metadata },
+    );
   }
 
   async reserve<TArgs>(request: UsageRequest<TArgs>): Promise<AdmissionResult> {
@@ -594,6 +635,40 @@ function validateRequestIdentity(request: UsageRequest): void {
   if (!request.operationId) throw new RangeError('operationId must be non-empty');
   if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
   if (!request.tool) throw new RangeError('tool must be non-empty');
+}
+
+function cloneReservationRecord(reservation: ReservationRecord): ReservationRecord {
+  if (typeof reservation.id !== 'string' || reservation.id.length === 0) {
+    throw new UsageStateError('Resume reservation id must be non-empty');
+  }
+  if (typeof reservation.operationId !== 'string' || reservation.operationId.length === 0) {
+    throw new UsageStateError('Resume operationId must be non-empty');
+  }
+  if (typeof reservation.principalId !== 'string' || reservation.principalId.length === 0) {
+    throw new UsageStateError('Resume principalId must be non-empty');
+  }
+  if (typeof reservation.tool !== 'string' || reservation.tool.length === 0) {
+    throw new UsageStateError('Resume tool must be non-empty');
+  }
+  if (!Array.isArray(reservation.budgetKeys) || reservation.budgetKeys.length === 0) {
+    throw new UsageStateError('Resume reservation must contain budget keys');
+  }
+  if (reservation.budgetKeys.some(key => typeof key !== 'string' || key.length === 0)) {
+    throw new UsageStateError('Resume budget keys must be non-empty strings');
+  }
+  assertNonNegativeInteger(reservation.reservedUnits, 'reservedUnits');
+  assertPositiveInteger(reservation.expiresAt, 'expiresAt');
+  return {
+    id: reservation.id,
+    operationId: reservation.operationId,
+    principalId: reservation.principalId,
+    ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+    ...(reservation.plan === undefined ? {} : { plan: reservation.plan }),
+    tool: reservation.tool,
+    budgetKeys: [...reservation.budgetKeys],
+    reservedUnits: reservation.reservedUnits,
+    expiresAt: reservation.expiresAt,
+  };
 }
 
 function requestIdentity(request: UsageRequest): {
