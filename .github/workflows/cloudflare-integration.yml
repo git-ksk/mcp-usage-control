@@ -38,6 +38,9 @@ jobs:
       - run: pnpm build
       - name: Run Durable Objects integration against local workerd
         shell: bash
+        env:
+          MCP_USAGE_CLOUDFLARE_TOKEN: local-integration-token
+          MCP_USAGE_CLOUDFLARE_OLD_TOKEN: rotated-out-local-token
         run: |
           set -euo pipefail
           pnpm dlx wrangler@4.114.0 dev --local \
