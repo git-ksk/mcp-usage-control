@@ -214,6 +214,55 @@ describe('RemoteCloudflareUsageStore', () => {
     expect(calls).toBe(1);
   });
 
+  it('applies timeoutMs to async rotating-header resolution', async () => {
+    let fetchCalled = false;
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      timeoutMs: 25,
+      headers: () => new Promise<HeadersInit>(() => {}),
+      fetch: async () => {
+        fetchCalled = true;
+        return new Response('{}', { status: 200 });
+      },
+    });
+
+    await expect(
+      store.reserve({ request, units: 1, budgets: [{ key: 'budget-a', limit: 10 }], ttlMs: 1_000 }),
+    ).rejects.toMatchObject({ code: 'timeout' });
+    expect(fetchCalled).toBe(false);
+  });
+
+  it('applies timeoutMs while reading a response body', async () => {
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      timeoutMs: 25,
+      fetch: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start() {
+              // Intentionally never enqueue or close: response decoding must still respect the call deadline.
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    });
+
+    await expect(
+      store.reserve({ request, units: 1, budgets: [{ key: 'budget-a', limit: 10 }], ttlMs: 1_000 }),
+    ).rejects.toMatchObject({ code: 'timeout' });
+  });
+
+  it.each([429, 503])('preserves HTTP %i as bounded metadata on remote failures', async status => {
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => new Response('{"error":"not-exposed"}', { status }),
+    });
+
+    await expect(
+      store.reserve({ request, units: 1, budgets: [{ key: 'budget-a', limit: 10 }], ttlMs: 1_000 }),
+    ).rejects.toMatchObject({ code: 'remote', status });
+  });
+
   it('emits bounded Cloudflare recovery events', async () => {
     const events: UsageEvent[] = [];
     const hash = 'a'.repeat(64);

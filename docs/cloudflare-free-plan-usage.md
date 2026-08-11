@@ -90,8 +90,8 @@ Cloudflare Free-plan limit exhaustion must not silently become a business quota 
 These are intentionally different paths:
 
 - **Business quota denial:** the Durable Object returns a successful protocol envelope with `accepted: false`, `reason: 'quota_exceeded'`. The remote caller receives a normal `StoreReserveResult` and may present a quota-specific response.
-- **Cloudflare / Durable Object failure:** the gateway converts an internal invocation failure to HTTP `503` without serializing the raw runtime exception. `RemoteCloudflareUsageStore` converts a non-success HTTP status to `CloudflareUsageTransportError` with code `remote`. The caller fails closed.
-- **Network/timeout ambiguity:** the remote client reports `network` or `timeout` and does not blindly retry.
+- **Cloudflare / Durable Object failure:** the gateway converts an internal invocation failure to HTTP `503` without serializing the raw runtime exception. `RemoteCloudflareUsageStore` converts a non-success HTTP status to `CloudflareUsageTransportError` with code `remote`. The caller fails closed. The error may expose only bounded numeric `status` metadata such as `429` or `503`; the remote response body is not propagated.
+- **Network/timeout ambiguity:** the remote client reports `network` or `timeout` and does not blindly retry. `timeoutMs` is a full-call deadline covering rotating-header resolution, fetch, and response-body/protocol decoding.
 
 Do not dynamically switch to a second quota ledger after a Cloudflare platform failure. Doing so would create split enforcement truth and can permit quota oversubscription.
 

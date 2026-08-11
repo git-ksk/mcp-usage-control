@@ -54,9 +54,9 @@ if (oldToken) {
 // platform-style limit/unavailability responses. These are infrastructure
 // failures, never business quota denials, and therefore must fail closed.
 if (isLocalWorkerd) {
-  for (const [pathname, operationId] of [
-    ['/test/platform-limit', 'platform-limit'],
-    ['/test/platform-unavailable', 'platform-unavailable'],
+  for (const [pathname, operationId, expectedStatus] of [
+    ['/test/platform-limit', 'platform-limit', 429],
+    ['/test/platform-unavailable', 'platform-unavailable', 503],
   ]) {
     const failureStore = new RemoteCloudflareUsageStore({
       endpoint: new URL(pathname, endpointUrl.origin).toString(),
@@ -64,8 +64,11 @@ if (isLocalWorkerd) {
     });
     await assert.rejects(
       () => reserve(failureStore, operationId, operationId, 1),
-      error => error instanceof CloudflareUsageTransportError && error.code === 'remote',
-      `${pathname} must remain a fail-closed platform error`,
+      error =>
+        error instanceof CloudflareUsageTransportError &&
+        error.code === 'remote' &&
+        error.status === expectedStatus,
+      `${pathname} must remain a fail-closed platform error with HTTP status metadata`,
     );
   }
 }
