@@ -39,6 +39,23 @@ principal -> policy/entitlement -> quote -> atomic reserve -> mark liable -> exe
 
 reservationは最初 `pending` です。metered execution直前に `cost-liable` へ遷移します。pending leaseがexpireした場合はcapacityを解放できますが、cost-liable leaseがexecution開始後にexpireした場合はfull reservationを保守的に維持し、process crashがrefundになることを防ぎます。
 
+## なぜrate limiterではないのか
+
+一般的なrequest rate limiterは「このrequestを開始してよいか」を主に判定します。しかしquotaがexecution中に消費される実resourceを表す場合、それだけでは不十分です。実行後にactual usageをsettleする必要があります。
+
+単純な `check -> execute -> increment` はconcurrencyでraceします。budget残量が1のとき、2 requestが同時に残量1を観測し、両方がmetered upstream operationを実行してからusageをincrementすると、1 unitのcapacityに対して2 unitsのworkをadmitしてしまいます。
+
+`mcp-usage-control` はexecution**前**にquota比較とreservation作成を1つのatomic store operationとして行います。admitされたcapacityを実行中holdし、execution boundaryでcost-liable化し、long-running workではrenewし、最後にactual usageへsettleします。retryやambiguous failureも単なるrequest countではなくstate machineとして扱います。
+
+| Category | 主な関心 | `mcp-usage-control` の違い |
+| --- | --- | --- |
+| Rate limiter | 時間窓あたりのrequest数 | execution前にmetered capacityをreserveし、実行後にactual usageへsettleする。 |
+| Billing/payment provider | invoice、payment、subscription | 意図的にscope外。moneyを処理せず、policy / entitlement decisionを入力として使う。 |
+| Gateway policy | centralized access / routing control | gateway必須ではなく、provider-neutral storeでtool execution周辺を直接enforceできる。 |
+| Transactional usage enforcement | admission + liability + settlement | これがprojectのcore category。 |
+
+外部billing / metering schemaはstableなobserver/event adapterを通じて**enforcement transactionの後段**へ接続します。external schemaの都合でatomic admission、liability、idempotency、expiry recovery、ambiguous settlement semanticsを弱めません。
+
 ## Packages
 
 - **`mcp-usage-control`** — core policy、atomic admission contract、renewable / resumable lease、settlement、idempotency、provider-neutral observability hook、in-memory reference store。
@@ -237,6 +254,7 @@ Worker設定、privacy、cleanup / cost behavior、GCP等からの利用は [Clo
 - [MCP SDK v2 integration](docs/mcp-integration.ja.md)
 - [Observability](docs/observability.ja.md)
 - [Architecture / invariant](docs/architecture.ja.md)
+- [Roadmap](docs/roadmap.ja.md)
 - [Redis adapter](docs/redis.ja.md)
 - [Cloudflare adapter](docs/cloudflare.ja.md)
 - [API reference](docs/api-reference.ja.md)
@@ -247,7 +265,9 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## v0.1以降のscope
 
-horizontal scaleするmulti-round MCP server向けのproduction-ready shared flow-store adapterとoptional vendor-specific telemetry adapterをfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
+horizontal scaleするmulti-round MCP server向けのproduction-ready shared flow-store adapter、third-party store向けconformance-style invariant kit、enforcement transaction外のoptional external telemetry / billing adapterをfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
+
+priority / boundaryの詳細は [Roadmap](docs/roadmap.ja.md) を参照してください。
 
 ## License
 
