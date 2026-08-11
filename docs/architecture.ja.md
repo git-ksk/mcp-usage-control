@@ -12,13 +12,25 @@ identity -> entitlement/policy -> quote -> atomic reserve -> mark liable -> exec
                                                           |------ renew -----|
 ```
 
-authentication、subscription billing、payment collection、dashboard、generic rate limiting、upstream pricingは責務外です。
+projectのcategoryは **transactional usage / quota enforcement** です。execution周辺のadmission、liability、lease recovery、settlementを扱います。
+
+authentication、subscription billing、payment collection、dashboard、generic rate limiting、gateway routing、upstream pricingは責務外です。
+
+external billing / metering integrationはenforcement transactionの外側に置きます。
+
+```text
+transactional enforcement core -> stable observer/event contract -> optional billing/telemetry adapter
+```
+
+external schemaはstableなoutcomeをconsumeできますが、reserve / liability / idempotency / expiry / settlement semanticsを再定義・弱体化してはいけません。
 
 ## なぜexecution前にreserveするのか
 
 `check -> execute -> record` にはtime-of-check/time-of-use raceがあります。並列agent callが同じremaining balanceを確認し、どのcallもusageを記録する前にすべて実行開始できるためです。
 
-そのため `UsageStore.reserve()` はduplicate検出、quota比較、reservation作成を1つのatomic store operationとして実行します。
+例えば残り1 unitのとき、2 requestが同時に `remaining = 1` を読み、両方がmetered upstream operationを実行してからusageをincrementすると、1 unitのcapacityに対して2 unitsのreal workをadmitしてしまいます。
+
+そのため `UsageStore.reserve()` はduplicate検出、quota比較、reservation作成をexecution**前**の1つのatomic store operationとして実行します。これが通常のrequest rate limiterとの主要な違いです。
 
 ## Multi-budget admission
 
@@ -49,11 +61,13 @@ expiry behaviorはstate-dependentです。
 
 これによりcrash-after-cost refundを防ぎます。generic MCP wrapperはprovider-specificなcost発生点を知らないためhandler entryをliability boundaryにします。このためhandler entry後・実upstream cost前のcrashは保守的にover-accountする可能性があります。より正確なboundaryが必要ならcore lifecycleを直接利用してください。
 
-## Renewable lease
+## Renewable / resumable lease
 
 固定TTLだけではlong-running workに危険です。実行中reservationをreclaimすると別operationが同じbudget capacityを再利用できてしまいます。
 
-`UsageStore.renew()` はactive leaseをatomicに延長します。`mcp-usage-control-mcp` はwrapped handler実行中defaultでheartbeatを行い、settlement前にheartbeatを止め、in-flight renewalの完了を待ちます。
+`UsageStore.renew()` はactive leaseをatomicに延長します。`mcp-usage-control-mcp` はwrapped handler実行中defaultでheartbeatを行い、settlementまたはmulti-round suspension前にheartbeatを止め、in-flight renewalの完了を待ちます。
+
+`UsageLease.toResumeState()` / `UsageControl.resumeLease()` はpolicy quote / reserveを再実行せず、trusted server-side stateから既存leaseへreattachする仕組みです。raw resume stateはclient credentialではなく、そのように扱ってはいけません。
 
 storage/network partitionがleaseより長く続く可能性はあります。renewalはprovider-specific fencingではありません。lease loss直後にupstream workを止める必要があるapplicationはmetered resource boundaryでfencing / cancellationを実装してください。
 
@@ -72,6 +86,32 @@ v0.1のsettlement rule:
 `actualUnits` はnon-negative safe integerかつ `reservedUnits` 以下です。dynamic-cost toolはsafe maximumをreserveし、settlement時にunused分をreleaseします。
 
 settlementはreservationに参加した全budgetへ同じactual unit countを適用します。
+
+## Failure / crash / ACK ambiguity
+
+state-changing operationはremoteで成功していてもcallerがACKを受け取れない場合があります。どのtransitionがambiguousになったかで安全な扱いが変わります。
+
+### Liability前のcrash
+
+leaseがpendingのままprocessが消えた場合、expiryでreservationを解放します。metered execution boundaryへ入った宣言がないためです。
+
+### Liability後のcrash
+
+`markLiable()` 後にprocessが消えた場合、expiryでfull reserved chargeを維持します。metered resourceを消費していないと安全に断定できません。
+
+### Reserve ACK loss
+
+`reserve()` 後のtimeoutは「commitされていない」場合と「commit済みでACKだけlost」の両方があります。availabilityを戻すために無関係なsecond reservationを作ってはいけません。store-specific reconciliationまたはstable logical-operation replayでoriginal reservationの存在を確認します。
+
+### Settlement ACK loss
+
+`settle()` 後のtimeoutもsettlement commit済みの可能性があります。different settlementをblindに発行するのは危険です。identical settlement replayはtombstone retention中idempotentで、conflicting replayはfail-closeします。
+
+### Multi-round token claim後のfailure
+
+MCP `input_required` resume tokenはapplicationへ再入場する前にone-time consumeされます。claim後にprocess / transportがfailした場合、wrapperはapplication handlerをblindに再実行しません。usage leaseは保守的に扱われ、completed business resultのreplayが必要なら別のbusiness idempotency / result reconciliation layerが必要です。
+
+このようなcaseがあるためruntimeはrequest counterではなくstate machineとして設計されています。
 
 ## Idempotency / replay protection
 
@@ -106,15 +146,19 @@ coreはMCP / storage vendorから独立です。production `UsageStore` には�
 
 `mcp-usage-control-redis` は1つのconfigurable Redis Cluster hash slot内でRedis-side Luaによりcontractを実装します。lease / tombstone判定にはRedis server `TIME` を使い、application hostのclock skewがaccountingを変えないようにします。
 
-## Redis atomicityとdurability
+将来のthird-party store compatibility kitでは、method名が一致するだけでcompatibilityをclaimできないよう、これらのinvariantを直接実行するconformance testを提供する方針です。
 
-LuaはRedis内部のatomic transitionを提供しますが、あらゆるcrash / failover / acknowledged-write-loss windowでのpersistenceを単独では保証しません。productionでは許容accounting lossに合わせてpersistence、replication、failover、backup、recoveryを構成してください。
+## Enforcement stateとfinancial ledger
 
-より強いfinancial ledgerが必要ならRedisをenforcement stateとして使い、別のdurable ledger / event systemへreconcileします。
+atomic enforcement stateが答えるのは「workを開始してよいか」「reserved capacityをどうfinalizeするか」です。それだけでfinancial-grade ledgerになるわけではありません。
+
+Redis、Durable Objects等のenforcement storeはinvoice / statutory record向けaccounting systemとは異なるpersistence / failover propertyを持ち得ます。より強いdurabilityが必要なら、admissionのauthoritative sourceはenforcement stateのままにし、stable enforcement outcomeを別durable ledger / event systemへreconcileします。
+
+reconciliationはdownstreamです。enforcement store failure後にbilling ledgerをdynamic fallback quota storeとして利用するとsource of truthが分裂しquota oversubscriptionを起こし得るため、行いません。
 
 ## MCP result semantics
 
-`mcp-usage-control-mcp` は `@modelcontextprotocol/server` v2 **single-round** tool handlerを対象にし、coreはSDK非依存です。
+`mcp-usage-control-mcp` は `@modelcontextprotocol/server` v2を対象にし、coreはSDK非依存です。
 
 adapterは次を区別します。
 
@@ -123,21 +167,26 @@ adapterは次を区別します。
 - thrown execution error。
 - cost-classification error。
 - settlement error。
+- `protectMultiRoundTool()` による明示的multi-round `input_required` suspend/resume。
 
 ambiguous settlementはblind retryしません。store writeがcommit済みでACKだけ失った可能性があるためです。
 
-repositoryではdirect wrapper testと公式SDK `Client + createMcpHandler` pathの両方をtestします。
+repositoryでは両wrapperのdirect testと公式SDK `Client + createMcpHandler` pathの両方をtestします。
 
 ### `input_required`
 
-MCP v2 `input_required` はrequest boundaryを跨ぎます。正しいaccountingにはround間のreservation suspend/resume、replay identity、abandonment recovery、client-carried stateのintegrity ruleが必要です。
+`protectTool()` は意図的にsingle-roundのままで、`input_required` を保守的にrejectします。
 
-そのためv0.1ではsupport boundaryを明示します。`protectTool()` は **`input_required` 未対応**です。wrapped handlerが返した場合はcurrent reservationを保守的にsettleし `UnsupportedMcpUsageFlowError` を返します。real suspend/resume supportはIssue #14で追跡します。
+`protectMultiRoundTool()` がopt-inのmulti-round contractを提供します。初回roundだけreserve / mark liableし、suspended stateはserver-sideに保持します。wire `requestState` はintegrity-protectedなopaque referenceです。resumeにはMCP server verification hookと、principal / tool / args bindingを考慮したatomic flow consumeが必要です。resume roundはquote / reserveを再実行せずoriginal leaseへreattachします。
+
+`MemoryMcpUsageFlowStore` はprocess-local reference semanticsです。horizontal scaleするserverには同じatomic compare-and-consume contractを持つshared/durable flow storeが必要です。post-claim crash後のcompleted-result replayはone-time resume-token semanticsを弱めず、別reconciliation concernとして扱います。
 
 ## Trust boundary
 
 - principal / tenant identityはtrustedなserver-side authentication/application contextから取得する。
 - `clientInfo`、tool args、request-state blob、operation IDをauthorization proofにしない。
+- clientを往復したMCP request stateはintegrity verification後、trusted server-side flow stateへrebindしてからaccountingへ影響させる。
 - policy denial detailへmodel/end userに出したくないsecretを入れない。
 - log / metricへ出すbudget key / outcomeはlow-cardinality / non-sensitiveにする。
-- Redis key nameのhashingはidentifier exposureを減らすだけでencryptionではない。
+- storage / key nameのhashingはidentifier exposureを減らすだけでencryptionではない。
+- external billing / metering adapterはstable outcomeをobserveできるが、enforcement decisionやtransaction semanticsを変更してはいけない。
