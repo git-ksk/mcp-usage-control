@@ -27,6 +27,8 @@ pnpm check
 
 Node.js 20+が必要です。repository CIではNode.js 20 / 22、Redis 7、公式MCP TypeScript SDK v2のclient/handler pathをtestします。
 
+Versioningは [Semantic Versioning (SemVer)](https://semver.org/) に従います。1.0未満ではminor releaseに意図的なbreaking API changeを含む場合があり、その場合はrelease notesで明示します。詳細は [Release policy](docs/releasing.ja.md) を参照してください。
+
 ## Core lifecycle
 
 ```text
