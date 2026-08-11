@@ -4,7 +4,7 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**Concurrency-safe usage enforcement for MCP tool execution.**
+**Concurrency-safe transactional usage enforcement for MCP tool execution.**
 
 `mcp-usage-control` is a provider-neutral runtime for enforcing entitlements and usage budgets around Model Context Protocol (MCP) tool execution. v0.1 focuses on correct admission and settlement under concurrency, retries, failures, long-running handlers, and process loss.
 
@@ -38,6 +38,21 @@ principal -> policy/entitlement -> quote -> atomic reserve -> mark liable -> exe
 The important distinction is **settlement, not automatic rollback**. A failed tool call may already have consumed an upstream API, database, compute resource, or other metered resource.
 
 A reservation starts `pending`. Immediately before metered execution, it becomes `cost-liable`. If a pending lease expires, its reservation can be released. If a cost-liable lease expires after execution started, the full reservation is conservatively retained so a process crash cannot become a refund.
+
+## Why not a rate limiter?
+
+A normal rate limiter primarily answers whether another request may start within a time window. That is useful, but it does not by itself provide transactional accounting for work that consumes a real metered resource.
+
+A naive `check -> execute -> increment` flow can over-admit under concurrency. If two requests both observe one remaining unit, both may execute an upstream paid operation before either increments the counter. The budget has then paid for more work than it could safely admit.
+
+`mcp-usage-control` reserves capacity **before** metered execution and settles afterward. It also models cost liability, renewable/resumable leases, replay protection, expiry recovery, and ambiguous settlement outcomes.
+
+| Category | Primary concern | `mcp-usage-control` difference |
+| --- | --- | --- |
+| Rate limiter | requests per time window | reserves metered capacity before execution and settles actual usage afterward |
+| Billing/payment provider | invoicing, payment, subscriptions | intentionally outside scope; consumes policy/entitlement decisions rather than processing money |
+| Gateway policy | centralized access/routing controls | enforcement can live directly around tool execution with provider-neutral stores |
+| Transactional usage enforcement | admission + liability + settlement | this project's core category |
 
 ## Packages
 
@@ -114,6 +129,22 @@ Events cover admission accepted/denied, settlement completed, expiry recovery, a
 Identical idempotent settlement replay can emit another identical `settlement.completed` event. Downstream analytics that require de-duplication should use a stable key such as `(reservationId, actualUnits, outcome)`; the event stream is not the transactional ledger.
 
 Runtime IDs can be high-cardinality. Do not use unique principal, operation, reservation, or user-specific budget IDs as metric labels. See [Observability](docs/observability.md) for event fields, privacy guidance, Redis aggregate recovery behavior, replay guidance, and delivery guarantees.
+
+## Billing and metering adapter boundary
+
+External billing or metering systems may define balances, entitlements, prices, invoices, receipts, or usage events with guarantees that differ from the enforcement transaction.
+
+Keep those integrations outside the core state machine:
+
+```text
+transactional enforcement core
+        -> stable observer/event contract
+        -> optional billing/telemetry adapter
+```
+
+An adapter may translate stable enforcement outcomes into an external billing or MCP metering schema. External terminology or delivery guarantees must not weaken atomic admission, reservation, `cost-liable` state, idempotency, lease/expiry recovery, or conservative handling of ambiguous settlement.
+
+The observer/event stream is integration evidence, not a financial ledger and not a substitute for the store transaction.
 
 ## Direct core example
 
@@ -240,6 +271,7 @@ See [Cloudflare adapter](docs/cloudflare.md) for Worker configuration, privacy, 
 - [Architecture and invariants](docs/architecture.md)
 - [Redis adapter](docs/redis.md)
 - [Cloudflare adapter](docs/cloudflare.md)
+- [Roadmap](docs/roadmap.md)
 - [API reference](docs/api-reference.md)
 - [Release policy](docs/releasing.md)
 - [Documentation index](docs/README.md)
@@ -248,7 +280,11 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Scope after v0.1
 
-Tracked follow-up work includes production-ready shared flow-store adapters for horizontally scaled multi-round MCP servers and optional vendor-specific telemetry adapters. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
+The near-term order is transaction-semantic hardening first: production shared/durable multi-round flow stores and post-claim reconciliation (#41), remaining deployed Cloudflare validation (#24), and final public package-contract review before npm publication (#6).
+
+After that, planned differentiation includes a third-party store invariant test kit, a versioned enforcement event contract, production multi-budget policy examples, and optional billing/telemetry adapters that remain outside the enforcement transaction. See the [Roadmap](docs/roadmap.md).
+
+Billing providers, OAuth providers, dashboards, payment protocols, generic rate limiting, and external billing schemas as a replacement for the core state machine remain outside the core runtime.
 
 ## License
 

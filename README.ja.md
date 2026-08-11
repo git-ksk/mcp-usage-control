@@ -4,7 +4,7 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**MCP tool実行向けの、同時実行に強いusage enforcement runtimeです。**
+**MCP tool実行向けの、同時実行に強いtransactional usage enforcement runtimeです。**
 
 `mcp-usage-control` は、Model Context Protocol (MCP) のtool実行を対象に、entitlement・usage budget・credit消費を安全に制御するprovider-neutral runtimeです。v0.1では、parallel call、retry、failure、長時間handler、process消失があってもadmission / settlementを壊しにくいことを中心にしています。
 
@@ -38,6 +38,21 @@ principal -> policy/entitlement -> quote -> atomic reserve -> mark liable -> exe
 重要なのはautomatic rollbackではなく **settlement** です。toolが失敗しても、その前に外部API、DB、compute resourceなどのmetered resourceを消費している場合があります。
 
 reservationは最初 `pending` です。metered execution直前に `cost-liable` へ遷移します。pending leaseがexpireした場合はcapacityを解放できますが、cost-liable leaseがexecution開始後にexpireした場合はfull reservationを保守的に維持し、process crashがrefundになることを防ぎます。
+
+## Rate limiterと何が違うのか
+
+一般的なrate limiterが主に答えるのは「time window内で次のrequestを開始してよいか」です。これは有用ですが、realなmetered resourceを消費するworkのtransactional accountingを、それだけで保証するものではありません。
+
+単純な `check -> execute -> increment` ではconcurrency時にover-admitできます。例えば残り1 unitを2 requestが同時に確認すると、どちらもcounterをincrementする前にupstreamの有料処理を実行できてしまい、budgetが安全に許可できる量を超えてworkを開始します。
+
+`mcp-usage-control` はmetered execution **前** にcapacityをreserveし、実行後にsettleします。さらにcost liability、renewable / resumable lease、replay protection、expiry recovery、ambiguous settlement outcomeをmodel化します。
+
+| Category | 主な関心 | `mcp-usage-control` の違い |
+| --- | --- | --- |
+| Rate limiter | time windowあたりのrequest数 | execution前にmetered capacityをreserveし、実行後にactual usageをsettleする |
+| Billing / payment provider | invoice、payment、subscription | 対象外。money processingではなくpolicy / entitlement decisionを消費する |
+| Gateway policy | centralizedなaccess / routing control | provider-neutral storeを使いtool execution boundaryへ直接enforcementできる |
+| Transactional usage enforcement | admission + liability + settlement | projectのcore category |
 
 ## Packages
 
@@ -114,6 +129,22 @@ eventはadmission accepted / denied、settlement completed、expiry recovery、p
 同一内容のidempotent settlement replayでも同じ `settlement.completed` eventが再発火する場合があります。二重計上を避けたいanalyticsは `(reservationId, actualUnits, outcome)` 等のstable keyでdedupeしてください。event stream自体はtransactional ledgerではありません。
 
 runtime IDはhigh-cardinalityになり得ます。unique principal / operation / reservation / user-specific budget IDをmetric labelへ使わないでください。event field、privacy指針、Redis aggregate recovery、replay guidance、delivery guaranteeは [Observability](docs/observability.ja.md) を参照してください。
+
+## Billing / metering adapter boundary
+
+外部billing / metering systemは、balance、entitlement、price、invoice、receipt、usage eventなど、enforcement transactionとは異なるguaranteeを持つconceptを定義する場合があります。
+
+integrationはcore state machineの外側に置きます。
+
+```text
+transactional enforcement core
+        -> stable observer/event contract
+        -> optional billing/telemetry adapter
+```
+
+adapterでstableなenforcement outcomeを外部billing / MCP metering schemaへ変換することはできます。ただし外部terminologyやdelivery guaranteeによって、atomic admission、reservation、`cost-liable` state、idempotency、lease / expiry recovery、ambiguous settlementの保守的な扱いを弱めません。
+
+observer / event streamはintegration向けevidenceであり、financial ledgerでもstore transactionの代替でもありません。
 
 ## Coreを直接使う例
 
@@ -239,6 +270,7 @@ Worker設定、privacy、cleanup / cost behavior、GCP等からの利用は [Clo
 - [Architecture / invariant](docs/architecture.ja.md)
 - [Redis adapter](docs/redis.ja.md)
 - [Cloudflare adapter](docs/cloudflare.ja.md)
+- [Roadmap](docs/roadmap.ja.md)
 - [API reference](docs/api-reference.ja.md)
 - [Release policy](docs/releasing.ja.md)
 - [Documentation index](docs/README.ja.md)
@@ -247,7 +279,11 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## v0.1以降のscope
 
-horizontal scaleするmulti-round MCP server向けのproduction-ready shared flow-store adapterとoptional vendor-specific telemetry adapterをfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
+near-termはtransaction semanticsのproduction hardeningを最優先します。shared / durable multi-round flow-storeとpost-claim reconciliation (#41)、残っているdeployed Cloudflare validation (#24)、npm publish前のfinal public package-contract review (#6) の順です。
+
+その後はthird-party store invariant test kit、versioned enforcement event contract、production向けmulti-budget policy example、enforcement transaction外に留まるoptionalなbilling / telemetry adapterを進めます。詳細は [Roadmap](docs/roadmap.ja.md) を参照してください。
+
+billing provider、OAuth provider、dashboard、payment protocol、generic rate limiting、外部billing schemaによるcore state machine置換はcore runtimeの対象外です。
 
 ## License
 
