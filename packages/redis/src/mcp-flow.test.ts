@@ -49,7 +49,9 @@ function record(
 
 beforeAll(async () => {
   if (!redisUrl) return;
-  client = createClient({ url: redisUrl });
+  // Vitest runs integration files in parallel. Keep MCP-flow cleanup isolated
+  // from RedisUsageStore tests that flush database 0 and observability on 15.
+  client = createClient({ url: redisUrl, database: 14 });
   await client.connect();
   await client.flushDb();
 });
