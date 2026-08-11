@@ -14,6 +14,35 @@ For a tool with no input schema, set `noInput: true`. For input-schema tools, om
 
 It distinguishes normal success, `{ isError: true }`, and thrown errors. Invalid/throwing cost classifiers cause the full reservation to be settled before `UsageClassificationError` is surfaced. Ambiguous settlement failures are surfaced as `UsageSettlementError` and are not blindly retried.
 
+### Returning a bounded remaining value
+
+Successful core admission exposes the authoritative store-produced `remainingByBudget`. The MCP wrappers intentionally do not inject balances into handler results. If a tool must return a bounded remaining value to its consumer, use the core lifecycle directly at that integration point and select only the application-approved budget value:
+
+```ts
+const admission = await control.reserve(request);
+if (!admission.allowed) throw new UsageDeniedError(admission.reason);
+
+const remaining = admission.remainingByBudget.find(
+  balance => balance.key === expectedBudgetKey,
+)?.remaining;
+
+const lease = admission.lease;
+await lease.markLiable();
+const value = await runTool();
+await lease.settle(1, 'success');
+
+return {
+  content: [
+    {
+      type: 'text',
+      text: JSON.stringify({ value, ...(remaining === undefined ? {} : { remaining }) }),
+    },
+  ],
+};
+```
+
+Do not recompute the balance from configured limits in the MCP layer; the usage store is authoritative. Budget keys can contain application-sensitive or high-cardinality identity, so do not expose the key itself to the model/client or promote it to metric labels by default. Prefer a single numeric value selected by application policy.
+
 ### Multi-round trust boundary
 
 MCP `requestState` round-trips through the client and is untrusted. `protectMultiRoundTool()` therefore does **not** put the usage lease in client state and does not trust a client-supplied flow identifier by itself.
@@ -47,6 +76,35 @@ The application remains responsible for trusted principal/tenant derivation, aut
 input schemaがないtoolでは `noInput: true` を指定し、input schemaありでは省略します。SDKのno-input callback / runtime shapeをnormalizeしますが、`{}` がreal inputかどうかを推測しません。
 
 normal success、`{ isError: true }`、thrown errorを区別します。classifierがthrow / invalid unitsを返した場合はfull reservationをsettleしてから `UsageClassificationError` を表面化します。ambiguous settlement failureは `UsageSettlementError` として表面化しblind retryしません。
+
+### boundedなremaining値を返す
+
+coreのadmission成功結果には、authoritative storeが算出した `remainingByBudget` が含まれます。MCP wrapperはbalanceをhandler resultへ自動注入しません。tool consumerへboundedなremaining値を返したい場合は、そのintegration pointだけcore lifecycleを直接使い、applicationが許可したbudgetの値だけを選択します。
+
+```ts
+const admission = await control.reserve(request);
+if (!admission.allowed) throw new UsageDeniedError(admission.reason);
+
+const remaining = admission.remainingByBudget.find(
+  balance => balance.key === expectedBudgetKey,
+)?.remaining;
+
+const lease = admission.lease;
+await lease.markLiable();
+const value = await runTool();
+await lease.settle(1, 'success');
+
+return {
+  content: [
+    {
+      type: 'text',
+      text: JSON.stringify({ value, ...(remaining === undefined ? {} : { remaining }) }),
+    },
+  ],
+};
+```
+
+MCP layerでconfigured limitからbalanceを再計算しないでください。usage storeがsource of truthです。budget keyにはapplication-sensitive / high-cardinalityなidentityが含まれ得るため、key自体をmodel/clientへ出したりmetric labelへ自動昇格したりしません。application policyで選択した単一のnumeric valueだけを返す形を推奨します。
 
 ### Multi-roundのtrust boundary
 
