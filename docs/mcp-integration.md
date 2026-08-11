@@ -2,13 +2,13 @@
 
 [English](mcp-integration.md) | [日本語](mcp-integration.ja.md)
 
-`mcp-usage-control-mcp` adapts the core lifecycle to **single-round** tool handlers from `@modelcontextprotocol/server` v2.
+`mcp-usage-control-mcp` adapts the core lifecycle to `@modelcontextprotocol/server` v2 tool handlers. Use `protectTool()` for single-round tools and `protectMultiRoundTool()` for explicit MCP v2 `input_required` suspend/resume flows.
 
 > **Current distribution status:** the adapter is not published to npm yet. Build/install the local core + MCP tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `@modelcontextprotocol/server@2.0.0`.
 
 The adapter does not authenticate callers or decide subscriptions. The application must derive a trusted `Principal` and a suitable logical `operationId`.
 
-## Register a protected tool
+## Register a protected single-round tool
 
 ```ts
 import { protectTool } from 'mcp-usage-control-mcp';
@@ -60,9 +60,9 @@ server.registerTool(
 
 This flag is intentionally explicit. The SDK public TypeScript callback model represents no-input tools as `(ctx)`, while server dispatch can be observed as `({}, ctx)`. `{}` can also be valid input for an empty object schema, so runtime guessing would be unsafe. In `noInput: true` mode the adapter normalizes the no-input path to `args === undefined` and the real `ServerContext`.
 
-## Execution lifecycle
+## Single-round execution lifecycle
 
-For an admitted call:
+For an admitted `protectTool()` call:
 
 ```text
 reserve -> markLiable -> heartbeat -> handler -> stop heartbeat -> classify -> settle
@@ -70,9 +70,123 @@ reserve -> markLiable -> heartbeat -> handler -> stop heartbeat -> classify -> s
 
 The liability boundary is immediately before application handler entry. The generic adapter cannot know a provider-specific point where cost actually begins, so it chooses a conservative boundary. Use the core lifecycle directly if the application needs a later, provider-aware `markLiable()` point.
 
+## MCP v2 `input_required` suspend/resume
+
+MCP 2026-era `input_required` retries the same logical call as a fresh MCP request. A fresh JSON-RPC request ID must not create a second usage reservation.
+
+Use `protectMultiRoundTool()` for this flow. The first round calls the configured `operationId()` and reserves once. Later rounds reattach to the same server-side lease; they do not call policy quote or reserve again.
+
+### Request-state integrity
+
+MCP `requestState` is echoed through the client and must be treated as untrusted. Configure the official SDK verification seam and give the wrapper the matching mint function:
+
+```ts
+import {
+  createMcpHandler,
+  createRequestStateCodec,
+  inputRequired,
+  McpServer,
+} from '@modelcontextprotocol/server';
+import {
+  MemoryMcpUsageFlowStore,
+  protectMultiRoundTool,
+  type McpUsageRequestStatePayload,
+} from 'mcp-usage-control-mcp';
+
+const stateCodec = createRequestStateCodec<McpUsageRequestStatePayload>({
+  key: process.env.REQUEST_STATE_SECRET!, // >= 32 bytes; keep server-side
+  ttlSeconds: 600,
+});
+
+// Keep this outside the per-request createMcpHandler factory.
+// Use a durable/shared implementation when requests can hit multiple processes.
+const flowStore = new MemoryMcpUsageFlowStore();
+
+const protectedConfirm = protectMultiRoundTool(
+  {
+    control,
+    tool: 'confirm-write',
+    noInput: true,
+    principal: ctx => getPrincipalFromTrustedAuthContext(ctx),
+    operationId: () => createStableLogicalOperationId(),
+    flowStore,
+    requestState: { mint: payload => stateCodec.mint(payload) },
+    suspendTtlMs: 5 * 60_000,
+    maxRounds: 4,
+  },
+  async (_args, ctx, flow) => {
+    if (flow.round === 0) {
+      return inputRequired({
+        inputRequests: {},
+        // Optional application state. The wrapper keeps it server-side and
+        // replaces the wire requestState with its own integrity-protected token.
+        requestState: 'awaiting-confirmation',
+      });
+    }
+
+    if (flow.applicationRequestState !== 'awaiting-confirmation') {
+      throw new Error('invalid application phase');
+    }
+
+    return { content: [{ type: 'text', text: 'done' }] };
+  },
+);
+
+const handler = createMcpHandler(() => {
+  const server = new McpServer(
+    { name: 'example', version: '1.0.0' },
+    { requestState: { verify: stateCodec.verify } },
+  );
+  server.registerTool('confirm-write', { description: 'Confirm then write' }, protectedConfirm);
+  return server;
+});
+```
+
+If `ctx.mcpReq.requestState()` is a raw string rather than a verified decoded payload, the wrapper fails closed with `McpUsageResumeError`. Do not disable verification and manually trust the client-echoed string.
+
+### Server-side flow store
+
+The client receives only an integrity-protected opaque flow reference. The trusted record contains the resumable usage lease and remains server-side.
+
+`McpUsageFlowStore.consume(flowId, binding)` has a security-critical contract:
+
+1. compare the stored binding to the current trusted principal / tenant / tool / canonical argument hash;
+2. if it does not match, return no record **without consuming the legitimate flow**;
+3. if it matches, atomically consume and return the flow exactly once.
+
+`MemoryMcpUsageFlowStore` implements that contract for tests and one process. It is not suitable for horizontally scaled servers because a modern `createMcpHandler` request may land on another instance. Use Redis, a transactional database, Durable Objects, or another shared store that can implement atomic compare-and-consume.
+
+### Lifecycle and abandonment
+
+A multi-round lifecycle is:
+
+```text
+reserve -> markLiable -> handler
+  -> input_required
+  -> stop heartbeat -> renew(suspendTtlMs) -> persist flow -> return signed requestState
+  -> fresh request -> verify requestState -> atomic consume -> resume lease -> renew
+  -> handler -> ... -> classify -> settle
+```
+
+The reservation is cost-liable before the application handler first runs. Therefore an abandoned suspended flow, or a process crash after a one-time resume token has been claimed, is conservative: lease expiry retains the full reserved charge. It never silently creates a refund for work that may already have happened.
+
+`maxRounds` bounds repeated suspension. Exceeding it settles the full reservation and raises `McpUsageRoundsExceededError`.
+
+### Replay semantics
+
+A resume token is one-time. Concurrent identical resume attempts can produce only one application re-entry; later attempts fail closed with `McpUsageResumeError`. A mismatched principal/tool/argument attempt cannot consume the legitimate flow.
+
+This prevents duplicate usage reservation and duplicate handler entry for the same resume token. It does **not** make arbitrary application side effects exactly-once, and it does not cache/replay a completed business response if the response is lost after the token has already been claimed. Keep existing business idempotency/result reconciliation for destructive or externally metered operations.
+
+### Logical operation IDs
+
+`operationId()` is evaluated on the initial round only. The stable logical operation ID is carried in the trusted lease state and exposed as `flow.operationId` on resumed rounds.
+
+Do not derive multi-round accounting identity from each retry's fresh `ctx.mcpReq.id`. The MCP client is allowed to use a fresh request ID when it fulfills `input_required`.
+
 ## Observability
 
-The MCP adapter does not define a second telemetry system. Configure a provider-neutral `UsageObserver` on the `UsageControl` used by `protectTool()`; reserve/denial/settlement/error events then follow the same lifecycle as direct core calls. If the store is Redis, pass the same observer to `RedisUsageStore` to include expiry-recovery events.
+The MCP adapter does not define a second telemetry system. Configure a provider-neutral `UsageObserver` on the `UsageControl` used by either wrapper; reserve/denial/settlement/error events then follow the same lifecycle as direct core calls. If the store is Redis, pass the same observer to `RedisUsageStore` to include expiry-recovery events.
 
 Tool arguments are not copied into usage events automatically. See [Observability](observability.md) for privacy, cardinality, metadata, and delivery semantics.
 
@@ -96,15 +210,15 @@ Core replay protection is scoped to:
 (tenantId, principal.id, tool, operationId)
 ```
 
-`operationId` should be stable across retries of the same logical execution and different for intentional new executions. It is non-secret idempotency identity, not authorization proof.
+For single-round tools, `operationId` should be stable across retries of the same logical execution and different for intentional new executions. It is non-secret idempotency identity, not authorization proof.
 
-`ctx.mcpReq.id` is useful for request-scoped cases and tests, but applications should not assume a client/host will preserve the same JSON-RPC request ID across logical retries. Provide your own stable invocation identity when retry-stable accounting matters.
+`ctx.mcpReq.id` is useful for request-scoped cases and tests, but applications should not assume a client/host will preserve the same JSON-RPC request ID across logical retries. For `protectMultiRoundTool()`, only the first round calls the application `operationId()` callback; resumed rounds reuse the trusted original identity.
 
 ## Lease heartbeat
 
-`protectTool()` renews the active lease at roughly one third of its TTL by default. Before settlement it stops the heartbeat and waits for an in-flight renewal.
+Both wrappers renew an actively executing lease at roughly one third of its TTL by default. Before settlement or suspension they stop the heartbeat and wait for an in-flight renewal.
 
-A renewal error does not prove whether Redis applied the renewal. The adapter therefore does not cancel arbitrary upstream work automatically. If lease loss must immediately fence upstream work, implement provider-specific fencing/cancellation.
+A renewal error does not prove whether the backend applied the renewal. The adapter therefore does not cancel arbitrary upstream work automatically. If lease loss must immediately fence upstream work, implement provider-specific fencing/cancellation.
 
 ## Result and cost classification
 
@@ -135,17 +249,17 @@ errorUnits: ({ error, lease }) => {
 
 A classifier that throws or returns a negative/unsafe/over-reservation value does not leave usage unsettled. The wrapper settles the full reservation first, then throws `UsageClassificationError`.
 
-## `input_required` support boundary
+## `protectTool()` support boundary
 
-MCP v2 `resultType: 'input_required'` is a multi-round flow: the client collects input and a fresh request re-enters tool execution. Correct accounting requires reservation suspend/resume, abandonment recovery, cross-round replay identity, and trust rules for carried state.
+`protectTool()` remains intentionally single-round. If its handler returns `input_required`, it conservatively settles the current reservation and raises `UnsupportedMcpUsageFlowError` rather than silently accounting the retry as a new call.
 
-**v0.1 does not support this flow in `protectTool()`.** If a wrapped handler returns `input_required`, the current reservation is conservatively settled and `UnsupportedMcpUsageFlowError` is surfaced. Do not wrap production `input_required` tools until issue #14 is implemented.
+Use `protectMultiRoundTool()` only when the server has the verified request-state and server-side flow-store requirements described above.
 
 ## Settlement failures
 
 A settlement failure surfaces as `UsageSettlementError`. The wrapper does not blindly retry because the store may have committed the write while only the acknowledgement was lost.
 
-`mcp-usage-control-redis` makes an identical settlement replay idempotent and rejects conflicting settlement replay. Application-level reconciliation remains separate.
+Store-specific identical settlement replay/reconciliation remains separate from MCP flow retry semantics.
 
 ## Denials and disclosure
 
@@ -155,12 +269,14 @@ Do not place secrets, private tenant identifiers, entitlement internals, or bala
 
 ## Protocol integration tests
 
-CI tests the wrapper directly and through the official SDK v2 `Client + createMcpHandler` in-process path, including:
+CI tests the wrappers directly and through the official SDK v2 `Client + createMcpHandler` in-process path, including:
 
 - explicit no-input normalization;
 - validated input-schema `(args, ctx)` behavior;
 - `isError: true` accounting;
 - generic denial messages;
-- explicit unsupported `input_required` behavior.
+- explicit single-round rejection of `input_required`;
+- modern protocol negotiation and a real `input_required` retry through `createRequestStateCodec` verification;
+- one quote/reservation across the fresh retry request and final settlement.
 
 The adapter targets the public `@modelcontextprotocol/server` v2 API and v0.1 CI currently resolves v2.0.0. Core does not import the MCP SDK.
