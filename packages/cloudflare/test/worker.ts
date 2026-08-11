@@ -6,6 +6,7 @@ export { UsageControlDurableObject } from '../src/versioned-worker.js';
 interface Env {
   USAGE_CONTROL: CloudflareDurableObjectNamespace;
   MCP_USAGE_TEST_TOKEN: string;
+  MCP_USAGE_ENABLE_FAULT_INJECTION?: string;
 }
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -17,16 +18,21 @@ function jsonResponse(body: unknown, status: number): Response {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const pathname = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const pathname = url.pathname;
     if (pathname === '/health') return new Response('ok');
 
-    // Local workerd-only fault injection. These routes deliberately bypass the
-    // usage gateway so the remote client sees real HTTP platform-style errors.
-    if (pathname === '/test/platform-limit') {
-      return jsonResponse({ error: 'simulated_platform_limit' }, 429);
-    }
-    if (pathname === '/test/platform-unavailable') {
-      return jsonResponse({ error: 'simulated_platform_unavailable' }, 503);
+    // Fault injection requires both an explicit local-test flag and a localhost
+    // request. Even if wrangler.test.jsonc is accidentally deployed, these
+    // routes cannot be enabled on a workers.dev/custom-domain hostname.
+    const isLocalHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    if (env.MCP_USAGE_ENABLE_FAULT_INJECTION === '1' && isLocalHost) {
+      if (pathname === '/test/platform-limit') {
+        return jsonResponse({ error: 'simulated_platform_limit' }, 429);
+      }
+      if (pathname === '/test/platform-unavailable') {
+        return jsonResponse({ error: 'simulated_platform_unavailable' }, 503);
+      }
     }
 
     if (pathname === '/v1/usage-store-maintenance') {
