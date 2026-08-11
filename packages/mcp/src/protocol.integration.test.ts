@@ -240,7 +240,7 @@ describe('MCP protocol integration', () => {
             requestState: 'application-phase-one',
           });
         }
-        return { content: [{ type: 'text', text: 'completed after resume' }] };
+        return { content: [{ type: 'text' as const, text: 'completed after resume' }] };
       },
     );
 
