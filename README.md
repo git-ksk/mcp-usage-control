@@ -39,6 +39,23 @@ The important distinction is **settlement, not automatic rollback**. A failed to
 
 A reservation starts `pending`. Immediately before metered execution, it becomes `cost-liable`. If a pending lease expires, its reservation can be released. If a cost-liable lease expires after execution started, the full reservation is conservatively retained so a process crash cannot become a refund.
 
+## Why not a rate limiter?
+
+A request rate limiter usually answers whether a request may start. That is not enough when quota represents a resource that can be consumed during execution and must later be settled.
+
+A naive `check -> execute -> increment` flow races under concurrency. If a budget has 1 unit left, two requests can both observe that unit, both execute a metered upstream operation, and only then increment usage. The system has admitted 2 units of work against 1 unit of capacity.
+
+`mcp-usage-control` instead makes quota comparison and reservation one atomic store operation **before** execution. The admitted capacity is held while the operation runs, becomes cost-liable at the execution boundary, can be renewed for long-running work, and is finally settled to actual usage. Retries and ambiguous failures are handled as state-machine problems rather than ordinary request counting.
+
+| Category | Primary concern | `mcp-usage-control` difference |
+| --- | --- | --- |
+| Rate limiter | Requests per time window | Reserves metered capacity before execution and settles actual usage afterward. |
+| Billing/payment provider | Invoicing, payments, subscriptions | Intentionally outside scope; consumes policy/entitlement decisions rather than processing money. |
+| Gateway policy | Centralized access/routing controls | Can enforce usage directly around tool execution with provider-neutral stores; it is not a gateway requirement. |
+| Transactional usage enforcement | Admission + liability + settlement | This is the project's core category. |
+
+External billing or metering schemas belong **after** the enforcement transaction through stable observer/event adapters. They must not weaken atomic admission, liability, idempotency, expiry recovery, or ambiguous-settlement behavior.
+
 ## Packages
 
 - **`mcp-usage-control`** — core policy, atomic admission contract, renewable/resumable leases, settlement, idempotency, provider-neutral observability hooks, and the in-memory reference store.
@@ -238,6 +255,7 @@ See [Cloudflare adapter](docs/cloudflare.md) for Worker configuration, privacy, 
 - [MCP SDK v2 integration](docs/mcp-integration.md)
 - [Observability](docs/observability.md)
 - [Architecture and invariants](docs/architecture.md)
+- [Roadmap](docs/roadmap.md)
 - [Redis adapter](docs/redis.md)
 - [Cloudflare adapter](docs/cloudflare.md)
 - [API reference](docs/api-reference.md)
@@ -248,7 +266,9 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Scope after v0.1
 
-Tracked follow-up work includes production-ready shared flow-store adapters for horizontally scaled multi-round MCP servers and optional vendor-specific telemetry adapters. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
+Tracked follow-up work includes production-ready shared flow-store adapters for horizontally scaled multi-round MCP servers, a conformance-style invariant kit for third-party stores, and optional external telemetry/billing adapters outside the enforcement transaction. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
+
+See the [Roadmap](docs/roadmap.md) for priority and boundary details.
 
 ## License
 
