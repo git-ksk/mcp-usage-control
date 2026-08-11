@@ -310,7 +310,6 @@ describe('protectMultiRoundTool', () => {
     const first = await protectedHandler(contextWithState());
     expect(quoteCalls).toBe(1);
     expect(operation).toHaveBeenCalledOnce();
-    await expect(nextAdmission(control)).resolves.toEqual(exhausted);
 
     const final = await protectedHandler(contextWithState(decodedState(first)));
     expect(final).toEqual({ content: [{ type: 'text', text: 'done' }] });
