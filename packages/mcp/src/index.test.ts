@@ -10,10 +10,14 @@ import {
   type UsagePolicy,
 } from 'mcp-usage-control';
 import {
+  McpUsageResumeError,
+  MemoryMcpUsageFlowStore,
+  protectMultiRoundTool,
   protectTool,
   UnsupportedMcpUsageFlowError,
   UsageClassificationError,
   UsageSettlementError,
+  type McpUsageRequestStatePayload,
 } from './index.js';
 
 const ctx = {} as ServerContext;
@@ -46,6 +50,21 @@ function nextAdmission(control: UsageControl) {
     tool: 'expensive_tool',
     args: {},
   });
+}
+
+function contextWithState(state?: unknown, user = 'user-1'): ServerContext {
+  return {
+    user,
+    mcpReq: {
+      requestState: () => state,
+    },
+  } as unknown as ServerContext;
+}
+
+function decodedState(result: unknown): McpUsageRequestStatePayload {
+  const requestState = (result as { requestState?: string }).requestState;
+  if (!requestState) throw new Error('expected wrapped requestState');
+  return JSON.parse(requestState) as McpUsageRequestStatePayload;
 }
 
 const exhausted = {
@@ -241,5 +260,180 @@ describe('protectTool', () => {
 
     await vi.advanceTimersByTimeAsync(60);
     await expect(running).resolves.toBe('done');
+  });
+});
+
+describe('protectMultiRoundTool', () => {
+  it('spans input_required rounds with one reservation and settles exactly once on completion', async () => {
+    let quoteCalls = 0;
+    const resumablePolicy: UsagePolicy = {
+      quote() {
+        quoteCalls += 1;
+        return { decision: 'allow', units: 1, budget: { key: 'monthly:user-1', limit: 1 } };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), resumablePolicy);
+    const flowStore = new MemoryMcpUsageFlowStore();
+    const operation = vi.fn(() => 'logical-op');
+    const rounds: Array<{ round: number; state?: string }> = [];
+    const protectedHandler = protectMultiRoundTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        noInput: true,
+        principal,
+        operationId: operation,
+        flowStore,
+        suspendTtlMs: 1_000,
+        flowId: () => 'flow-000000000001',
+        requestState: { mint: payload => JSON.stringify(payload) },
+        successUnits: () => 0,
+      },
+      async (_args, _ctx, flow) => {
+        rounds.push({
+          round: flow.round,
+          ...(flow.applicationRequestState === undefined
+            ? {}
+            : { state: flow.applicationRequestState }),
+        });
+        if (flow.round === 0) {
+          return {
+            resultType: 'input_required',
+            inputRequests: { confirm: { kind: 'test' } },
+            requestState: 'application-phase-one',
+          };
+        }
+        return { content: [{ type: 'text', text: 'done' }] };
+      },
+    );
+
+    const first = await protectedHandler(contextWithState());
+    expect(quoteCalls).toBe(1);
+    expect(operation).toHaveBeenCalledOnce();
+
+    const final = await protectedHandler(contextWithState(decodedState(first)));
+    expect(final).toEqual({ content: [{ type: 'text', text: 'done' }] });
+    expect(quoteCalls).toBe(1);
+    expect(operation).toHaveBeenCalledOnce();
+    expect(rounds).toEqual([
+      { round: 0 },
+      { round: 1, state: 'application-phase-one' },
+    ]);
+    expect((await nextAdmission(control)).allowed).toBe(true);
+  });
+
+  it('rejects raw unverified requestState before it can be used as accounting authority', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const protectedHandler = protectMultiRoundTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        noInput: true,
+        principal,
+        operationId,
+        flowStore: new MemoryMcpUsageFlowStore(),
+        suspendTtlMs: 1_000,
+        requestState: { mint: payload => JSON.stringify(payload) },
+      },
+      async () => ({ content: [] }),
+    );
+
+    await expect(protectedHandler(contextWithState('raw-client-controlled-string'))).rejects.toBeInstanceOf(
+      McpUsageResumeError,
+    );
+  });
+
+  it('atomically consumes a resume token so concurrent replay enters the handler once', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const flowStore = new MemoryMcpUsageFlowStore();
+    let resumeEntries = 0;
+    const protectedHandler = protectMultiRoundTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        noInput: true,
+        principal,
+        operationId,
+        flowStore,
+        suspendTtlMs: 1_000,
+        flowId: () => 'flow-000000000002',
+        requestState: { mint: payload => JSON.stringify(payload) },
+      },
+      async (_args, _ctx, flow) => {
+        if (flow.round === 0) return { resultType: 'input_required', inputRequests: { x: {} } };
+        resumeEntries += 1;
+        return { content: [{ type: 'text', text: 'done' }] };
+      },
+    );
+
+    const first = await protectedHandler(contextWithState());
+    const state = decodedState(first);
+    const results = await Promise.allSettled([
+      protectedHandler(contextWithState(state)),
+      protectedHandler(contextWithState(state)),
+    ]);
+
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
+    expect(resumeEntries).toBe(1);
+    expect((results.find(result => result.status === 'rejected') as PromiseRejectedResult).reason).toBeInstanceOf(
+      McpUsageResumeError,
+    );
+  });
+
+  it('does not consume a legitimate flow when principal binding mismatches', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const flowStore = new MemoryMcpUsageFlowStore();
+    const protectedHandler = protectMultiRoundTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        noInput: true,
+        principal: current => ({ id: (current as unknown as { user: string }).user }),
+        operationId,
+        flowStore,
+        suspendTtlMs: 1_000,
+        flowId: () => 'flow-000000000003',
+        requestState: { mint: payload => JSON.stringify(payload) },
+        successUnits: () => 0,
+      },
+      async (_args, _ctx, flow) =>
+        flow.round === 0
+          ? { resultType: 'input_required', inputRequests: { x: {} } }
+          : { content: [{ type: 'text', text: 'done' }] },
+    );
+
+    const first = await protectedHandler(contextWithState(undefined, 'user-1'));
+    const state = decodedState(first);
+    await expect(protectedHandler(contextWithState(state, 'attacker'))).rejects.toBeInstanceOf(
+      McpUsageResumeError,
+    );
+    await expect(protectedHandler(contextWithState(state, 'user-1'))).resolves.toEqual({
+      content: [{ type: 'text', text: 'done' }],
+    });
+  });
+
+  it('keeps an abandoned suspended liable flow charged after its explicit TTL expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const protectedHandler = protectMultiRoundTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        noInput: true,
+        principal,
+        operationId,
+        flowStore: new MemoryMcpUsageFlowStore(),
+        suspendTtlMs: 30,
+        flowId: () => 'flow-000000000004',
+        requestState: { mint: payload => JSON.stringify(payload) },
+      },
+      async () => ({ resultType: 'input_required', inputRequests: { x: {} } }),
+    );
+
+    await protectedHandler(contextWithState());
+    await vi.advanceTimersByTimeAsync(31);
+    await expect(nextAdmission(control)).resolves.toEqual(exhausted);
   });
 });

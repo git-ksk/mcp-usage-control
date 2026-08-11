@@ -1,9 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
+import {
+  createMcpHandler,
+  createRequestStateCodec,
+  inputRequired,
+  McpServer,
+} from '@modelcontextprotocol/server';
 import * as z from 'zod/v4';
 import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
-import { protectTool } from './index.js';
+import {
+  MemoryMcpUsageFlowStore,
+  protectMultiRoundTool,
+  protectTool,
+  type McpUsageRequestStatePayload,
+} from './index.js';
 
 type TextToolResult = {
   content: Array<{ type: 'text'; text: string }>;
@@ -187,5 +197,88 @@ describe('MCP protocol integration', () => {
     const result = await client.callTool({ name: 'confirm', arguments: {} });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain('input_required');
+  });
+
+  it('keeps one usage reservation across a modern 2026 input_required retry', async () => {
+    let quoteCalls = 0;
+    const rounds: Array<{ round: number; applicationRequestState?: string }> = [];
+    const policy: UsagePolicy = {
+      quote() {
+        quoteCalls += 1;
+        return { decision: 'allow', units: 1, budget: { key: 'modern-multi-round', limit: 1 } };
+      },
+    };
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const flowStore = new MemoryMcpUsageFlowStore();
+    const stateCodec = createRequestStateCodec<McpUsageRequestStatePayload>({
+      key: '0123456789abcdef0123456789abcdef',
+      ttlSeconds: 60,
+    });
+
+    const protectedHandler = protectMultiRoundTool(
+      {
+        control,
+        tool: 'modern-confirm',
+        noInput: true,
+        principal: () => ({ id: 'user-1' }),
+        operationId: () => 'one-logical-operation',
+        flowStore,
+        suspendTtlMs: 5_000,
+        requestState: { mint: payload => stateCodec.mint(payload) },
+        successUnits: () => 0,
+      },
+      async (_args, _ctx, flow) => {
+        rounds.push({
+          round: flow.round,
+          ...(flow.applicationRequestState === undefined
+            ? {}
+            : { applicationRequestState: flow.applicationRequestState }),
+        });
+        if (flow.round === 0) {
+          return inputRequired({
+            inputRequests: {},
+            requestState: 'application-phase-one',
+          });
+        }
+        return { content: [{ type: 'text' as const, text: 'completed after resume' }] };
+      },
+    );
+
+    const handler = createMcpHandler(() => {
+      const server = new McpServer(
+        { name: 'usage-modern-test', version: '1.0.0' },
+        { requestState: { verify: stateCodec.verify } },
+      );
+      server.registerTool('modern-confirm', { description: 'Modern multi-round test' }, protectedHandler);
+      return server;
+    });
+    openHandlers.push(handler);
+
+    const transport = new StreamableHTTPClientTransport(new URL('http://test.local/mcp'), {
+      fetch: (url, init) => handler.fetch(new Request(url, init)),
+    });
+    const client = new Client(
+      { name: 'usage-modern-test-client', version: '1.0.0' },
+      { versionNegotiation: { mode: 'auto' } },
+    );
+    await client.connect(transport);
+    openClients.push(client);
+
+    expect(client.getProtocolEra()).toBe('modern');
+    const result = await client.callTool({ name: 'modern-confirm', arguments: {} });
+    expect(JSON.stringify(result.content)).toContain('completed after resume');
+    expect(quoteCalls).toBe(1);
+    expect(rounds).toEqual([
+      { round: 0 },
+      { round: 1, applicationRequestState: 'application-phase-one' },
+    ]);
+
+    const after = await control.reserve({
+      operationId: 'after-modern-flow',
+      principal: { id: 'user-1' },
+      tool: 'modern-confirm',
+      args: undefined,
+    });
+    expect(after.allowed).toBe(true);
   });
 });
