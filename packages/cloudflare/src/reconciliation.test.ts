@@ -163,19 +163,86 @@ describe('remote Cloudflare reserve reconciliation', () => {
     ).rejects.toBeInstanceOf(UsageStateError);
   });
 
-  it('fails closed on Cloudflare gateway unavailability', async () => {
+  it('applies the deadline while resolving rotating headers', async () => {
+    await expect(
+      reconcileRemoteCloudflareReserve(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store',
+          headers: () => new Promise<HeadersInit>(() => undefined),
+          fetch: async () => {
+            throw new Error('fetch must not run');
+          },
+          timeoutMs: 20,
+        },
+        { request, units: 1, budgets },
+      ),
+    ).rejects.toMatchObject({ code: 'timeout' });
+  });
+
+  it('applies the same deadline while reading a stalled response body', async () => {
     await expect(
       reconcileRemoteCloudflareReserve(
         {
           endpoint: 'https://usage.example.test/v1/usage-store',
           fetch: async () =>
-            new Response(JSON.stringify({ error: 'store_unavailable' }), {
-              status: 503,
-              headers: { 'content-type': 'application/json' },
-            }),
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start() {
+                  // Intentionally never enqueue or close: response.json() remains pending.
+                },
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            ),
+          timeoutMs: 20,
         },
         { request, units: 1, budgets },
       ),
-    ).rejects.toMatchObject({ code: 'remote' });
+    ).rejects.toMatchObject({ code: 'timeout' });
+  });
+
+  it.each([429, 503])('retains bounded HTTP status metadata for remote status %i', async status => {
+    const secretBody = 'upstream-secret-must-not-leak';
+    let error: unknown;
+    try {
+      await reconcileRemoteCloudflareReserve(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store',
+          fetch: async () => new Response(secretBody, { status }),
+        },
+        { request, units: 1, budgets },
+      );
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toMatchObject({
+      code: 'remote',
+      status,
+      message: 'Cloudflare usage store transport failed',
+    });
+    expect(String(error)).not.toContain(secretBody);
+  });
+
+  it('retains status metadata for unauthorized responses without exposing the body', async () => {
+    const secretBody = 'credential-detail-must-not-leak';
+    let error: unknown;
+    try {
+      await reconcileRemoteCloudflareReserve(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store',
+          fetch: async () => new Response(secretBody, { status: 401 }),
+        },
+        { request, units: 1, budgets },
+      );
+    } catch (caught) {
+      error = caught;
+    }
+
+    expect(error).toMatchObject({
+      code: 'unauthorized',
+      status: 401,
+      message: 'Cloudflare usage store transport failed',
+    });
+    expect(String(error)).not.toContain(secretBody);
   });
 });
