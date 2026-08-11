@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createClient, type RedisClientType } from 'redis';
+import { createClient } from 'redis';
 import {
   RedisMcpUsageFlowStore,
   type RedisMcpFlowEvalClient,
@@ -9,7 +9,7 @@ import {
 } from './mcp-flow.js';
 
 const redisUrl = process.env.REDIS_URL;
-let client: RedisClientType | undefined;
+let client: ReturnType<typeof createClient> | undefined;
 
 const binding: RedisMcpUsageFlowBinding = {
   principalId: 'user-1',
@@ -101,7 +101,9 @@ describe('RedisMcpUsageFlowStore validation', () => {
         return `opaque:${Buffer.from(JSON.stringify(value)).toString('base64url')}`;
       },
       decode(payload) {
-        return JSON.parse(Buffer.from(payload.slice('opaque:'.length), 'base64url').toString('utf8')) as RedisMcpUsageFlowRecord;
+        return JSON.parse(
+          Buffer.from(payload.slice('opaque:'.length), 'base64url').toString('utf8'),
+        ) as RedisMcpUsageFlowRecord;
       },
     };
     const store = new RedisMcpUsageFlowStore(fake, { codec });
@@ -172,9 +174,8 @@ describe.skipIf(!redisUrl)('RedisMcpUsageFlowStore integration', () => {
     const loseReply: RedisMcpFlowEvalClient = {
       async eval(script, options) {
         calls += 1;
-        const result = await (client as unknown as RedisMcpFlowEvalClient).eval(script, options);
+        await (client as unknown as RedisMcpFlowEvalClient).eval(script, options);
         throw new Error('simulated lost suspend ACK');
-        return result;
       },
     };
     const ambiguous = new RedisMcpUsageFlowStore(loseReply, { prefix: 'flow-lost-suspend' });
