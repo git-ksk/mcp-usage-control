@@ -41,8 +41,8 @@ reservationは最初 `pending` です。metered execution直前に `cost-liable`
 
 ## Packages
 
-- **`mcp-usage-control`** — core policy、atomic admission contract、renewable lease、settlement、idempotency、provider-neutral observability hook、in-memory reference store。
-- **`mcp-usage-control-mcp`** — `@modelcontextprotocol/server` v2 single-round tool handler adapter。
+- **`mcp-usage-control`** — core policy、atomic admission contract、renewable / resumable lease、settlement、idempotency、provider-neutral observability hook、in-memory reference store。
+- **`mcp-usage-control-mcp`** — `@modelcontextprotocol/server` v2 single-round toolに加え、opt-inの `input_required` suspend/resume accountingへ対応するadapter。
 - **`mcp-usage-control-redis`** — LuaとRedis server timeを使うatomic Redis store。optionalなexpiry-recovery observabilityにも対応。
 - **`mcp-usage-control-cloudflare`** — Cloudflare Durable Objects + SQLite store。Worker-localとauthenticated remote-client pathを提供。
 
@@ -175,9 +175,17 @@ server.registerTool(
 - classifier failure時のfull reservationによる保守的settlement。
 - ambiguous settlement failureをblind retryしないこと。
 
-### `input_required` のsupport boundary
+### Multi-round `input_required`
 
-v0.1の `protectTool()` はMCP v2 multi-round `input_required` flowを**意図的に未対応**とします。fresh requestをまたぐ正しいreservation suspend/resume semanticsが必要なためです。adapterはsilentなroundごとの二重課金やreplay deadlockを避けるため、該当resultを検出すると保守的にsettleして `UnsupportedMcpUsageFlowError` を返します。将来設計はIssue #14で追跡します。
+`protectTool()` 自体はsingle-roundのままで、`input_required` は引き続き明示rejectします。fresh MCP retry requestをまたぐlogical operationにはopt-inの `protectMultiRoundTool()` を使います。
+
+multi-round wrapperは初回roundだけreserveします。usage leaseはserver-sideに保持し、wire上の `requestState` はintegrity-protectedなopaque flow referenceへ置換します。MCP serverの `requestState.verify` hookでretry stateを検証・decodeした後、同じreservationへ再attachします。server-side `McpUsageFlowStore` はtrusted principal / tool / args bindingをatomicに比較し、resume tokenをexactly one callerへconsumeする必要があります。
+
+`MemoryMcpUsageFlowStore` はsingle-process reference implementationです。horizontal scaleするserverでは同じatomic compare-and-consume contractを満たすshared/durable flow storeが必要です。suspended leaseは明示的な `suspendTtlMs` を持ち、abandonされたcost-liable flowはexpiry時にfull reserved chargeを維持します。
+
+one-time resume tokenにより同じretryでhandlerへ二重再入場しません。ただし任意のbusiness side effectのgeneral exactly-onceやcompleted result replayを提供する仕組みではないため、destructive / external operationでは既存のbusiness idempotency / result reconciliationを維持してください。
+
+公式 `createRequestStateCodec()` の設定例とtrust boundaryの詳細は [MCP SDK v2 integration](docs/mcp-integration.ja.md) を参照してください。
 
 ## Redis production store
 
@@ -218,6 +226,9 @@ Worker設定、privacy、cleanup / cost behavior、GCP等からの利用は [Clo
 12. storage failureをadmissionのallowへ変換しません。
 13. Redis lease / tombstone時刻はapplication hostではなくRedisから取得します。
 14. observabilityはenforcement transactionの外側で、observer failureがallow / deny / settlement stateを変えません。
+15. multi-round MCP retryで再reserveせず、original server-side usage leaseをresumeします。
+16. clientを往復したMCP request stateはintegrity verificationとserver-side binding checkなしにaccounting authorityとして利用しません。
+17. resume tokenはat-most-once consumeされ、mismatch callerが正規suspended flowをconsumeできません。
 
 ## Documentation
 
@@ -236,7 +247,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## v0.1以降のscope
 
-本物の `input_required` suspend/resume accountingとoptionalなvendor-specific telemetry adapterをfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
+horizontal scaleするmulti-round MCP server向けのproduction-ready shared flow-store adapterとoptional vendor-specific telemetry adapterをfollow-upとして追跡します。billing provider、OAuth provider、dashboard、payment protocol、generic rate limitingはcore runtimeの対象外です。
 
 ## License
 
