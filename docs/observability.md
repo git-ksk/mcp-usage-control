@@ -42,6 +42,53 @@ The legacy numeric third constructor argument remains accepted:
 new UsageControl(store, policy, 60_000);
 ```
 
+## Safe structured-log projection
+
+Raw `UsageEvent` values are useful for traces and controlled diagnostics, but they intentionally contain high-cardinality identity fields. For operations logs and log-based metrics, use `projectUsageEvent()` to produce a safer bounded shape:
+
+```ts
+import {
+  projectUsageEvent,
+  type UsageObserver,
+} from 'mcp-usage-control';
+
+const observer: UsageObserver = {
+  onEvent(event) {
+    const record = projectUsageEvent(event);
+    console.log(JSON.stringify(record));
+  },
+};
+```
+
+The default projection keeps operational fields such as `eventType`, `phase`, `result`, bounded `denialReason` / `errorClass`, reserved/actual/released units, recovery count, and aggregate remaining-budget information (`budgetCount`, `remainingMin`, `remainingMax`). It deliberately excludes raw principal/tenant/operation/reservation IDs, tool names, budget keys, settlement `outcome`, and application-defined denial text.
+
+Example projected JSON:
+
+```json
+{
+  "timestamp": 1786411200000,
+  "eventType": "reserve.accepted",
+  "phase": "reserve",
+  "result": "success",
+  "reservedUnits": 2,
+  "budgetCount": 2,
+  "remainingMin": 8,
+  "remainingMax": 98
+}
+```
+
+Explicit event metadata can be copied only by opting in:
+
+```ts
+const record = projectUsageEvent(event, { includeMetadata: true });
+```
+
+The existing metadata trust model still applies. Only opt in to metadata whose keys and values are non-secret and bounded.
+
+A log-based metric can safely use fields such as `eventType`, `phase`, `result`, `denialReason`, `errorClass`, `store`, and `recovery` as dimensions, while recording unit/remaining fields as values. Do not automatically promote tool names, budget keys, IDs, or arbitrary metadata into labels.
+
+Raw settlement `outcome` and application-provided policy denial `reason` strings are intentionally not copied into the default projection. If your application adds either field to metrics, normalize it into a finite allow-listed code set first. Truncating a free-form string is not sufficient to make its cardinality safe.
+
 ## Event types
 
 ### `reserve.accepted`
@@ -114,19 +161,19 @@ Runtime events can contain `principalId`, `tenantId`, `operationId`, `reservatio
 Recommended usage:
 
 - structured logs / traces: IDs may be useful when allowed by your privacy policy;
-- metrics: use bounded dimensions such as tool, outcome, plan, denial reason code, or error class;
-- **do not** promote unique principal, operation, reservation, or user-specific budget IDs into metric labels/tags.
+- operational logs / log-based metrics: prefer `projectUsageEvent()`;
+- metrics: use bounded dimensions such as projected event type, phase, result, denial reason, recovery type, or error class;
+- **do not** promote unique principal, operation, reservation, tool, or user-specific budget IDs into metric labels/tags by default.
 
 This avoids cardinality explosions in Prometheus, Cloud Monitoring, Datadog, OpenTelemetry metric backends, and similar systems.
 
 ## Suggested counters
 
-The event stream is suitable for deriving bounded operational counters such as:
+The event stream or safe projection is suitable for deriving bounded operational counters such as:
 
-- accepted calls by tool/plan;
-- denied calls by reason/tool/plan;
-- consumed units by tool/outcome;
-- released units;
+- accepted calls;
+- denied calls by bounded denial reason;
+- consumed/released units;
 - pending-expiry recoveries;
 - liable-expiry retained units;
 - store/state errors by phase/error class.
