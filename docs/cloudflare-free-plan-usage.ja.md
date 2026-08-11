@@ -90,8 +90,8 @@ Cloudflare Free-plan limit exhaustionをbusiness quota denialへ変換しては�
 この2つは意図的に別pathです。
 
 - **Business quota denial:** Durable Objectは正常protocol envelopeとして `accepted: false`, `reason: 'quota_exceeded'` を返します。remote callerは通常の `StoreReserveResult` を受け取り、quota-specific responseを返せます。
-- **Cloudflare / Durable Object failure:** gatewayは内部invocation failureをraw runtime exceptionをserializeせずHTTP `503`へ変換します。`RemoteCloudflareUsageStore` はnon-success HTTP statusをcode `remote` の `CloudflareUsageTransportError` に変換し、callerはfail-closeします。
-- **Network / timeout ambiguity:** remote clientは `network` / `timeout` を返し、blind retryしません。
+- **Cloudflare / Durable Object failure:** gatewayは内部invocation failureをraw runtime exceptionをserializeせずHTTP `503`へ変換します。`RemoteCloudflareUsageStore` はnon-success HTTP statusをcode `remote` の `CloudflareUsageTransportError` に変換し、callerはfail-closeします。errorには `429` / `503` などboundedな数値 `status` だけを保持でき、remote response bodyは公開しません。
+- **Network / timeout ambiguity:** remote clientは `network` / `timeout` を返し、blind retryしません。`timeoutMs` は rotating credential/header取得、fetch、response body/protocol decodeまでを含む1 call全体のdeadlineです。
 
 Cloudflare platform failure後に別quota ledgerへdynamic switchしないでください。enforcement truthが分裂し、quota oversubscriptionを許す可能性があります。
 
