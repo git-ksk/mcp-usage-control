@@ -45,6 +45,84 @@ const result = await reconcileRemoteCloudflareReserve(
 
 reconciliationをgeneric retry middlewareとして使わないでください。reserve結果がambiguousになった場合だけ実行する明示的なrecovery stepです。
 
+## canonicalなlost-ACK flow
+
+安全なconsumer sequenceは次です。
+
+```text
+reserveを1回だけ実行
+  -> ACK付き成功: 通常どおり続行
+  -> 明確なbusiness denial: 通常どおり停止
+  -> network/timeoutでambiguous: lookupを1回実行
+       -> active/pending: 同じreservationへreattachし、1回だけ続行
+       -> active/liable: 再実行禁止。既に開始したworkをrecover
+       -> settled: 再実行禁止
+       -> expired/absent: applicationのrecovery horizonに従ってfail-close
+       -> lookup transport/protocol failure: fail-close
+```
+
+`active/pending` の具体的なrecoveryでは `UsageControl.resumeLease()` を使えます。policyや `reserve()` を2回目に呼ぶ必要はありません。
+
+```ts
+import { UsageControl } from 'mcp-usage-control';
+import {
+  CloudflareUsageTransportError,
+  RemoteCloudflareUsageStore,
+} from 'mcp-usage-control-cloudflare';
+import { reconcileRemoteCloudflareReserve } from 'mcp-usage-control-cloudflare/reconciliation';
+
+const remoteOptions = {
+  endpoint: process.env.MCP_USAGE_CLOUDFLARE_URL!,
+  headers: () => ({
+    authorization: `Bearer ${process.env.MCP_USAGE_CLOUDFLARE_TOKEN!}`,
+  }),
+};
+const store = new RemoteCloudflareUsageStore(remoteOptions);
+const control = new UsageControl(store, policy);
+
+const reserveInput = {
+  request,
+  units,
+  budgets,
+  ttlMs,
+};
+
+try {
+  const reserved = await store.reserve(reserveInput);
+  // ACKを受け取れた通常のStoreReserveResultを処理する。
+  void reserved;
+} catch (error) {
+  const ambiguous =
+    error instanceof CloudflareUsageTransportError &&
+    (error.code === 'network' || error.code === 'timeout');
+  if (!ambiguous) throw error;
+
+  const reconciled = await reconcileRemoteCloudflareReserve(remoteOptions, reserveInput);
+
+  if (reconciled.status === 'active' && reconciled.state === 'pending') {
+    const lease = control.resumeLease({
+      reservation: reconciled.reservation,
+      ttlMs: reserveInput.ttlMs,
+    });
+
+    // application側でも「workが別経路で未開始」を先に確認する。
+    await lease.markLiable();
+    // business workをexactly onceで実行
+    await lease.settle(actualUnits, boundedOutcomeCode);
+  } else if (reconciled.status === 'active' && reconciled.state === 'liable') {
+    // business operationを絶対に再実行しない。
+    // 既に開始済みのworkをreconcileし、必要ならrenew/settleだけ行う。
+  } else {
+    // settled / expired / absentは再実行の許可を意味しない。
+    throw new Error('reserve reconciliation did not prove a safe pending continuation');
+  }
+}
+```
+
+すべてのreconciliation stateを暗黙に「reserve成功」へ変換するhelperは意図的に避けます。ambiguityを隠すとbusiness side effectの二重実行を起こしやすくなるためです。
+
+business `duplicate_operation` responseはlost ACKとは別物です。これはlogical operation keyが既に保護されていることを示す明確なstore resultであり、元reserve resultのreplayとして扱ったり、blind retryしたりしないでください。
+
 ## Result state
 
 ### `active` / `pending`
@@ -55,7 +133,7 @@ reconciliationをgeneric retry middlewareとして使わないでください。
 
 ### `active` / `liable`
 
-reservationが存在し、metered executionは既に開始している可能性があります。operationを再実行しないでください。既に開始したworkに対するapplication固有のrecovery/reconciliationだけを行います。
+reservationが存在し、metered executionは既に開始している可能性があります。operationを再実行しないでください。既に開始したworkに対するapplication固有のrecovery/reconciliationだけを行います。renew / settleが必要なら返されたreservationへserver-sideでreattachできますが、reattachはbusiness side effectの再実行許可ではありません。
 
 ### `settled`
 
@@ -97,13 +175,20 @@ reserve -> pending -> liable -> settled
 
 accounting stateを変更するのは通常の `reserve` / `markLiable` / `renew` / `settle` / expiry recoveryだけです。
 
+## Transport behavior
+
+reconciliationは `RemoteCloudflareUsageStore` と同じbounded remote-transport semanticsを使います。1つの `timeoutMs` deadlineがasync header resolution、HTTP fetch、response-body decode、protocol validationまでを覆います。state-changing callの自動retryは行いません。
+
+`CloudflareUsageTransportError` が保持するのはboundedなtransport diagnosticだけです。HTTP responseを受け取った場合はunauthorized / remote / protocol failureの `status` を保持しますが、任意のremote response body、credential、request identity値はerrorへコピーしません。
+
 ## 運用ルール
 
 - ambiguousなreserve transport failure後だけreconcileする。
 - 元request identity / units / budgetsを完全に同じ値で使う。
 - reconciliation前にreserveを自動retryしない。
+- `duplicate_operation` とtransport ambiguityを区別する。
 - applicationのidempotency / retry horizon内で速やかにreconcileする。
 - reconciliationのtransport / protocol failureはfail-closeとして扱う。
 - unknown stateをunmetered executionへ変換しない。
 
-local workerd integrationでは、reserve commit後のlost ACKを再現し、並列read-only reconciliation、元quotaが保持されること、復元reservationからのlifecycle再開、settlement後のcapacity recoveryまで検証します。
+local workerd integrationでは、reserve commit後のlost ACKを再現し、並列read-only reconciliation、元quotaが保持されること、`UsageControl.resumeLease()` による復元reservationへのreattach、settlement後のcapacity recoveryまで検証します。

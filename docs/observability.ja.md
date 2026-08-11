@@ -42,6 +42,53 @@ policy denialの `reason` もapplication定義で、`reserve.denied` へコピ�
 new UsageControl(store, policy, 60_000);
 ```
 
+## 安全なstructured log projection
+
+raw `UsageEvent` はtraceや制御された診断には便利ですが、意図的にhigh-cardinalityなidentity fieldを含みます。運用logやlog-based metricでは `projectUsageEvent()` を使い、より安全でboundedなshapeへ落としてから出力できます。
+
+```ts
+import {
+  projectUsageEvent,
+  type UsageObserver,
+} from 'mcp-usage-control';
+
+const observer: UsageObserver = {
+  onEvent(event) {
+    const record = projectUsageEvent(event);
+    console.log(JSON.stringify(record));
+  },
+};
+```
+
+default projectionには `eventType`、`phase`、`result`、boundedな `denialReason` / `errorClass`、reserved / actual / released units、recovery count、remaining budgetのaggregate情報（`budgetCount`、`remainingMin`、`remainingMax`）だけを残します。raw principal / tenant / operation / reservation ID、tool名、budget key、settlement `outcome`、application定義のdenial textは意図的に除外します。
+
+projected JSONの例:
+
+```json
+{
+  "timestamp": 1786411200000,
+  "eventType": "reserve.accepted",
+  "phase": "reserve",
+  "result": "success",
+  "reservedUnits": 2,
+  "budgetCount": 2,
+  "remainingMin": 8,
+  "remainingMax": 98
+}
+```
+
+明示metadataを含めたい場合だけopt-inします。
+
+```ts
+const record = projectUsageEvent(event, { includeMetadata: true });
+```
+
+既存のmetadata trust modelはそのまま適用されます。secretでなく、key/valueともboundedだとapplication側で保証できるmetadataだけopt-inしてください。
+
+log-based metricのdimensionには `eventType`、`phase`、`result`、`denialReason`、`errorClass`、`store`、`recovery` などを使えます。units / remaining系は値として記録し、tool名、budget key、各種ID、任意metadataを自動的にlabelへ昇格させないでください。
+
+raw settlement `outcome` とapplication提供のpolicy denial `reason` はdefault projectionへ入れません。application側でmetricに追加する場合は、有限個のallow-list codeへ正規化してからdimensionにしてください。free-form文字列を単にtruncateするだけではcardinality対策として不十分です。
+
 ## Event type
 
 ### `reserve.accepted`
@@ -114,19 +161,19 @@ runtime eventには `principalId`、`tenantId`、`operationId`、`reservationId`
 推奨:
 
 - structured log / trace: privacy policy上許容される場合のみIDを利用。
-- metric: tool、outcome、plan、denial reason code、error classなどbounded dimensionを利用。
-- **unique principal / operation / reservation / user-specific budget IDをmetric label/tagにしない。**
+- operational log / log-based metric: `projectUsageEvent()` を優先。
+- metric: projected event type、phase、result、denial reason、recovery type、error classなどbounded dimensionを利用。
+- **unique principal / operation / reservation / tool / user-specific budget IDをmetric label/tagにしない。**
 
 Prometheus、Cloud Monitoring、Datadog、OpenTelemetry metrics backend等でのcardinality explosionを避けるためです。
 
 ## 作りやすいcounter
 
-このevent streamから、例えば次のbounded operational counterを作れます。
+raw event streamまたはsafe projectionから、例えば次のbounded operational counterを作れます。
 
-- tool / plan別accepted call数
-- reason / tool / plan別denied call数
-- tool / outcome別consumed units
-- released units
+- accepted call数
+- bounded denial reason別denied call数
+- consumed / released units
 - pending-expiry recovery件数
 - liable-expiry retained units
 - phase / error class別store/state error

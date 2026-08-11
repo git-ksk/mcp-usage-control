@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { UsageControl } from 'mcp-usage-control';
 import {
   CloudflareUsageTransportError,
   RemoteCloudflareUsageStore,
@@ -10,6 +11,11 @@ const endpoint =
 const token = process.env.MCP_USAGE_CLOUDFLARE_TOKEN ?? 'local-integration-token';
 const authHeaders = { authorization: `Bearer ${token}` };
 const store = new RemoteCloudflareUsageStore({ endpoint, headers: authHeaders });
+const control = new UsageControl(store, {
+  quote() {
+    throw new Error('policy must not be re-run while resuming a reconciled reservation');
+  },
+});
 const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const request = operationId => ({
@@ -85,13 +91,14 @@ assert.deepEqual(competitor, {
   remaining: 0,
 });
 
-// The recovered reservation can resume the normal lifecycle explicitly.
-await store.markLiable({ reservationId: recovered.reservation.id });
-await store.settle({
-  reservationId: recovered.reservation.id,
-  actualUnits: 0,
-  outcome: 'reconciled-no-charge',
+// Consumer-style recovery: reattach the reconciled pending reservation without
+// re-running policy.quote() or reserve(), then continue the normal lifecycle.
+const recoveredLease = control.resumeLease({
+  reservation: recovered.reservation,
+  ttlMs: reserveInput.ttlMs,
 });
+await recoveredLease.markLiable();
+await recoveredLease.settle(0, 'reconciled-no-charge');
 
 const afterSettlement = await reconcileRemoteCloudflareReserve(
   { endpoint, headers: authHeaders },
