@@ -12,13 +12,25 @@ identity -> entitlement/policy -> quote -> atomic reserve -> mark liable -> exec
                                                           |------ renew -----|
 ```
 
-It does not own authentication, subscription billing, payment collection, dashboards, generic rate limiting, or upstream pricing.
+Its category is **transactional usage/quota enforcement**: admission, liability, lease recovery, and settlement around execution.
+
+It does not own authentication, subscription billing, payment collection, dashboards, generic rate limiting, gateway routing, or upstream pricing.
+
+External billing/metering integrations sit outside the enforcement transaction:
+
+```text
+transactional enforcement core -> stable observer/event contract -> optional billing/telemetry adapter
+```
+
+An external schema may consume stable outcomes, but it must not redefine or weaken reserve/liability/idempotency/expiry/settlement semantics.
 
 ## Why reserve before execution
 
 `check -> execute -> record` has a time-of-check/time-of-use race. Concurrent agent calls can all observe the same remaining balance and start before any one call records usage.
 
-`UsageStore.reserve()` therefore performs duplicate detection, quota comparison, and reservation creation as one atomic store operation.
+For example, with 1 unit left, two requests can both read `remaining = 1`, both execute a metered upstream operation, and only then increment usage. Two units of real work have been admitted against one unit of capacity.
+
+`UsageStore.reserve()` therefore performs duplicate detection, quota comparison, and reservation creation as one atomic store operation **before** execution. This is the primary distinction from an ordinary request rate limiter.
 
 ## Multi-budget admission
 
@@ -49,11 +61,13 @@ Expiry behavior is state-dependent:
 
 This closes the crash-after-cost refund gap. The generic MCP wrapper uses handler entry as the liability boundary because it cannot know a provider-specific point of cost. This can conservatively over-account a crash between handler entry and real upstream cost; applications needing a more precise boundary should use the core lifecycle directly.
 
-## Renewable leases
+## Renewable and resumable leases
 
 A fixed reservation TTL is unsafe for legitimate long-running work. If an active reservation is reclaimed while its operation is still running, another operation can reuse the same budget capacity.
 
-`UsageStore.renew()` atomically extends an active lease. `mcp-usage-control-mcp` enables a heartbeat by default while a wrapped handler runs and stops/waits for any in-flight renewal before settlement.
+`UsageStore.renew()` atomically extends an active lease. `mcp-usage-control-mcp` enables a heartbeat by default while a wrapped handler runs and stops/waits for any in-flight renewal before settlement or multi-round suspension.
+
+`UsageLease.toResumeState()` and `UsageControl.resumeLease()` provide a trusted server-side reattachment mechanism without running policy quote or reserve again. The raw resume state is not a client credential and must not be treated as one.
 
 A storage/network partition can still outlive a lease. Renewal is not provider-specific fencing. Applications requiring immediate cancellation after lease loss must implement fencing/cancellation at the metered resource boundary.
 
@@ -72,6 +86,32 @@ v0.1 settlement rules are explicit:
 `actualUnits` must be a non-negative safe integer and cannot exceed `reservedUnits`. Dynamic-cost tools should reserve a safe maximum and release unused units at settlement.
 
 Settlement applies the same actual unit count to all budgets that participated in the reservation.
+
+## Failure, crash, and acknowledgement ambiguity
+
+State-changing operations can succeed remotely even when the caller does not receive the acknowledgement. The safe response depends on which transition became ambiguous.
+
+### Crash before liability
+
+If a process disappears while a lease is still pending, expiry releases the reservation. No metered execution boundary was declared.
+
+### Crash after liability
+
+If the process disappears after `markLiable()`, expiry retains the full reserved charge. The system cannot safely infer that no metered resource was consumed.
+
+### Lost reserve acknowledgement
+
+A timeout after `reserve()` can mean either "not committed" or "committed but ACK lost". A client must not issue an unrelated second reservation to regain availability. Store-specific reconciliation or stable logical-operation replay should determine whether the original reservation exists.
+
+### Lost settlement acknowledgement
+
+A timeout after `settle()` can likewise mean the settlement committed. Blindly issuing a different settlement is unsafe. Identical settlement replay is idempotent during tombstone retention; conflicting replay fails closed.
+
+### Multi-round post-claim failure
+
+MCP `input_required` resume tokens are consumed once before application re-entry. If a process or transport fails after that claim, the wrapper does not blindly re-enter the application handler. The usage lease remains conservative; applications that need replay of a completed business result require a separate business-idempotency/result-reconciliation layer.
+
+These cases are why the runtime is a state machine rather than a request counter.
 
 ## Idempotency and replay protection
 
@@ -106,15 +146,19 @@ Core is independent of MCP and storage vendors. A production `UsageStore` must p
 
 `mcp-usage-control-redis` implements the contract with Redis-side Lua in one configurable Redis Cluster hash slot. Lease/tombstone decisions use Redis server `TIME` so application host clock skew does not change accounting.
 
-## Redis atomicity vs durability
+A future third-party-store compatibility kit should execute these invariants directly so an adapter cannot claim compatibility based only on matching method names.
 
-Lua provides atomic transitions inside Redis. It does not by itself guarantee persistence across every crash, failover, or acknowledged-write-loss window. Production deployments must configure persistence, replication, failover, backup, and recovery according to their acceptable accounting-loss budget.
+## Enforcement state vs financial ledger
 
-When a stronger financial ledger is required, Redis should remain the enforcement state and be reconciled to a separate durable ledger/event system.
+Atomic enforcement state answers whether work may proceed and how reserved capacity is finalized. That does not automatically make it a financial-grade ledger.
+
+Redis, Durable Objects, or another enforcement store can have persistence/failover properties different from an accounting system used for invoices or statutory records. When stronger durability is required, keep the enforcement state authoritative for admission and reconcile stable enforcement outcomes to a separate durable ledger/event system.
+
+The reconciliation path is downstream; a billing ledger must not become a dynamic fallback quota store after an enforcement-store failure, because split sources of truth can oversubscribe quota.
 
 ## MCP result semantics
 
-`mcp-usage-control-mcp` targets `@modelcontextprotocol/server` v2 **single-round** tool handlers while core remains SDK-independent.
+`mcp-usage-control-mcp` targets `@modelcontextprotocol/server` v2 while core remains SDK-independent.
 
 The adapter distinguishes:
 
@@ -122,22 +166,27 @@ The adapter distinguishes:
 - explicit `{ isError: true }` tool result;
 - thrown execution error;
 - cost-classification error;
-- settlement error.
+- settlement error;
+- explicit multi-round `input_required` suspension/resumption through `protectMultiRoundTool()`.
 
 Ambiguous settlement is not blindly retried because the store write may already have committed even when the acknowledgement was lost.
 
-The repository tests both the wrapper directly and through the official SDK `Client + createMcpHandler` path.
+The repository tests both wrappers directly and through the official SDK `Client + createMcpHandler` path.
 
 ### `input_required`
 
-MCP v2 `input_required` crosses request boundaries. Correct accounting requires reservation suspend/resume semantics, replay identity across rounds, abandonment recovery, and integrity rules for client-carried state.
+`protectTool()` deliberately remains single-round and conservatively rejects `input_required`.
 
-v0.1 therefore makes an explicit support-boundary decision: `protectTool()` does **not** support `input_required`. If a wrapped handler returns it, the current reservation is conservatively settled and `UnsupportedMcpUsageFlowError` is surfaced. True suspend/resume support remains tracked in issue #14.
+`protectMultiRoundTool()` provides the opt-in multi-round contract. The initial round reserves and marks liability once. Suspended state remains server-side; the wire `requestState` is an integrity-protected opaque reference. Resume requires the MCP server verification hook plus an atomic principal/tool/args binding-aware flow consume. The resumed round reattaches to the original lease instead of re-quoting or re-reserving.
+
+`MemoryMcpUsageFlowStore` is process-local reference semantics. Horizontally scaled servers need a shared/durable flow store with the same atomic compare-and-consume contract. Completed-result replay after a post-claim crash remains a separate reconciliation concern rather than a reason to weaken one-time resume-token semantics.
 
 ## Trust boundaries
 
 - principal/tenant identity must come from trusted server-side authentication/application context;
 - `clientInfo`, tool arguments, request-state blobs, and operation IDs are not authorization proof;
+- MCP client-round-tripped request state must be integrity-verified and rebound to trusted server-side flow state before it can affect accounting;
 - policy denial details should not contain secrets intended for end users/models;
 - budget keys and outcome labels should be low-cardinality and non-sensitive when exported to logs/metrics;
-- Redis hashing reduces identifier exposure in key names but is not encryption.
+- hashing reduces identifier exposure in storage/key names but is not encryption;
+- external billing/metering adapters may observe stable outcomes but must not alter enforcement decisions or transaction semantics.
