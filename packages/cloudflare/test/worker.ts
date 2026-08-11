@@ -18,13 +18,15 @@ function jsonResponse(body: unknown, status: number): Response {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const pathname = new URL(request.url).pathname;
+    const url = new URL(request.url);
+    const pathname = url.pathname;
     if (pathname === '/health') return new Response('ok');
 
-    // Fault injection is explicitly enabled only by the local workerd config.
-    // The deployed dogfood config does not set this flag, so these routes are
-    // absent from the externally reachable test Worker surface.
-    if (env.MCP_USAGE_ENABLE_FAULT_INJECTION === '1') {
+    // Fault injection requires both an explicit local-test flag and a localhost
+    // request. Even if wrangler.test.jsonc is accidentally deployed, these
+    // routes cannot be enabled on a workers.dev/custom-domain hostname.
+    const isLocalHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+    if (env.MCP_USAGE_ENABLE_FAULT_INJECTION === '1' && isLocalHost) {
       if (pathname === '/test/platform-limit') {
         return jsonResponse({ error: 'simulated_platform_limit' }, 429);
       }
