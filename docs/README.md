@@ -8,10 +8,11 @@ Maintained documentation for `mcp-usage-control` v0.1.
 
 - [Use from source / local tarballs](using-from-source.md) — **current installation path while npm publication is pending**; clone, verify, pack, install into another project, and smoke-test imports.
 - [Getting started](getting-started.md) — multi-budget policy, core lifecycle, distributed stores, and MCP examples.
-- [MCP integration](mcp-integration.md) — `@modelcontextprotocol/server` v2 single-round usage control and the `input_required` support boundary.
+- [MCP integration](mcp-integration.md) — `@modelcontextprotocol/server` v2 single-round and opt-in `input_required` multi-round usage control.
 - [Observability](observability.md) — provider-neutral lifecycle events, privacy/cardinality guidance, best-effort delivery semantics, and distributed-store recovery telemetry.
 - [API reference](api-reference.md) — v0.1 core, MCP, Redis, and Cloudflare public surface/defaults.
-- [Architecture](architecture.md) — safety invariants, multi-budget atomicity, liability, idempotency, settlement, trust boundaries.
+- [Architecture](architecture.md) — transactional usage-enforcement boundary, safety invariants, crash/ACK ambiguity, multi-budget atomicity, liability, idempotency, settlement, and trust boundaries.
+- [Roadmap](roadmap.md) — invariant-first priorities: production multi-round flow storage, real Cloudflare closure, third-party store conformance, and external billing adapter boundaries.
 - [Redis adapter](redis.md) — v0.1 Lua transaction model, key layout, expiry, replay, Redis Cluster and durability trade-offs.
 - [Cloudflare adapter](cloudflare.md) — Durable Objects + SQLite transaction domain, Worker-local/remote use, privacy, ACK ambiguity, cleanup and cost behavior.
 - [Release policy](releasing.md) — package/version/release procedure and pre-1.0 compatibility policy.
