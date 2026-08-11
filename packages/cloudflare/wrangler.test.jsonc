@@ -18,6 +18,7 @@
     }
   },
   "vars": {
-    "MCP_USAGE_TEST_TOKEN": "local-integration-token"
+    "MCP_USAGE_TEST_TOKEN": "local-integration-token",
+    "MCP_USAGE_ENABLE_FAULT_INJECTION": "1"
   }
 }
