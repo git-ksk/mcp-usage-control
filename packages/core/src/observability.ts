@@ -73,6 +73,128 @@ export type UsageEvent =
         errorName: string;
       });
 
+export type UsageLogResult = 'success' | 'denied' | 'error' | 'recovery';
+export type UsageLogPhase = 'quote' | 'reserve' | 'mark_liable' | 'renew' | 'settle' | 'recovery';
+export type UsageLogDenialReason = 'quota_exceeded' | 'duplicate_operation' | 'policy_denied';
+export type UsageLogErrorClass =
+  | 'Error'
+  | 'TypeError'
+  | 'RangeError'
+  | 'UsageStateError'
+  | 'UsageDeniedError'
+  | 'CloudflareUsageTransportError'
+  | 'UnknownError'
+  | 'OtherError';
+
+/**
+ * Operations-safe, low-cardinality projection of a UsageEvent.
+ *
+ * Identity fields, reservation IDs, tool/budget identifiers, settlement outcome,
+ * and application-defined reason strings are deliberately excluded by default.
+ */
+export interface UsageLogRecord {
+  timestamp: number;
+  eventType: UsageEvent['type'];
+  phase: UsageLogPhase;
+  result: UsageLogResult;
+  source?: 'policy' | 'store' | 'runtime';
+  denialReason?: UsageLogDenialReason;
+  errorClass?: UsageLogErrorClass;
+  store?: 'memory' | 'redis' | 'cloudflare';
+  recovery?: 'pending_released' | 'liable_retained';
+  reservedUnits?: number;
+  actualUnits?: number;
+  releasedUnits?: number;
+  remaining?: number;
+  budgetCount?: number;
+  remainingMin?: number;
+  remainingMax?: number;
+  count?: number;
+  /** Explicit opt-in only; callers remain responsible for metadata privacy/cardinality. */
+  metadata?: UsageEventMetadata;
+}
+
+export interface UsageLogProjectionOptions {
+  /** Copy explicit UsageEvent metadata into the log record. Disabled by default. */
+  includeMetadata?: boolean;
+}
+
+/**
+ * Project a raw lifecycle event into a log-safe shape suitable for JSON logs and
+ * bounded operational metrics. This helper is pure and never affects enforcement.
+ */
+export function projectUsageEvent(
+  event: UsageEvent,
+  options: UsageLogProjectionOptions = {},
+): UsageLogRecord {
+  const metadata =
+    options.includeMetadata === true && event.metadata !== undefined
+      ? { metadata: { ...event.metadata } }
+      : {};
+
+  if (event.type === 'reserve.accepted') {
+    const remaining = summarizeRemaining(event.remainingByBudget);
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'reserve',
+      result: 'success',
+      reservedUnits: event.reservedUnits,
+      ...remaining,
+      ...metadata,
+    };
+  }
+
+  if (event.type === 'reserve.denied') {
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'reserve',
+      result: 'denied',
+      denialReason: normalizeDenialReason(event.reason),
+      ...(event.remaining === undefined ? {} : { remaining: event.remaining }),
+      ...metadata,
+    };
+  }
+
+  if (event.type === 'settlement.completed') {
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'settle',
+      result: 'success',
+      reservedUnits: event.reservedUnits,
+      actualUnits: event.actualUnits,
+      releasedUnits: event.releasedUnits,
+      ...metadata,
+    };
+  }
+
+  if (event.type === 'reservation.recovered') {
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'recovery',
+      result: 'recovery',
+      store: event.store,
+      recovery: event.recovery,
+      reservedUnits: event.reservedUnits,
+      count: event.count,
+      ...metadata,
+    };
+  }
+
+  return {
+    timestamp: event.timestamp,
+    eventType: event.type,
+    phase: event.phase,
+    result: 'error',
+    source: event.source,
+    errorClass: normalizeErrorClass(event.errorName),
+    ...metadata,
+  };
+}
+
 /**
  * Best-effort observer delivery outside the enforcement outcome. The callback
  * is invoked inline, but returned promises are not awaited. Keep synchronous
@@ -101,4 +223,36 @@ export function usageErrorName(error: unknown): string {
     return constructorName;
   }
   return 'UnknownError';
+}
+
+function normalizeDenialReason(reason: string): UsageLogDenialReason {
+  if (reason === 'quota_exceeded' || reason === 'duplicate_operation') return reason;
+  return 'policy_denied';
+}
+
+function normalizeErrorClass(errorName: string): UsageLogErrorClass {
+  switch (errorName) {
+    case 'Error':
+    case 'TypeError':
+    case 'RangeError':
+    case 'UsageStateError':
+    case 'UsageDeniedError':
+    case 'CloudflareUsageTransportError':
+    case 'UnknownError':
+      return errorName;
+    default:
+      return 'OtherError';
+  }
+}
+
+function summarizeRemaining(
+  remainingByBudget: readonly { key: string; remaining: number }[],
+): Pick<UsageLogRecord, 'budgetCount' | 'remainingMin' | 'remainingMax'> {
+  if (remainingByBudget.length === 0) return { budgetCount: 0 };
+  const values = remainingByBudget.map(item => item.remaining);
+  return {
+    budgetCount: values.length,
+    remainingMin: Math.min(...values),
+    remainingMax: Math.max(...values),
+  };
 }
