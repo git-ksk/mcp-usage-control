@@ -8,10 +8,11 @@
 
 - [Source / local tarballから使う](using-from-source.ja.md) — **npm公開待ちの現在のinstall手順**。clone、検証、pack、別projectへのinstall、import smoke testまで。
 - [Getting started](getting-started.ja.md) — multi-budget policy、core lifecycle、distributed store、MCP例。
-- [MCP integration](mcp-integration.ja.md) — `@modelcontextprotocol/server` v2 single-round usage controlと `input_required` support boundary。
+- [MCP integration](mcp-integration.ja.md) — `@modelcontextprotocol/server` v2 single-roundとopt-in `input_required` multi-round usage control。
 - [Observability](observability.ja.md) — provider-neutral lifecycle event、privacy / cardinality指針、best-effort delivery semantics、distributed-store recovery telemetry。
 - [API reference](api-reference.ja.md) — v0.1 core / MCP / Redis / Cloudflare public surfaceとdefault。
-- [Architecture](architecture.ja.md) — safety invariant、multi-budget atomicity、liability、idempotency、settlement、trust boundary。
+- [Architecture](architecture.ja.md) — transactional usage-enforcement boundary、safety invariant、crash / ACK ambiguity、multi-budget atomicity、liability、idempotency、settlement、trust boundary。
+- [Roadmap](roadmap.ja.md) — invariant-first priority。production multi-round flow storage、real Cloudflare closure、third-party store conformance、external billing adapter boundary。
 - [Redis adapter](redis.ja.md) — v0.1 Lua transaction model、key layout、expiry、replay、Redis Cluster / durability trade-off。
 - [Cloudflare adapter](cloudflare.ja.md) — Durable Objects + SQLite transaction domain、Worker-local / remote利用、privacy、ACK ambiguity、cleanup / cost behavior。
 - [Release policy](releasing.ja.md) — package / version / release procedure、pre-1.0 compatibility policy。
