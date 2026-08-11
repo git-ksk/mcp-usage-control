@@ -231,14 +231,18 @@ export interface RemoteCloudflareUsageStoreOptions {
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
   /** Override fetch for tests or custom transports. No automatic retry is performed. */
   fetch?: typeof fetch;
-  /** Per-call timeout. Defaults to 10 seconds. */
+  /** Full-call timeout covering header resolution, fetch, and response decoding. Defaults to 10 seconds. */
   timeoutMs?: number;
   /** Optional best-effort recovery observer. */
   observer?: UsageObserver;
 }
 
 export class CloudflareUsageTransportError extends Error {
-  constructor(public readonly code: 'timeout' | 'network' | 'unauthorized' | 'remote' | 'protocol') {
+  constructor(
+    public readonly code: 'timeout' | 'network' | 'unauthorized' | 'remote' | 'protocol',
+    /** Bounded HTTP status metadata when a response was received. Response bodies are never exposed. */
+    public readonly status?: number,
+  ) {
     super('Cloudflare usage store transport failed');
     this.name = 'CloudflareUsageTransportError';
   }
@@ -343,39 +347,57 @@ export class RemoteCloudflareUsageStore implements UsageStore {
   }
 
   private async post<T>(body: CloudflareHttpRequest): Promise<CloudflareStoreEnvelope<T>> {
-    const headers = new Headers(await resolveHeaders(this.options.headers));
-    headers.set('content-type', 'application/json');
-    headers.set('accept', 'application/json');
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-    let response: Response;
+
     try {
-      response = await this.fetchImpl(this.endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-    } catch (error) {
-      if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
-      throw new CloudflareUsageTransportError('network');
+      let resolvedHeaders: HeadersInit | undefined;
+      try {
+        resolvedHeaders = await waitForAbort(resolveHeaders(this.options.headers), controller.signal);
+      } catch (error) {
+        if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
+        throw error;
+      }
+
+      const headers = new Headers(resolvedHeaders);
+      headers.set('content-type', 'application/json');
+      headers.set('accept', 'application/json');
+
+      let response: Response;
+      try {
+        response = await waitForAbort(
+          this.fetchImpl(this.endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          }),
+          controller.signal,
+        );
+      } catch (error) {
+        if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
+        if (error instanceof CloudflareUsageTransportError) throw error;
+        throw new CloudflareUsageTransportError('network');
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        throw new CloudflareUsageTransportError('unauthorized', response.status);
+      }
+      if (!response.ok) throw new CloudflareUsageTransportError('remote', response.status);
+
+      let payload: unknown;
+      try {
+        payload = await waitForAbort(response.json(), controller.signal);
+      } catch (error) {
+        if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
+        if (error instanceof CloudflareUsageTransportError) throw error;
+        throw new CloudflareUsageTransportError('protocol', response.status);
+      }
+      if (!isEnvelope(payload)) throw new CloudflareUsageTransportError('protocol', response.status);
+      return payload as CloudflareStoreEnvelope<T>;
     } finally {
       clearTimeout(timer);
     }
-
-    if (response.status === 401 || response.status === 403) {
-      throw new CloudflareUsageTransportError('unauthorized');
-    }
-    if (!response.ok) throw new CloudflareUsageTransportError('remote');
-
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new CloudflareUsageTransportError('protocol');
-    }
-    if (!isEnvelope(payload)) throw new CloudflareUsageTransportError('protocol');
-    return payload as CloudflareStoreEnvelope<T>;
   }
 
   private emitRecovery(report: CloudflareRecoveryReport): void {
@@ -711,6 +733,28 @@ async function resolveHeaders(
 ): Promise<HeadersInit | undefined> {
   if (typeof headers === 'function') return headers();
   return headers;
+}
+
+function waitForAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new Error('operation aborted'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(new Error('operation aborted'));
+    };
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      value => {
+        cleanup();
+        resolve(value);
+      },
+      error => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
 }
 
 function isHttpRequest(value: unknown): value is CloudflareHttpRequest {
