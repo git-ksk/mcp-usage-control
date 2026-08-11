@@ -20,8 +20,11 @@
 - lost settlement ACK を模擬し、同一 settlement replay で reconciliation できること
 - observer failure isolation
 - optional な credential rotation 後の旧 credential 拒否
+- local workerd のみ、実際の remote HTTP transport path を通した synthetic HTTP `429` / `503` の platform-style failure
 
 テスト payload には sentinel の tool argument を意図的に含めています。transport / log review で raw tool arguments が Cloudflare usage-control boundary を越えていないことを確認できます。
+
+local workerd の fault-injection route はテスト専用です。platform-style HTTP failure が fail-close のままで、business `quota_exceeded` に変換されないことを検証します。ただし、実際の Cloudflare Free-plan exhaustion や overload が発生したこと自体を証明するものではありません。
 
 ## 前提
 
@@ -126,13 +129,15 @@ printf '%s' "$MCP_USAGE_CLOUDFLARE_TOKEN" | \
 node packages/cloudflare/test/integration.mjs
 ```
 
-`MCP_USAGE_CLOUDFLARE_OLD_TOKEN` が設定されている場合、suite は旧 credential が拒否され、新 credential が成功することも検証します。
+`MCP_USAGE_CLOUDFLARE_OLD_TOKEN` が設定されている場合、suite は旧 credential が拒否され、新 credential が成功することも検証します。Public の local-workerd CI でも既知の stale token を設定し、この拒否動作自体は継続的に検証します。ただし、実際の secret rotation 手順の確認には deployed Cloudflare run が必要です。
 
 ## 8. Platform limit / overload 検証
 
 この手順では、テストのためだけに account の Workers Free quota を意図的に使い切りません。Free-tier exhaustion と実際の Cloudflare overload は外部 platform condition であり、共有 account で人為的に発生させるべきではありません。
 
-専用 dogfood environment で自然に発生した場合は Cloudflare error category を記録し、application が fail-close し、business quota denial と別に識別できることを確認してください。別 quota ledger への dynamic fallback は行いません。
+local workerd CI では synthetic HTTP `429` / `503` を注入し、`RemoteCloudflareUsageStore` がどちらも business `quota_exceeded` とは別の fail-closed `CloudflareUsageTransportError('remote')` として扱うことを検証します。これにより Cloudflare quota を消費せず client-side failure contract を検証できます。
+
+専用 dogfood environment で本物の platform-limit / overload が自然に発生した場合は Cloudflare error category を記録し、application が fail-close し、business quota denial と別に識別できることを確認してください。別 quota ledger への dynamic fallback は行いません。
 
 Cloudflare の仕様上、Durable Objects Free-plan limit を超過すると、その種類の operation は該当 limit が reset されるまで失敗します。これは `mcp-usage-control` の `quota_exceeded` ではなく infrastructure/platform failure として扱います。
 
@@ -156,4 +161,4 @@ pnpm dlx wrangler@4.114.0 delete \
 
 ## CI policy
 
-Public CI は Cloudflare credential を使わず、これまで通り同じ suite を local workerd に対して実行します。実 Cloudflare run は manual / opt-in とし、secret-bearing live test を public CI の必須 check にしません。
+Public CI は Cloudflare credential を使わず、local workerd に対して integration suite を実行します。通常の Durable Object accounting path に加えて、stale credential 拒否と synthetic `429` / `503` の fail-close 処理も継続的に確認します。実 Cloudflare run は manual / opt-in とし、secret-bearing live test を public CI の必須 check にしません。
