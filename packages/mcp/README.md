@@ -8,32 +8,66 @@ MCP TypeScript SDK v2 adapter for `mcp-usage-control`.
 
 `protectTool()` wraps **single-round** `@modelcontextprotocol/server` v2 tool handlers with admission, cost-liable activation, lease heartbeat, MCP-aware result classification, and explicit settlement.
 
+`protectMultiRoundTool()` is the opt-in wrapper for MCP v2 `input_required` flows. It keeps one logical usage reservation across fresh MCP retry requests instead of reserving again for every round.
+
 For a tool with no input schema, set `noInput: true`. For input-schema tools, omit it. The adapter normalizes the SDK no-input callback/runtime shape without guessing whether `{}` is real input.
 
 It distinguishes normal success, `{ isError: true }`, and thrown errors. Invalid/throwing cost classifiers cause the full reservation to be settled before `UsageClassificationError` is surfaced. Ambiguous settlement failures are surfaced as `UsageSettlementError` and are not blindly retried.
 
-**v0.1 intentionally does not support MCP v2 `input_required` multi-round flows.** Such a result is conservatively settled and rejected with `UnsupportedMcpUsageFlowError` until suspend/resume semantics are implemented (issue #14).
+### Multi-round trust boundary
+
+MCP `requestState` round-trips through the client and is untrusted. `protectMultiRoundTool()` therefore does **not** put the usage lease in client state and does not trust a client-supplied flow identifier by itself.
+
+- configure the MCP server's `requestState.verify` hook, for example with the official SDK `createRequestStateCodec()`;
+- pass the matching mint function through `requestState.mint`;
+- keep `McpUsageFlowRecord` server-side;
+- use a `McpUsageFlowStore` whose `consume()` atomically compares the principal/tool/args binding and consumes the flow exactly once;
+- use `MemoryMcpUsageFlowStore` only for tests or a single-process server, and instantiate it outside a per-request `createMcpHandler` factory;
+- distributed servers must provide a durable/shared implementation with the same atomic compare-and-consume contract.
+
+The wrapper owns the wire `requestState`. A handler-authored `requestState` is retained only in trusted server-side flow storage and is supplied on the next round as `flow.applicationRequestState`.
+
+`suspendTtlMs` is explicit. The lease is already cost-liable before the application handler runs; if a suspended/claimed flow is abandoned, expiry conservatively retains the full reservation rather than refunding a possibly executed operation.
+
+Resume tokens are one-time. A concurrent or repeated resume after one caller has claimed the token fails closed instead of re-running the handler. This prevents duplicate execution/reservation, but it is not a general exactly-once side-effect or response-replay mechanism; applications that require replay of a completed business result need their own business-idempotency/result store.
 
 - [Current source/tarball usage](../../docs/using-from-source.md)
 - [MCP integration](../../docs/mcp-integration.md)
 - [API reference](../../docs/api-reference.md)
 - [Architecture](../../docs/architecture.md)
 
-The application remains responsible for trusted principal/tenant derivation, authentication/authorization, retry-stable logical operation IDs, and provider-specific fencing after lease loss.
+The application remains responsible for trusted principal/tenant derivation, authentication/authorization, retry-stable logical operation IDs, durable flow storage when horizontally scaled, and provider-specific fencing after lease loss.
 
 ## 日本語
 
 `protectTool()` は `@modelcontextprotocol/server` v2の **single-round** tool handlerをusage admission、cost-liable activation、lease heartbeat、MCP-aware result classification、explicit settlementでwrapします。
 
+`protectMultiRoundTool()` はMCP v2 `input_required` 向けのopt-in wrapperです。fresh MCP retry requestごとに再reserveせず、1つのlogical usage reservationをround間で維持します。
+
 input schemaがないtoolでは `noInput: true` を指定し、input schemaありでは省略します。SDKのno-input callback / runtime shapeをnormalizeしますが、`{}` がreal inputかどうかを推測しません。
 
 normal success、`{ isError: true }`、thrown errorを区別します。classifierがthrow / invalid unitsを返した場合はfull reservationをsettleしてから `UsageClassificationError` を表面化します。ambiguous settlement failureは `UsageSettlementError` として表面化しblind retryしません。
 
-**v0.1はMCP v2 `input_required` multi-round flowを意図的に未対応とします。** 該当resultは保守的にsettleした後 `UnsupportedMcpUsageFlowError` でrejectし、suspend/resume semanticsはIssue #14で追跡します。
+### Multi-roundのtrust boundary
+
+MCP `requestState` はclientを往復するためuntrustedです。`protectMultiRoundTool()` はusage leaseをclient stateへ入れず、client supplied flow IDだけをaccounting authorityとして信用しません。
+
+- MCP server側で `requestState.verify` を設定します。公式SDKの `createRequestStateCodec()` を利用できます。
+- 対応するmint関数を `requestState.mint` へ渡します。
+- `McpUsageFlowRecord` はserver-sideに保持します。
+- `McpUsageFlowStore.consume()` はprincipal / tool / args bindingを比較し、matchしたflowだけをatomicにone-time consumeする必要があります。
+- `MemoryMcpUsageFlowStore` はtestまたはsingle-process server専用です。per-request `createMcpHandler` factoryの外側で生成してください。
+- horizontal scaleするserverでは同じatomic compare-and-consume contractを満たすshared/durable storeを用意してください。
+
+wire上の `requestState` はwrapperが所有します。application handlerが返した `requestState` はtrusted server-side flow storageだけに保持し、次roundでは `flow.applicationRequestState` として渡します。
+
+`suspendTtlMs` は明示必須です。application handlerへ入る前にleaseはすでにcost-liableなので、suspend / claim後にflowがabandonされた場合はexpiryでfull reservationを保守的に維持し、実行済みかもしれない処理をrefundしません。
+
+resume tokenはone-timeです。同じtokenのconcurrent/repeated resumeは1 callerがclaimした後fail-closeし、handlerを再実行しません。これはduplicate execution / duplicate reservationを防ぎますが、汎用的なexactly-once side effectやcompleted response replayを保証するものではありません。business resultのreplayが必要なapplicationは既存のbusiness idempotency / result storeを併用してください。
 
 - [現在のsource / tarball利用手順](../../docs/using-from-source.ja.md)
 - [MCP integration](../../docs/mcp-integration.ja.md)
 - [API reference](../../docs/api-reference.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 
-trustedなprincipal / tenant derivation、authentication / authorization、retry-stable logical operation ID、lease loss後のprovider-specific fencingはapplication側の責務です。
+trustedなprincipal / tenant derivation、authentication / authorization、retry-stable logical operation ID、horizontal scale時のdurable flow storage、lease loss後のprovider-specific fencingはapplication側の責務です。
