@@ -6,6 +6,7 @@ export { UsageControlDurableObject } from '../src/versioned-worker.js';
 interface Env {
   USAGE_CONTROL: CloudflareDurableObjectNamespace;
   MCP_USAGE_TEST_TOKEN: string;
+  MCP_USAGE_ENABLE_FAULT_INJECTION?: string;
 }
 
 function jsonResponse(body: unknown, status: number): Response {
@@ -20,13 +21,16 @@ export default {
     const pathname = new URL(request.url).pathname;
     if (pathname === '/health') return new Response('ok');
 
-    // Local workerd-only fault injection. These routes deliberately bypass the
-    // usage gateway so the remote client sees real HTTP platform-style errors.
-    if (pathname === '/test/platform-limit') {
-      return jsonResponse({ error: 'simulated_platform_limit' }, 429);
-    }
-    if (pathname === '/test/platform-unavailable') {
-      return jsonResponse({ error: 'simulated_platform_unavailable' }, 503);
+    // Fault injection is explicitly enabled only by the local workerd config.
+    // The deployed dogfood config does not set this flag, so these routes are
+    // absent from the externally reachable test Worker surface.
+    if (env.MCP_USAGE_ENABLE_FAULT_INJECTION === '1') {
+      if (pathname === '/test/platform-limit') {
+        return jsonResponse({ error: 'simulated_platform_limit' }, 429);
+      }
+      if (pathname === '/test/platform-unavailable') {
+        return jsonResponse({ error: 'simulated_platform_unavailable' }, 503);
+      }
     }
 
     if (pathname === '/v1/usage-store-maintenance') {
