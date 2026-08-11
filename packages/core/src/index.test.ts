@@ -323,7 +323,7 @@ describe('UsageControl', () => {
     const persisted = JSON.parse(JSON.stringify(admission.lease.toResumeState()));
     const resumed = control.resumeLease(persisted);
     expect(quoteCalls).toBe(1);
-    expect(resumed.reservation).toEqual(admission.lease.reservation);
+    expect(resumed.toResumeState()).toEqual(persisted);
 
     await resumed.renew(1_000);
     await resumed.settle(0, 'multi_round_success');
