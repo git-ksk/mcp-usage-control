@@ -125,6 +125,8 @@ default reservation TTLは `60_000` msです。従来のnumber形式の第3引�
 
 `reserve(request)` はpolicy評価、budget validation/canonicalization、storeのatomic admissionを行い、設定されていればruntime lifecycle eventを発火します。metadata callbackは明示opt-inで、callback failureはenforcementへ影響させず無視します。
 
+`resumeLease(state)` は既存reservationへ再attachし、`policy.quote()` / `store.reserve()` を再実行しません。trusted server-sideの `UsageLeaseResumeState` 専用で、resume後のrenew / settleはunderlying storeをauthoritative stateとして引き続き検証します。
+
 ### `AdmissionResult`
 
 ```ts
@@ -156,12 +158,25 @@ interface ReservationRecord {
 }
 ```
 
+### `UsageLeaseResumeState`
+
+```ts
+interface UsageLeaseResumeState {
+  reservation: ReservationRecord;
+  ttlMs: number;
+  metadata?: UsageEventMetadata;
+}
+```
+
+trusted server-side suspend/resume用のserializable stateです。client credentialではありません。raw structureをuntrusted clientへ渡さず、clientにはintegrity-protectedなopaque referenceだけを渡し、実lease stateはserver-sideに保持してください。
+
 ### `UsageLease`
 
 ```ts
 lease.reservation
 lease.ttlMs
 lease.reservedUnits
+lease.toResumeState()
 await lease.markLiable()
 await lease.renew(ttlMs?)
 await lease.settle(actualUnits, outcome)
@@ -170,6 +185,8 @@ await lease.settle(actualUnits, outcome)
 `markLiable()` はmetered execution boundaryへ入ったことを宣言します。pending expiryはcapacityを解放できますが、cost-liable expiryはfull chargeを保守的に維持します。
 
 `renew()` はactive leaseを延長します。`settle()` はreservationに参加した全budgetへ同じactual unit countを確定します。v0.1では `actualUnits <= reservedUnits` が必要です。
+
+`toResumeState()` はtrusted server-side flow storage向けのdetached snapshotを返します。`UsageControl.resumeLease()` でreattachでき、quote / reserveを二重実行しません。
 
 `UsageControl` 経由でobserverを設定した場合、lease errorとsuccessful settlementもeventを発火します。observer failureはlease結果を変更しません。
 
@@ -202,7 +219,7 @@ pending expiryは参加する全budgetを解放しoperation IDを再利用可能
 
 ### Core errors
 
-- `UsageStateError` — invalid / expired / conflictingなstore state。
+- `UsageStateError` — invalid / expired / conflictingなstore / resume state。
 - `UsageDeniedError` — programmaticな `.reason` を保持しつつ、MCP SDK error変換による情報漏洩を避けるためthrow messageはgenericです。
 
 ## `mcp-usage-control-mcp`
@@ -243,13 +260,119 @@ behavior:
 - settlement failure -> `UsageSettlementError`。blind retryしません。
 - `resultType: 'input_required'` -> conservative settlement後に `UnsupportedMcpUsageFlowError`。
 
-v0.1はmulti-round `input_required` supportをclaimしません。[MCP integration](mcp-integration.ja.md) とIssue #14を参照してください。
+supportedなmulti-round `input_required` accountingには `protectTool()` ではなく `protectMultiRoundTool()` を使います。
+
+### `McpUsageRequestStatePayload`
+
+```ts
+interface McpUsageRequestStatePayload {
+  mcpUsageControl: 1;
+  flowId: string;
+}
+```
+
+MCP server側の `requestState.verify` hookでdecode済みのpayloadを想定します。wire valueは公式SDK `createRequestStateCodec()` 等のintegrity-protected codecでmintしてください。raw client-controlled stringは `protectMultiRoundTool()` がrejectします。
+
+### `McpUsageFlowBinding`
+
+```ts
+interface McpUsageFlowBinding {
+  principalId: string;
+  tenantId?: string;
+  tool: string;
+  argsHash: string;
+}
+```
+
+suspended flow claim前にserver-sideで比較するtrusted bindingです。`argsHash` はvalidated tool argumentsをcanonicalizeしたSHA-256 hashです。
+
+### `McpUsageFlowRecord` / `McpUsageFlowStore`
+
+```ts
+interface McpUsageFlowRecord {
+  flowId: string;
+  binding: McpUsageFlowBinding;
+  lease: UsageLeaseResumeState;
+  round: number;
+  expiresAt: number;
+  applicationRequestState?: string;
+}
+
+interface McpUsageFlowStore {
+  suspend(record: McpUsageFlowRecord): void | Promise<void>;
+  consume(
+    flowId: string,
+    binding: McpUsageFlowBinding,
+  ): McpUsageFlowRecord | undefined |
+     Promise<McpUsageFlowRecord | undefined>;
+}
+```
+
+`consume()` はsecurity-criticalです。現在のtrusted bindingとatomicに比較し、matchしたflowだけをexactly one callerへconsumeする必要があります。mismatch callerにはno recordを返し、**正規flowを削除してはいけません**。
+
+### `MemoryMcpUsageFlowStore`
+
+`McpUsageFlowStore` のprocess-local reference implementationです。test / single-process server向けで、per-request `createMcpHandler` factoryの外側で生成します。horizontal scaleするserverは同じatomic compare-and-consume contractを持つshared/durable implementationが必要です。
+
+### `McpUsageFlowContext`
+
+```ts
+interface McpUsageFlowContext {
+  readonly round: number;
+  readonly operationId: string;
+  readonly applicationRequestState?: string;
+}
+```
+
+`protectMultiRoundTool()` がapplication handlerの第3引数へ渡します。`round` は0開始、最初のresume requestは1です。`operationId` は初回roundのlogical IDです。前roundでapplicationが独自 `requestState` を返した場合、wrapperはwire値として信用せずserver-sideに保持し、ここへ `applicationRequestState` として渡します。
+
+### `ProtectMultiRoundToolOptions<TArgs, TResult>`
+
+`ProtectToolOptions` に以下を追加します。
+
+```ts
+interface ProtectMultiRoundToolOptions<TArgs, TResult>
+  extends ProtectToolOptions<TArgs, TResult> {
+  flowStore: McpUsageFlowStore;
+  requestState: {
+    mint(
+      payload: McpUsageRequestStatePayload,
+      ctx: ServerContext,
+    ): string | Promise<string>;
+  };
+  suspendTtlMs: number;
+  maxRounds?: number; // default 8
+  flowId?: () => string | Promise<string>;
+}
+```
+
+`suspendTtlMs` は必須です。cost-liable suspended leaseを保守的expiry recoveryまで保持する時間をboundします。`flowId` は主にtest/customization用hookで、defaultはcryptographically randomなIDです。
+
+### `protectMultiRoundTool(options, handler)`
+
+MCP v2 multi-round向けopt-in wrapperです。
+
+behavior:
+
+- first roundでprincipal / operation IDを導出し、1回だけreserveしてleaseをliable化。
+- `input_required` 時はactive heartbeatを止め、`suspendTtlMs` でrenew、trusted server-side flow recordを保存し、wrapper-owned signed/opaque `requestState` を返す。
+- resume roundはverified decoded request-state payloadとatomic binding-aware flow consumeを必須にする。
+- resume roundはquote / reserveせず `UsageControl.resumeLease()` で同じleaseへreattachし、authoritative underlying reservationをrenewする。
+- one-time resume tokenでhandler再入場は1 callerだけ。replay / expired / missing / mismatched stateは `McpUsageResumeError` でfail-close。
+- `maxRounds` 超過はfull reservationを保守的にsettleして `McpUsageRoundsExceededError`。
+- final success / tool-error / throwのclassification / settlementは `protectTool()` と同じrule。
+
+同じresume tokenでのdouble reservation / duplicate application re-entryを防ぎますが、任意のside effectに対するgeneral exactly-once guaranteeやcompleted business result cache/replayは提供しません。destructive / externally metered workでは既存のbusiness idempotency / reconciliationを維持してください。
+
+公式SDK request-state設定とtrust boundaryは [MCP integration](mcp-integration.ja.md) を参照してください。
 
 ### MCP adapter errors
 
 - `UsageSettlementError` — `settlementError` とoptional `executionError`。
 - `UsageClassificationError` — `classificationError` とoptional `executionError`。
-- `UnsupportedMcpUsageFlowError` — v0.1のmulti-round `input_required` support boundary。
+- `UnsupportedMcpUsageFlowError` — single-round `protectTool()` の `input_required` boundary error。
+- `McpUsageResumeError` — missing / expired / replayed / mismatched / unverifiedなmulti-round resume state。
+- `McpUsageRoundsExceededError` — configured `maxRounds` を超え、full conservative settlement後に返るerror。
 
 ## `mcp-usage-control-redis`
 
@@ -296,7 +419,7 @@ Durable Object namespaceを使うWorker-local `UsageStore`。optionは `domainNa
 
 ### `RemoteCloudflareUsageStore`
 
-Cloudflare外のapplication向けHTTP `UsageStore`。`endpoint` は必須で、local以外はHTTPSのみ許可します。request headerは直接またはcallbackで指定できます。timeout / network failureは `CloudflareUsageTransportError` として表面化し、自動retryしません。
+Cloudflare外のapplication向けHTTP `UsageStore`。`endpoint` は必須で、local以外はHTTPSのみ許可します。request headerは直接またはcallbackで指定できます。`timeoutMs` はasync header resolution、fetch、response decodeを含むfull-call deadlineです。timeout / network failureは `CloudflareUsageTransportError` として表面化し、自動retryしません。non-auth HTTP failureは `code: 'remote'` のまま、boundedな数値 `status` metadataだけをoptionalに保持し、response bodyは公開しません。
 
 ### `createCloudflareUsageStoreGateway()`
 
