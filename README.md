@@ -27,6 +27,8 @@ To use the packages from another project now, build `.tgz` packages locally and 
 
 Requirements: Node.js 20+. The repository CI tests Node.js 20 and 22, Redis 7, and the official MCP TypeScript SDK v2 client/handler path.
 
+Versioning follows [Semantic Versioning (SemVer)](https://semver.org/). Before 1.0, minor releases may intentionally include breaking API changes; those changes are called out prominently. See the [Release policy](docs/releasing.md) for details.
+
 ## Core lifecycle
 
 ```text
