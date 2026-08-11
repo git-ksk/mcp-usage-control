@@ -8,10 +8,26 @@ interface Env {
   MCP_USAGE_TEST_TOKEN: string;
 }
 
+function jsonResponse(body: unknown, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const pathname = new URL(request.url).pathname;
     if (pathname === '/health') return new Response('ok');
+
+    // Local workerd-only fault injection. These routes deliberately bypass the
+    // usage gateway so the remote client sees real HTTP platform-style errors.
+    if (pathname === '/test/platform-limit') {
+      return jsonResponse({ error: 'simulated_platform_limit' }, 429);
+    }
+    if (pathname === '/test/platform-unavailable') {
+      return jsonResponse({ error: 'simulated_platform_unavailable' }, 503);
+    }
 
     if (pathname === '/v1/usage-store-maintenance') {
       const maintenanceHandler = createCloudflareBudgetMaintenanceGateway({
