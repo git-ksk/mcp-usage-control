@@ -41,8 +41,8 @@ A reservation starts `pending`. Immediately before metered execution, it becomes
 
 ## Packages
 
-- **`mcp-usage-control`** — core policy, atomic admission contract, renewable leases, settlement, idempotency, provider-neutral observability hooks, and the in-memory reference store.
-- **`mcp-usage-control-mcp`** — adapter for `@modelcontextprotocol/server` v2 single-round tool handlers.
+- **`mcp-usage-control`** — core policy, atomic admission contract, renewable/resumable leases, settlement, idempotency, provider-neutral observability hooks, and the in-memory reference store.
+- **`mcp-usage-control-mcp`** — adapter for `@modelcontextprotocol/server` v2 single-round tools plus opt-in `input_required` suspend/resume accounting.
 - **`mcp-usage-control-redis`** — atomic Redis store using Lua and Redis server time, with optional expiry-recovery observability.
 - **`mcp-usage-control-cloudflare`** — Cloudflare Durable Objects + SQLite store with Worker-local and authenticated remote-client paths.
 
@@ -175,9 +175,17 @@ For a tool with **no input schema**, set `noInput: true`. This is explicit becau
 - settles classifier failures conservatively with the full reservation before surfacing the classification error;
 - does not blindly retry ambiguous settlement failures.
 
-### `input_required` support boundary
+### Multi-round `input_required`
 
-v0.1 intentionally does **not** support MCP v2 multi-round `input_required` flows in `protectTool()`. A correct implementation needs reservation suspend/resume semantics across fresh requests. The adapter detects this result, settles conservatively, and raises `UnsupportedMcpUsageFlowError` instead of silently double-charging rounds or deadlocking replay protection. See issue #14 for the future design.
+`protectTool()` remains deliberately single-round and still rejects `input_required`. Use the opt-in `protectMultiRoundTool()` when a logical operation must span fresh MCP retry requests.
+
+The multi-round wrapper reserves only on the first round. It keeps the usage lease server-side, replaces the wire `requestState` with an integrity-protected opaque flow reference, and reattaches to the same reservation after the MCP server's `requestState.verify` hook has decoded the retry state. A server-side `McpUsageFlowStore` must atomically compare the trusted principal/tool/args binding and consume a resume token exactly once.
+
+`MemoryMcpUsageFlowStore` is a single-process reference implementation. Horizontally scaled servers need a shared/durable flow store with the same atomic compare-and-consume contract. Suspended leases have an explicit `suspendTtlMs`; abandoned cost-liable flows retain the full reserved charge on expiry.
+
+A one-time resume token prevents duplicate handler re-entry for the same retry. It is not a general exactly-once side-effect or completed-result replay mechanism, so destructive/external operations should keep their existing business idempotency/result reconciliation.
+
+See [MCP SDK v2 integration](docs/mcp-integration.md) for the official `createRequestStateCodec()` setup and the complete trust boundary.
 
 ## Redis production store
 
@@ -219,6 +227,9 @@ See [Cloudflare adapter](docs/cloudflare.md) for Worker configuration, privacy, 
 12. Storage failures do not turn into an allow decision.
 13. Redis lease/tombstone time comes from Redis, not the application clock.
 14. Observability is outside the enforcement transaction; observer failure cannot convert allow/deny/settlement state.
+15. Multi-round MCP retries do not reserve again; the original server-side usage lease is resumed.
+16. Client-round-tripped MCP request state is never used as accounting authority without integrity verification and a server-side binding check.
+17. A resume token is consumed at most once; mismatched callers cannot consume the legitimate suspended flow.
 
 ## Documentation
 
@@ -237,7 +248,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Scope after v0.1
 
-Tracked follow-up work includes real `input_required` suspend/resume accounting and optional vendor-specific telemetry adapters. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
+Tracked follow-up work includes production-ready shared flow-store adapters for horizontally scaled multi-round MCP servers and optional vendor-specific telemetry adapters. Billing providers, OAuth providers, dashboards, payment protocols, and generic rate limiting remain outside the core runtime.
 
 ## License
 
