@@ -6,6 +6,10 @@ import {
 
 const endpoint =
   process.env.MCP_USAGE_CLOUDFLARE_URL ?? 'http://127.0.0.1:8799/v1/usage-store';
+const endpointUrl = new URL(endpoint);
+const isLocalWorkerd =
+  endpointUrl.protocol === 'http:' &&
+  (endpointUrl.hostname === '127.0.0.1' || endpointUrl.hostname === 'localhost');
 const token = process.env.MCP_USAGE_CLOUDFLARE_TOKEN ?? 'local-integration-token';
 const oldToken = process.env.MCP_USAGE_CLOUDFLARE_OLD_TOKEN;
 const authHeaders = { authorization: `Bearer ${token}` };
@@ -44,6 +48,26 @@ if (oldToken) {
     () => reserve(staleCredentialStore, 'stale-credential', 'stale-credential', 1),
     error => error instanceof CloudflareUsageTransportError && error.code === 'unauthorized',
   );
+}
+
+// Local workerd fault injection exercises the real HTTP transport path for
+// platform-style limit/unavailability responses. These are infrastructure
+// failures, never business quota denials, and therefore must fail closed.
+if (isLocalWorkerd) {
+  for (const [pathname, operationId] of [
+    ['/test/platform-limit', 'platform-limit'],
+    ['/test/platform-unavailable', 'platform-unavailable'],
+  ]) {
+    const failureStore = new RemoteCloudflareUsageStore({
+      endpoint: new URL(pathname, endpointUrl.origin).toString(),
+      headers: authHeaders,
+    });
+    await assert.rejects(
+      () => reserve(failureStore, operationId, operationId, 1),
+      error => error instanceof CloudflareUsageTransportError && error.code === 'remote',
+      `${pathname} must remain a fail-closed platform error`,
+    );
+  }
 }
 
 // 100-way contention: one shared remaining unit admits exactly one caller.
