@@ -21,9 +21,12 @@ The suite covers:
 - simulated lost reserve acknowledgement without blind retry;
 - simulated lost settlement acknowledgement with identical settlement reconciliation;
 - observer failure isolation;
-- optional rejection of a rotated-out credential.
+- optional rejection of a rotated-out credential;
+- on local workerd only, synthetic HTTP `429` and `503` platform-style failures through the real remote HTTP transport path.
 
 The test payload intentionally contains a sentinel tool argument so transport/log review can verify that raw tool arguments do not cross the Cloudflare usage-control boundary.
+
+The local workerd fault-injection routes are test-only. They prove that platform-style HTTP failures stay fail-closed and are not converted into a business `quota_exceeded` result. They do **not** prove that a genuine Cloudflare Free-plan exhaustion or overload condition has occurred.
 
 ## Prerequisites
 
@@ -128,13 +131,15 @@ Wait for `/health` again, then:
 node packages/cloudflare/test/integration.mjs
 ```
 
-When `MCP_USAGE_CLOUDFLARE_OLD_TOKEN` is set, the suite additionally verifies that the old credential is rejected while the new credential succeeds.
+When `MCP_USAGE_CLOUDFLARE_OLD_TOKEN` is set, the suite additionally verifies that the old credential is rejected while the new credential succeeds. Public local-workerd CI also sets a known stale token so this rejection behavior is exercised continuously, but the actual secret-rotation procedure still requires a deployed Cloudflare run.
 
 ## 8. Platform-limit / overload validation
 
 This runbook does **not** intentionally burn through an account's Workers Free quota. Free-tier exhaustion and genuine Cloudflare overload are external platform conditions and should not be manufactured in shared accounts merely to satisfy a test.
 
-When either condition is naturally observed in a dedicated dogfood environment, capture the Cloudflare error category and verify the application fails closed and reports it separately from a business quota denial. Do not dynamically fall back to another quota ledger.
+Local workerd CI injects synthetic HTTP `429` and `503` responses and verifies that `RemoteCloudflareUsageStore` maps both to a fail-closed `CloudflareUsageTransportError('remote')`, distinct from business `quota_exceeded`. This covers the client-side failure contract without consuming Cloudflare quota.
+
+When a genuine platform-limit or overload condition is naturally observed in a dedicated dogfood environment, capture the Cloudflare error category and verify the application fails closed and reports it separately from a business quota denial. Do not dynamically fall back to another quota ledger.
 
 Cloudflare documents that exceeding a Durable Objects Free-plan limit causes further operations of that type to fail until the relevant limit resets. Treat that as an infrastructure/platform failure, not as `quota_exceeded` from `mcp-usage-control`.
 
@@ -158,4 +163,4 @@ Confirm the destructive prompt only for the dedicated dogfood Worker. If a Durab
 
 ## CI policy
 
-Public CI continues to run the same suite against local workerd without Cloudflare credentials. A real deployed run is manual/opt-in and must not become a required secret-bearing public CI check.
+Public CI runs the integration suite against local workerd without Cloudflare credentials. It continuously checks the normal Durable Object accounting path, stale-credential rejection, and synthetic `429`/`503` fail-closed handling. A real deployed run is manual/opt-in and must not become a required secret-bearing public CI check.
