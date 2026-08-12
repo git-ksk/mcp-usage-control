@@ -70,7 +70,7 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for dir in packages/core packages/mcp packages/redis packages/cloudflare; do
+          for dir in packages/core packages/mcp packages/redis packages/cloudflare packages/firestore; do
             actual="$(node -p "require('./${dir}/package.json').version")"
             test "$actual" = "$VERSION"
           done
@@ -81,15 +81,16 @@ jobs:
           set -euo pipefail
           rm -rf /tmp/muc-packs
           mkdir -p /tmp/muc-packs
-          for dir in core mcp redis cloudflare; do
+          for dir in core mcp redis cloudflare firestore; do
             (cd "packages/$dir" && npm pack --pack-destination /tmp/muc-packs)
           done
           git diff --exit-code -- \
             packages/core/package.json \
             packages/mcp/package.json \
             packages/redis/package.json \
-            packages/cloudflare/package.json
-          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 4
+            packages/cloudflare/package.json \
+            packages/firestore/package.json
+          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 5
           for archive in /tmp/muc-packs/*.tgz; do
             listing="$(tar -tzf "$archive")"
             grep -qx 'package/dist/index.js' <<<"$listing"
