@@ -29,7 +29,7 @@ generic agent-budget、gateway、billing、governance productへ広げるので�
 ## Current priorities
 
 1. **Production multi-round hardening** — `input_required` suspend / resume accounting自体は実装済みです。one-time consume / fail-closed semanticsを弱めず、shared / durable flow-storeとpost-claim reconciliationを進めます。Issue #41で追跡します。
-2. **Current MCP protocol conformance** — fresh-request multi-round retry semantics、stateless server deployment assumption、long-running Tasks accountingを含め、current MCP protocol / SDK behaviorとの整合を明示的に検証します。stateless-friendlyなMRTR optionを追加する場合も、trusted bindingとaccounting invariantは維持します。
+2. **Current MCP protocol conformance** — fresh-request multi-round retry semantics、stateless server deployment assumption、long-running Tasks accountingを含め、current MCP protocol / SDK behaviorとの整合を明示的に検証します。stateless-friendlyなMRTR optionを追加する場合も、trusted bindingとaccounting invariantは維持します。Issue #63で追跡します。
 3. **Third-party Store invariant kit** — 外部Storeが同じmethod名を実装しただけでなくsemantic compatibilityを実証できるよう、projectのcorrectness contractを実行可能なtest kitにします。
 4. **Real Cloudflare operational evidence** — deployed Durable Objects adapterについて、残っているcredential rotationと実platform-limit / failure観測を完了します。Issue #24で追跡します。
 5. **Public package contract review / npm publication** — first registry publicationは明示的にgateしたままにし、publish直前にregistry-facing contract / metadataを最終確認します。Issue #6で追跡します。
