@@ -29,7 +29,7 @@ const store = new FirestoreUsageStore(getFirestore(), {
 
 ## Emulator integration validation
 
-Unit tests use a deterministic structural Firestore fake. A separate `Firestore Integration` GitHub Actions workflow also runs the built adapter against the real Cloud Firestore Emulator through the official `@google-cloud/firestore` server SDK.
+Unit tests use a deterministic structural Firestore fake. A separate `Firestore Integration` GitHub Actions workflow also runs the built adapter against the real Cloud Firestore Emulator through the official `@google-cloud/firestore` server SDK and type-checks that server client against the adapter's structural constructor contract.
 
 The emulator suite currently covers:
 
@@ -56,7 +56,9 @@ Important production constraints:
 - do not use Firestore TTL to blindly delete pending reservation documents, because reserved budget capacity must be released transactionally;
 - Firestore/store failures must remain fail-closed and must not be converted into unmetered allow behavior.
 
-See the full deployment and contention guidance:
+See the public guides and reference:
 
 - [Firestore UsageStore](../../docs/firestore.md)
 - [Firestore UsageStore 日本語](../../docs/firestore.ja.md)
+- [API reference](../../docs/api-reference.md)
+- [Use from source / local tarballs](../../docs/using-from-source.md)
