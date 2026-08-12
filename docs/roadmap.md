@@ -28,12 +28,13 @@ Broader platforms may offer dashboards, pricing catalogs, organization-wide gove
 
 ## Current priorities
 
-1. **Production multi-round hardening** — `input_required` suspend/resume accounting is implemented; continue shared/durable flow-store and post-claim reconciliation work without weakening one-time consume or fail-closed semantics. Tracked in #41.
-2. **Current MCP protocol conformance** — explicitly validate the adapter against the current MCP protocol/SDK behavior, including fresh-request multi-round retry semantics, stateless server deployment assumptions, and long-running Tasks accounting. Keep any stateless-friendly MRTR option subject to the same trusted binding and accounting invariants. Tracked in #63.
-3. **Third-party store invariant kit** — make the project's correctness contract executable so external stores can prove semantic compatibility rather than merely implement the same method names.
-4. **Real Cloudflare operational evidence** — complete the remaining credential-rotation and genuine platform-limit/failure observations for the deployed Durable Objects adapter. Tracked in #24.
-5. **Public package contract review / npm publication** — keep the first registry publication explicitly gated and perform final registry-facing contract/metadata verification immediately before publication. Tracked in #6.
-6. **Failure semantics documentation** — keep crash recovery, lost/ambiguous ACK, cost liability, multi-round claim/recovery, task lifetime, and reconciliation expectations explicit in architecture and adapter docs.
+1. **Production multi-round hardening** — `input_required` suspend/resume accounting is implemented and current-protocol proof shows no sticky MCP session is required. For v1, keep the existing shared/durable compare-and-consume flow state; a new stateless MRTR mode is deferred unless it can prove a stronger safety/operational result. Tracked in #41 and #63.
+2. **MCP Tasks accounting** — the long-running accounting state machine is now defined and covered by core proof tests. First-class protocol adapter support remains deferred while the upstream Tasks extension / TypeScript surface is experimental; do not advertise it as stable support. Tracked in #63.
+3. **Third-party Store invariant kit** — make the project's correctness contract executable so external stores can prove semantic compatibility rather than merely implement the same method names.
+4. **Production-readiness audit** — finish public API/export/version, Store invariant, security, horizontal-scale, tarball/clean-consumer, Node support, CI/release, TODO/Issue, and breaking-change review before the v1 decision.
+5. **Real Cloudflare operational evidence** — complete the remaining credential-rotation and genuine platform-limit/failure observations for the deployed Durable Objects adapter. Tracked in #24; classify whether any remaining evidence is a v1 blocker rather than assuming it is.
+6. **Public package contract review / npm publication** — keep the first registry publication explicitly gated and perform final registry-facing contract/metadata verification immediately before publication. Tracked in #6. npm publication is not required for the current v1-readiness review and must remain manual/deferred.
+7. **Failure semantics documentation** — keep crash recovery, lost/ambiguous ACK, cost liability, multi-round claim/recovery, task lifetime, and reconciliation expectations explicit in architecture and adapter docs.
 
 ## MCP-native correctness
 
@@ -43,7 +44,9 @@ Protocol-specific work belongs in the project when it changes accounting safety 
 
 Maintain one logical usage reservation across fresh MCP requests. Client-round-tripped request state must remain integrity-verified and rebound to trusted server-side principal/tool/argument identity before it can resume accounting state.
 
-Evaluate stateless-friendly resume designs only where they preserve:
+The **v1 direction** is the current shared/durable flow claim with atomic compare-and-consume. It already permits fresh requests to land on different server instances without sticky MCP session affinity.
+
+A future stateless-friendly resume design should only be adopted where it can preserve and prove:
 
 - one reservation per logical operation;
 - one-time resume/claim behavior where required;
@@ -55,15 +58,20 @@ Stateless transport does not require stateless accounting. Shared state remains 
 
 ### MCP Tasks
 
-Define accounting semantics for long-running Tasks before claiming first-class support. At minimum, the design must answer:
+The accounting state machine for long-running Tasks is defined in [MCP Tasks accounting](mcp-tasks-accounting.md) and exercised by `packages/core/src/task-accounting-proof.test.ts`.
 
-- when a reservation becomes cost-liable;
-- how the lease is renewed while a task remains active;
-- how completion, failure, cancellation, and abandonment settle usage;
-- how worker/process loss is handled without optimistic refund;
-- how a task result or business-side reconciliation stays separate from the usage ledger.
+The contract now explicitly covers:
 
-Do not turn the usage store into a general task/workflow engine.
+- one admission/reservation per logical operation, independent of task ID;
+- the liability boundary immediately before metered work rather than inferring liability from task status;
+- lease renewal during active execution and intentional `input_required` waits;
+- completion, failure, cancellation, abandonment, and worker crash;
+- conservative treatment of ambiguous reserve/liability/renew/settlement acknowledgements;
+- no optimistic refund on cooperative cancellation acknowledgement;
+- reconciliation without blind business replay;
+- strict separation of task/result/worker state from the usage ledger.
+
+No new core runtime primitive is required. First-class MCP Tasks adapter support remains deferred while the upstream extension is experimental. That integration is not a v1 accounting blocker as long as the public API/docs do not claim stable protocol-level Tasks support.
 
 ## Third-party store invariant kit
 
