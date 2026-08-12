@@ -47,16 +47,18 @@ jobs:
           (cd packages/mcp && npm pack --pack-destination /tmp/muc-packs)
           (cd packages/redis && npm pack --pack-destination /tmp/muc-packs)
           (cd packages/cloudflare && npm pack --pack-destination /tmp/muc-packs)
+          (cd packages/firestore && npm pack --pack-destination /tmp/muc-packs)
           git diff --exit-code -- \
             packages/core/package.json \
             packages/mcp/package.json \
             packages/redis/package.json \
-            packages/cloudflare/package.json
+            packages/cloudflare/package.json \
+            packages/firestore/package.json
       - name: Verify package contents
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 4
+          test "$(find /tmp/muc-packs -name '*.tgz' | wc -l)" -eq 5
           for archive in /tmp/muc-packs/*.tgz; do
             listing="$(tar -tzf "$archive")"
             grep -qx 'package/dist/index.js' <<<"$listing"
@@ -78,9 +80,6 @@ jobs:
               exit 1
             fi
           done
-          core_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-0.1.0.tgz)"
-          grep -qx 'package/dist/firestore.js' <<<"$core_listing"
-          grep -qx 'package/dist/firestore.d.ts' <<<"$core_listing"
           cloudflare_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-cloudflare-0.1.0.tgz)"
           grep -qx 'package/dist/worker.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/worker.d.ts' <<<"$cloudflare_listing"
@@ -104,12 +103,13 @@ jobs:
             /tmp/muc-packs/mcp-usage-control-mcp-0.1.0.tgz \
             /tmp/muc-packs/mcp-usage-control-redis-0.1.0.tgz \
             /tmp/muc-packs/mcp-usage-control-cloudflare-0.1.0.tgz \
+            /tmp/muc-packs/mcp-usage-control-firestore-0.1.0.tgz \
             @modelcontextprotocol/server@2.0.0 \
             redis@6.2.0 \
             --ignore-scripts
           node --input-type=module <<'NODE'
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
-          import { FirestoreUsageStore } from 'mcp-usage-control/firestore';
+          import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
           import { protectTool } from 'mcp-usage-control-mcp';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
           import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
