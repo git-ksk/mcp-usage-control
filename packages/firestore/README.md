@@ -27,6 +27,26 @@ const store = new FirestoreUsageStore(getFirestore(), {
 });
 ```
 
+## Emulator integration validation
+
+Unit tests use a deterministic structural Firestore fake. A separate `Firestore Integration` GitHub Actions workflow also runs the built adapter against the real Cloud Firestore Emulator through the official `@google-cloud/firestore` server SDK.
+
+The emulator suite currently covers:
+
+- all-or-nothing multi-budget admission;
+- concurrent reservations against one shared tenant budget;
+- expired pending reservation recovery and operation-ID reuse;
+- cost-liable expiry with conservative reserved-unit retention;
+- idempotent settlement replay and release of unused capacity.
+
+For a local run, start the Firestore Emulator so `FIRESTORE_EMULATOR_HOST` is set, build `mcp-usage-control` and this package, then run:
+
+```bash
+pnpm --filter mcp-usage-control-firestore test:emulator
+```
+
+The test script refuses to run unless `FIRESTORE_EMULATOR_HOST` is present, so it cannot accidentally target production Firestore.
+
 Important production constraints:
 
 - per-user budgets naturally spread across separate documents;
