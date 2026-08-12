@@ -20,7 +20,7 @@ Requirements:
 - Redis 7 for Redis adapter tests/usage
 - Wrangler/workerd only when running the dedicated Cloudflare integration path
 
-## 2. Pack the four packages locally
+## 2. Pack the five packages locally
 
 From the repository root:
 
@@ -31,6 +31,7 @@ pnpm --dir packages/core pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/mcp pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/redis pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/cloudflare pack --pack-destination "$PWD/.packs"
+pnpm --dir packages/firestore pack --pack-destination "$PWD/.packs"
 ```
 
 This produces:
@@ -40,6 +41,7 @@ This produces:
 .packs/mcp-usage-control-mcp-0.1.0.tgz
 .packs/mcp-usage-control-redis-0.1.0.tgz
 .packs/mcp-usage-control-cloudflare-0.1.0.tgz
+.packs/mcp-usage-control-firestore-0.1.0.tgz
 ```
 
 These tarballs are the closest current equivalent to the future npm packages. CI builds the same tarballs, rejects source/test-file leakage, installs them into a clean consumer project, and verifies their public ESM imports.
@@ -80,7 +82,18 @@ npm install \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz
 ```
 
-All four:
+Core + Firestore adapter (choose a server Firestore client for actual use):
+
+```console
+npm install \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.1.0.tgz \
+  firebase-admin
+```
+
+`@google-cloud/firestore` can be used instead of `firebase-admin`. The adapter intentionally does not bundle either client as a runtime dependency.
+
+All five:
 
 ```console
 npm install \
@@ -88,6 +101,7 @@ npm install \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.1.0.tgz \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.1.0.tgz \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.1.0.tgz \
   @modelcontextprotocol/server@2.0.0 \
   redis@6.2.0
 ```
@@ -100,8 +114,9 @@ import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
 import { protectTool } from 'mcp-usage-control-mcp';
 import { RedisUsageStore } from 'mcp-usage-control-redis';
 import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
+import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
 
-if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore].every(Boolean)) {
+if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore, FirestoreUsageStore].every(Boolean)) {
   throw new Error('mcp-usage-control local package import failed');
 }
 
@@ -121,7 +136,7 @@ For changes to the runtime itself, work inside the repository and run:
 pnpm check
 ```
 
-The in-memory store is suitable for tests and local development. Use the Redis adapter or the dedicated Cloudflare workerd integration workflow for distributed-enforcement verification.
+The in-memory store is suitable for tests and local development. Use the Redis adapter, the dedicated Cloudflare workerd integration workflow, or the Firestore Emulator integration workflow for distributed-enforcement verification.
 
 ## When npm publication is available
 

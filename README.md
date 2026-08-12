@@ -12,7 +12,7 @@ It is not a payment processor, MCP gateway, OAuth provider, billing dashboard, o
 
 ## Current distribution status
 
-**The packages are not published to npm yet.** Until the first registry publish completes, use a repository checkout or locally packed tarballs. Do not expect registry installation of `mcp-usage-control`, `mcp-usage-control-mcp`, `mcp-usage-control-redis`, or `mcp-usage-control-cloudflare` to work yet.
+**The packages are not published to npm yet.** Until the first registry publish completes, use a repository checkout or locally packed tarballs. Do not expect registry installation of `mcp-usage-control`, `mcp-usage-control-mcp`, `mcp-usage-control-redis`, `mcp-usage-control-cloudflare`, or `mcp-usage-control-firestore` to work yet.
 
 Quick verification from source:
 
@@ -62,8 +62,9 @@ A naive `check -> execute -> increment` flow can over-admit under concurrency. I
 - **`mcp-usage-control-mcp`** — adapter for `@modelcontextprotocol/server` v2 single-round tools plus opt-in `input_required` suspend/resume accounting.
 - **`mcp-usage-control-redis`** — atomic Redis store using Lua and Redis server time, with optional expiry-recovery observability.
 - **`mcp-usage-control-cloudflare`** — Cloudflare Durable Objects + SQLite store with Worker-local and authenticated remote-client paths.
+- **`mcp-usage-control-firestore`** — server-side Firestore transactional store with multi-budget admission, expiry recovery, and Firestore-specific contention guidance.
 
-All four packages are ESM and require Node.js 20+.
+All five packages are ESM and require Node.js 20+.
 
 ## Multi-budget admission
 
@@ -273,6 +274,7 @@ See [Cloudflare adapter](docs/cloudflare.md) for Worker configuration, privacy, 
 - [Architecture and invariants](docs/architecture.md)
 - [Redis adapter](docs/redis.md)
 - [Cloudflare adapter](docs/cloudflare.md)
+- [Firestore adapter](docs/firestore.md)
 - [Roadmap](docs/roadmap.md)
 - [API reference](docs/api-reference.md)
 - [Release policy](docs/releasing.md)

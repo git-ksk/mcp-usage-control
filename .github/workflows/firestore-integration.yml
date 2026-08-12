@@ -1,0 +1,69 @@
+name: Firestore Integration
+
+on:
+  pull_request:
+    paths:
+      - 'packages/firestore/**'
+      - 'packages/core/**'
+      - '.github/workflows/firestore-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'packages/firestore/**'
+      - 'packages/core/**'
+      - '.github/workflows/firestore-integration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  emulator:
+    runs-on: ubuntu-latest
+    env:
+      GCLOUD_PROJECT: demo-muc-firestore
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter mcp-usage-control build
+      - run: pnpm --filter mcp-usage-control-firestore build
+      - name: Type-check server Firestore client compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat_file='packages/firestore/client-compat.mts'
+          trap 'rm -f "$compat_file"' EXIT
+          cat > "$compat_file" <<'TS'
+          import type { Firestore } from '@google-cloud/firestore';
+          import { FirestoreUsageStore } from './dist/index.js';
+
+          declare const firestore: Firestore;
+          new FirestoreUsageStore(firestore);
+          TS
+          pnpm exec tsc \
+            --noEmit \
+            --strict \
+            --skipLibCheck \
+            --target ES2022 \
+            --module NodeNext \
+            --moduleResolution NodeNext \
+            --types node \
+            "$compat_file"
+      - name: Run Firestore adapter against Local Emulator Suite
+        shell: bash
+        run: >-
+          pnpm dlx firebase-tools@15.24.0
+          emulators:exec
+          --only firestore
+          --project demo-muc-firestore
+          "pnpm --filter mcp-usage-control-firestore test:emulator"

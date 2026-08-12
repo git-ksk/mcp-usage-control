@@ -77,4 +77,12 @@ Initial GitHub/source release. npm registry publication is intentionally deferre
 
 ## Unreleased
 
-No unreleased user-visible changes yet.
+### Added
+
+- `mcp-usage-control-firestore`, a standalone server-side Firestore `UsageStore` with transactional multi-budget admission, replay protection, conservative expiry recovery, hashed storage identifiers, and adapter-local recovery observability.
+- Real Firestore Emulator integration covering multi-budget atomicity, shared-budget concurrency, pending/liable expiry semantics, and idempotent settlement, plus a server-client TypeScript compatibility smoke check.
+- English/Japanese Firestore deployment, contention/hotspot, source/tarball usage, API, and package documentation.
+
+### CI
+
+- Firestore Integration runs for Firestore adapter, core, or its own workflow changes; Firestore-only changes do not trigger Cloudflare Integration.

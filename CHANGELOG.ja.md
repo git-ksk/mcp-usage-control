@@ -77,4 +77,12 @@
 
 ## Unreleased
 
-未releaseのuser-visible changeは現在ありません。
+### Added
+
+- transactional multi-budget admission、replay protection、保守的expiry recovery、hashed storage identifier、adapter-local recovery observabilityを持つstandalone server-side Firestore `UsageStore`、`mcp-usage-control-firestore`。
+- multi-budget atomicity、shared-budget concurrency、pending / liable expiry semantics、idempotent settlementを検証する実Firestore Emulator integrationと、server-client TypeScript compatibility smoke check。
+- Firestore deployment、contention / hotspot、source / tarball利用、API、packageについての英日ドキュメント。
+
+### CI
+
+- Firestore IntegrationはFirestore adapter / core / workflow自身の変更で実行。Firestore-only変更ではCloudflare Integrationを起動しない。

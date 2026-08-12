@@ -431,6 +431,49 @@ Exported from `mcp-usage-control-cloudflare/worker`. Uses SQLite transactions fo
 
 See [Cloudflare adapter](cloudflare.md) for deployment and trust-boundary details.
 
+## `mcp-usage-control-firestore`
+
+### `FirestoreUsageStore`
+
+```ts
+new FirestoreUsageStore(firestore, options?)
+```
+
+`firestore` is a server-side Firestore client satisfying the adapter's structural contract. `@google-cloud/firestore` `Firestore` is supported directly; Firebase Admin `getFirestore()` returns that same server `Firestore` type.
+
+### `FirestoreUsageStoreOptions`
+
+```ts
+interface FirestoreUsageStoreOptions {
+  collectionPrefix?: string;
+  idempotencyTtlMs?: number;
+  cleanupBatchSize?: number;
+  cleanupIntervalMs?: number;
+  expiryGraceMs?: number;
+  observer?: FirestoreRecoveryObserver;
+  now?: () => number;
+}
+```
+
+Defaults:
+
+- `collectionPrefix`: `muc`
+- `idempotencyTtlMs`: `86_400_000` (24 hours)
+- `cleanupBatchSize`: `16`
+- `cleanupIntervalMs`: `5_000`
+- `expiryGraceMs`: `5_000`
+
+`now` is a test hook; production normally uses `Date.now()`. Unlike the Redis adapter, Firestore lease/tombstone arithmetic therefore uses the application-host clock plus `expiryGraceMs`, so production hosts must be time-synchronized.
+
+The adapter stores hashed operation/budget identifiers, performs all-or-nothing multi-budget admission in one Firestore transaction, keeps active `markLiable()` / `renew()` traffic on the reservation document, and recovers expired pending/liable/tombstone state conservatively.
+
+### `recoverExpired(limit?)`
+
+Runs bounded explicit expiry recovery and returns `FirestoreRecoverySummary` with pending/liable counts and units plus deleted tombstones. `reserve()` also performs throttled best-effort cleanup unless `cleanupBatchSize` is `0`.
+
+`FirestoreRecoveryObserver` receives adapter-local best-effort `reservation.recovered` events for pending release and liable retention. Observer failure never changes enforcement state.
+
+Shared tenant/global budgets intentionally serialize on one budget document and can become contention hotspots. See [Firestore adapter](firestore.md) for document layout, contention, cleanup, clock, cost, and deployment guidance.
 ## Numeric validation
 
 - units and limits: non-negative JavaScript safe integers;
@@ -444,5 +487,7 @@ See [Cloudflare adapter](cloudflare.md) for deployment and trust-boundary detail
 - `@modelcontextprotocol/server` v2; CI currently resolves `2.0.0`
 - Redis 7 integration tests
 - node-redis `redis` 6.2.x
+- `@google-cloud/firestore` server-client compatibility; Firestore Emulator integration currently validates 8.7.0
+- Firebase Admin `getFirestore()` uses the same server `Firestore` type
 
 Pre-1.0 minor releases may intentionally change APIs; breaking changes are called out in release notes.

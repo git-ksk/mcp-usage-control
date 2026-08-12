@@ -4,6 +4,7 @@
     { "path": "./packages/core" },
     { "path": "./packages/mcp" },
     { "path": "./packages/redis" },
-    { "path": "./packages/cloudflare" }
+    { "path": "./packages/cloudflare" },
+    { "path": "./packages/firestore" }
   ]
 }

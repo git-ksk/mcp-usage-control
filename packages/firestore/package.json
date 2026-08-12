@@ -1,0 +1,48 @@
+{
+  "name": "mcp-usage-control-firestore",
+  "version": "0.1.0",
+  "description": "Transactional Firestore usage store for mcp-usage-control.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": { "node": ">=20" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
+    "directory": "packages/firestore"
+  },
+  "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
+  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
+  "keywords": ["mcp", "firestore", "firebase", "usage", "quota", "credits", "atomic"],
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:emulator": "node test/emulator.mjs",
+    "prepack": "node ../../scripts/pack-workspace-deps.mjs prepare",
+    "postpack": "node ../../scripts/pack-workspace-deps.mjs restore"
+  },
+  "dependencies": {
+    "mcp-usage-control": "workspace:^"
+  },
+  "devDependencies": {
+    "@google-cloud/firestore": "8.7.0"
+  }
+}
