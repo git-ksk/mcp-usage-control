@@ -81,6 +81,12 @@ protectTool()
 - [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md) — Durable Objects Store
 - [`mcp-usage-control-firestore`](../packages/firestore/README.md) — Firestore Store
 
+## CIについて
+
+`docs/**` とMarkdown (`*.md`) だけを変更したPull Requestでは、CIは変更範囲の判定だけを実行し、Node.js 20 / 22、Redis、package pack、clean consumer installを含む重いtest matrixは省略します。
+
+source code、workflow、package manifest、lockfile、configなどMarkdown以外の変更が1つでも含まれる場合は、従来どおりfull CIを実行します。Required checkの扱いを壊さないため、workflow自体はdocs-onlyでも起動します。
+
 ## Project policies
 
 - [Contributing](../CONTRIBUTING.ja.md)
