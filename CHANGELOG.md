@@ -10,6 +10,7 @@ All notable project changes are recorded here.
 
 - Added project positioning and roadmap guidance after v0.2.0 to sharpen the failure-safe transactional usage-enforcement boundary and track post-v0.2 MCP-native correctness work. These documentation changes are not part of the v0.2.0 source release.
 - Added explicit MCP `2026-07-28` / SDK `2.0.0` conformance proof for fresh-request multi-round retries and cross-handler resume, documenting that horizontal scale requires shared accounting/flow state but not sticky MCP sessions. Tasks support and any new stateless MRTR resume mode remain deferred pending separate failure-semantics proof.
+- Defined and proof-tested the long-running MCP Tasks accounting state machine, including liability, renewal, completion/failure/cancellation, abandonment, worker crash, ambiguous acknowledgements, and reconciliation. The v1 MRTR direction remains the existing shared/durable compare-and-consume design; first-class Tasks protocol integration remains deferred while the upstream extension is experimental.
 
 ## [0.2.0] - 2026-08-12
 
@@ -118,12 +119,3 @@ Initial GitHub/source release. npm registry publication is intentionally deferre
 - Generic lease renewal is not provider-specific fencing after lease loss.
 - Observability is best-effort, non-durable, not exactly-once, and is not the transactional quota ledger.
 - npm publication is not part of this GitHub/source release and remains a separate explicitly authorized step.
-
-### Compatibility
-
-- Node.js 20+
-- ESM
-- `@modelcontextprotocol/server` v2 (CI currently resolves 2.0.0)
-- Redis 7 integration behavior
-- node-redis `redis` 6.2.x
-- Cloudflare Workers / SQLite Durable Objects, with local workerd integration and deployed Free-plan dogfood
