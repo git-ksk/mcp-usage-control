@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { UsageEvent, UsageRequest } from 'mcp-usage-control';
+import type { UsageRequest } from 'mcp-usage-control';
 import {
   FirestoreUsageStore,
+  type FirestoreRecoveryEvent,
   type FirestoreCollectionReferenceLike,
   type FirestoreDocumentReferenceLike,
   type FirestoreDocumentSnapshotLike,
@@ -251,7 +252,7 @@ describe('FirestoreUsageStore', () => {
   it('releases expired pending reservations and allows operation ID reuse', async () => {
     const database = new FakeFirestore();
     let now = 1_000;
-    const events: UsageEvent[] = [];
+    const events: FirestoreRecoveryEvent[] = [];
     const store = new FirestoreUsageStore(database, {
       cleanupBatchSize: 0,
       expiryGraceMs: 0,

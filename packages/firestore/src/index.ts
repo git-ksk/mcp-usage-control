@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
   UsageStateError,
-  emitUsageEvent,
   type Budget,
   type BudgetRemaining,
   type MarkLiableInput,
@@ -11,7 +10,6 @@ import {
   type SettleInput,
   type SettlementResult,
   type StoreReserveResult,
-  type UsageObserver,
   type UsageRequest,
   type UsageStore,
 } from 'mcp-usage-control';
@@ -68,6 +66,20 @@ export interface FirestoreLike {
   ): Promise<T>;
 }
 
+export interface FirestoreRecoveryEvent {
+  type: 'reservation.recovered';
+  timestamp: number;
+  store: 'firestore';
+  recovery: 'pending_released' | 'liable_retained';
+  reservationId: string;
+  reservedUnits: number;
+  count: 1;
+}
+
+export interface FirestoreRecoveryObserver {
+  onEvent(event: FirestoreRecoveryEvent): void | Promise<void>;
+}
+
 export interface FirestoreUsageStoreOptions {
   /** Prefix for the two top-level collections. Defaults to `muc`. */
   collectionPrefix?: string;
@@ -84,7 +96,7 @@ export interface FirestoreUsageStoreOptions {
    */
   expiryGraceMs?: number;
   /** Optional best-effort observer for expiry/recovery events. */
-  observer?: UsageObserver;
+  observer?: FirestoreRecoveryObserver;
   /** Test hook. Production callers should normally keep the Date.now default. */
   now?: () => number;
 }
@@ -147,7 +159,7 @@ export class FirestoreUsageStore implements UsageStore {
   private readonly cleanupBatchSize: number;
   private readonly cleanupIntervalMs: number;
   private readonly expiryGraceMs: number;
-  private readonly observer?: UsageObserver;
+  private readonly observer?: FirestoreRecoveryObserver;
   private readonly now: () => number;
   private lastCleanupStartedAt = Number.NEGATIVE_INFINITY;
 
@@ -589,7 +601,7 @@ export class FirestoreUsageStore implements UsageStore {
     ) {
       return;
     }
-    emitUsageEvent(this.observer, {
+    emitFirestoreRecovery(this.observer, {
       type: 'reservation.recovered',
       timestamp: now,
       store: 'firestore',
@@ -614,6 +626,21 @@ export class FirestoreUsageStore implements UsageStore {
       throw new UsageStateError('Firestore usage store clock returned an invalid timestamp');
     }
     return value;
+  }
+}
+
+function emitFirestoreRecovery(
+  observer: FirestoreRecoveryObserver | undefined,
+  event: FirestoreRecoveryEvent,
+): void {
+  if (!observer) return;
+  try {
+    const result = observer.onEvent(event);
+    if (result && typeof (result as Promise<void>).catch === 'function') {
+      void (result as Promise<void>).catch(() => undefined);
+    }
+  } catch {
+    // Observability remains best-effort and never changes enforcement state.
   }
 }
 
