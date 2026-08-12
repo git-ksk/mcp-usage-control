@@ -21,7 +21,55 @@ pnpm check
 
 CI tests Node.js 20/22, real Redis 7, and MCP SDK v2 protocol integration behavior.
 
-Pull requests that change only `docs/**` and Markdown (`*.md`) use a lightweight path that preserves the required check names while skipping Redis startup, Node/pnpm setup, dependency installation, tests, package packing, and clean-consumer installation. If any non-Markdown path changes, the full CI runs.
+## CI operating rules
+
+The CI policy is to **keep safety checks intact while avoiding heavy work for documentation-only changes**.
+
+### Required checks
+
+Branch protection on `main` treats `test (20)` and `test (22)` as required checks.
+
+Those check names are part of the repository's operating contract. If a workflow/job/matrix change would rename them, update branch protection as part of the same operational change. Do not rename the checks first and leave branch protection expecting the old names.
+
+Do not use workflow-level `paths-ignore` to suppress a required workflow. If the workflow never starts, the required checks may never be created and a documentation-only pull request can become unmergeable.
+
+### Documentation-only pull requests
+
+A pull request is documentation-only when every changed path is one of the following:
+
+- `docs/**`
+- Markdown (`*.md`) at any repository depth
+
+When every changed path matches that definition, the `changes` job classifies the pull request as documentation-only. The `test (20)` and `test (22)` jobs still run so branch protection sees the required check names, but each job takes only the lightweight success path and skips the heavy work:
+
+- repository checkout
+- Node / pnpm setup
+- dependency installation
+- Redis startup
+- `pnpm check`
+- public-package packing and package-content verification
+- tarball installation in a clean consumer project
+
+Keeping the required jobs alive while skipping their heavy steps is the repository's documentation-only CI strategy.
+
+### When full CI is required
+
+If even one non-documentation path changes, full CI runs. Source files, workflows, `package.json`, lockfiles, configuration files, and other non-Markdown paths all require the full path.
+
+If CI cannot determine a usable base SHA or cannot reliably determine the changed paths, it fails safe by running full CI. An ambiguous change set must never become a reason to skip tests.
+
+Changes to `.github/workflows/ci.yml` itself are non-Markdown changes and therefore always exercise full CI.
+
+### Store-specific integration workflows
+
+Cloudflare and Firestore integration tests are intentionally separate from the general CI workflow and are scoped to their relevant paths:
+
+- Cloudflare Integration: `packages/cloudflare/**`, `packages/core/**`, `.github/workflows/cloudflare-integration.yml`
+- Firestore Integration: `packages/firestore/**`, `packages/core/**`, `.github/workflows/firestore-integration.yml`
+
+A Firestore-only change should not run Cloudflare Integration, and vice versa. Changes under `packages/core/**` intentionally run both because both adapters depend on the core contract.
+
+When adding another store adapter or integration workflow, scope its triggers to the adapter itself, the shared packages it actually depends on, and the workflow file itself. If a broader trigger is necessary, explain the dependency reason in the pull request.
 
 ## Repository layout
 
