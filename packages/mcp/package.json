@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./conformance": {
+      "types": "./dist/flow-store-conformance.d.ts",
+      "import": "./dist/flow-store-conformance.js",
+      "default": "./dist/flow-store-conformance.js"
     }
   },
   "files": [
@@ -19,6 +24,10 @@
     "dist/index.js.map",
     "dist/index.d.ts",
     "dist/index.d.ts.map",
+    "dist/flow-store-conformance.js",
+    "dist/flow-store-conformance.js.map",
+    "dist/flow-store-conformance.d.ts",
+    "dist/flow-store-conformance.d.ts.map",
     "README.md",
     "LICENSE"
   ],
