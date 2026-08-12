@@ -33,7 +33,6 @@ jobs:
                   raise SystemExit(f'{path}: expected exactly one match, got {count}: {old!r}')
               p.write_text(text.replace(old, new, 1))
 
-          # Root README (English)
           replace_once(
               'README.md',
               'Do not expect registry installation of `mcp-usage-control`, `mcp-usage-control-mcp`, `mcp-usage-control-redis`, or `mcp-usage-control-cloudflare` to work yet.',
@@ -50,7 +49,6 @@ jobs:
               '- [Cloudflare adapter](docs/cloudflare.md)\n- [Firestore adapter](docs/firestore.md)\n- [Roadmap](docs/roadmap.md)',
           )
 
-          # Root README (Japanese)
           replace_once(
               'README.ja.md',
               '現時点では `mcp-usage-control` / `mcp-usage-control-mcp` / `mcp-usage-control-redis` / `mcp-usage-control-cloudflare` をregistryからinstallできる前提にはしていません。',
@@ -67,7 +65,6 @@ jobs:
               '- [Cloudflare adapter](docs/cloudflare.ja.md)\n- [Firestore adapter](docs/firestore.ja.md)\n- [Roadmap](docs/roadmap.ja.md)',
           )
 
-          # Source/tarball guide (English)
           replace_once('docs/using-from-source.md', '## 2. Pack the four packages locally', '## 2. Pack the five packages locally')
           replace_once(
               'docs/using-from-source.md',
@@ -76,8 +73,8 @@ jobs:
           )
           replace_once(
               'docs/using-from-source.md',
-              '.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n```',
-              '.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n.packs/mcp-usage-control-firestore-0.1.0.tgz\n```',
+              'This produces:\n\n```text\n.packs/mcp-usage-control-0.1.0.tgz\n.packs/mcp-usage-control-mcp-0.1.0.tgz\n.packs/mcp-usage-control-redis-0.1.0.tgz\n.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n```',
+              'This produces:\n\n```text\n.packs/mcp-usage-control-0.1.0.tgz\n.packs/mcp-usage-control-mcp-0.1.0.tgz\n.packs/mcp-usage-control-redis-0.1.0.tgz\n.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n.packs/mcp-usage-control-firestore-0.1.0.tgz\n```',
           )
           replace_once(
               'docs/using-from-source.md',
@@ -100,7 +97,6 @@ jobs:
               'Use the Redis adapter, the dedicated Cloudflare workerd integration workflow, or the Firestore Emulator integration workflow for distributed-enforcement verification.',
           )
 
-          # Source/tarball guide (Japanese)
           replace_once('docs/using-from-source.ja.md', '## 2. 4 packageをローカルpack', '## 2. 5 packageをローカルpack')
           replace_once(
               'docs/using-from-source.ja.md',
@@ -109,8 +105,8 @@ jobs:
           )
           replace_once(
               'docs/using-from-source.ja.md',
-              '.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n```',
-              '.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n.packs/mcp-usage-control-firestore-0.1.0.tgz\n```',
+              '次のtarballが生成されます。\n\n```text\n.packs/mcp-usage-control-0.1.0.tgz\n.packs/mcp-usage-control-mcp-0.1.0.tgz\n.packs/mcp-usage-control-redis-0.1.0.tgz\n.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n```',
+              '次のtarballが生成されます。\n\n```text\n.packs/mcp-usage-control-0.1.0.tgz\n.packs/mcp-usage-control-mcp-0.1.0.tgz\n.packs/mcp-usage-control-redis-0.1.0.tgz\n.packs/mcp-usage-control-cloudflare-0.1.0.tgz\n.packs/mcp-usage-control-firestore-0.1.0.tgz\n```',
           )
           replace_once(
               'docs/using-from-source.ja.md',
@@ -141,6 +137,9 @@ jobs:
           git config user.email '108925270+git-ksk@users.noreply.github.com'
           git add README.md README.ja.md docs/using-from-source.md docs/using-from-source.ja.md .github/workflows/fix-firestore-docs.yml
           git diff --cached --check
-          git diff --cached --exit-code && { echo 'no documentation changes produced'; exit 1; } || true
+          if git diff --cached --quiet; then
+            echo 'no documentation changes produced'
+            exit 1
+          fi
           git commit -m 'docs: add Firestore package to source usage guides'
           git push origin HEAD:feat/firestore-usage-store
