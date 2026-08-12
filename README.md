@@ -4,19 +4,19 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**A library for enforcing MCP tool usage limits safely under concurrency and retries.**
+**Failure-safe transactional usage enforcement around MCP tool execution.**
 
-`mcp-usage-control` reserves usage quota **before** a tool starts and settles actual usage afterward. If two requests arrive when only one unit remains, they cannot both safely spend the same remaining capacity and start metered work.
+`mcp-usage-control` reserves usage capacity **before** metered work starts and settles actual usage afterward. It is designed for concurrency, retry, process loss, long-running work, and MCP multi-round flows where a naive `check -> execute -> increment` model can oversubscribe a real budget.
 
-The library focuses on the boundary between tool execution and usage accounting. It is not a payment processor, invoicing system, subscription manager, OAuth provider, or MCP gateway.
+The project focuses on the boundary between execution and usage accounting. It is not a payment processor, financial ledger, subscription system, OAuth provider, generic gateway, workflow engine, or ordinary HTTP rate limiter.
 
-> First time here? Start with **[Getting started](docs/getting-started.md)** for the smallest example and a quick Memory / Redis / Cloudflare / Firestore comparison.
+> New here? Start with **[Getting started](docs/getting-started.md)**.
 
 ## Current distribution status
 
-**The packages are not published to npm yet.** Until the first registry publish completes, use a repository checkout or locally packed tarballs. Do not expect registry installation of `mcp-usage-control`, `mcp-usage-control-mcp`, `mcp-usage-control-redis`, `mcp-usage-control-cloudflare`, or `mcp-usage-control-firestore` to work yet.
+**The packages are not published to npm yet.**
 
-Quick verification from source:
+Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred.
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -25,52 +25,68 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-To use the packages from another project now, build `.tgz` packages locally and install those tarballs. See **[Use from source / local tarballs](docs/using-from-source.md)** for exact commands. CI validates the same tarballs in a clean consumer project.
+See **[Use from source / local tarballs](docs/using-from-source.md)** for clean-consumer installation.
 
-Requirements: Node.js 20+. The repository CI tests Node.js 20 and 22, Redis 7, and the official MCP TypeScript SDK v2 client/handler path.
-
-Versioning follows [Semantic Versioning (SemVer)](https://semver.org/). Before 1.0, minor releases may intentionally include breaking API changes; those changes are called out prominently. See the [Release policy](docs/releasing.md) for details.
+Requirements: **Node.js 20+**, ESM. CI exercises Node.js 20/22, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
 
 ## Core lifecycle
 
 ```text
-principal -> policy/entitlement -> quote -> atomic reserve -> mark liable -> execute -> settle
-                                                ^                          |
-                                                |----------- renew --------|
+principal -> policy -> quote -> atomic reserve -> mark liable -> execute -> settle
+                                      ^                           |
+                                      |---------- renew ----------|
 ```
 
-The important distinction is **settlement, not automatic rollback**. A failed tool call may already have consumed an upstream API, database, compute resource, or other metered resource.
+A reservation begins `pending`. Immediately before work may incur metered cost, it becomes `cost-liable`.
 
-A reservation starts `pending`. Immediately before metered execution, it becomes `cost-liable`. If a pending lease expires, its reservation can be released. If a cost-liable lease expires after execution started, the full reservation is conservatively retained so a process crash cannot become a refund.
+- expired **pending** reservation: capacity can be released;
+- expired **cost-liable** reservation: full reserved usage is retained conservatively when actual usage is unknown.
 
-## Why not a rate limiter?
+A process crash after execution may have started therefore cannot become an automatic refund.
 
-A normal rate limiter primarily answers whether another request may start within a time window. That is useful, but it does not by itself provide transactional accounting for work that consumes a real metered resource.
+## Why this is not a normal rate limiter
 
-A naive `check -> execute -> increment` flow can over-admit under concurrency. If two requests both observe one remaining unit, both may execute an upstream paid operation before either increments the counter. The budget has then paid for more work than it could safely admit.
+If one unit remains and two requests both perform:
 
-`mcp-usage-control` reserves capacity **before** metered execution and settles afterward. It also models cost liability, renewable/resumable leases, replay protection, expiry recovery, and ambiguous settlement outcomes.
+```text
+check remaining -> execute paid work -> increment counter
+```
 
-| Category | Primary concern | `mcp-usage-control` difference |
-| --- | --- | --- |
-| Rate limiter | requests per time window | reserves metered capacity before execution and settles actual usage afterward |
-| Billing/payment provider | invoicing, payment, subscriptions | intentionally outside scope; consumes policy/entitlement decisions rather than processing money |
-| Gateway policy | centralized access/routing controls | enforcement can live directly around tool execution with provider-neutral stores |
-| Transactional usage enforcement | admission + liability + settlement | this project's core category |
+both can observe the same remaining unit and both begin work.
+
+This project instead makes admission and reservation one authoritative store transition. For multi-budget policies, **all budgets reserve or none do**.
 
 ## Packages
 
-- **`mcp-usage-control`** — core policy, atomic admission contract, renewable/resumable leases, settlement, idempotency, provider-neutral observability hooks, and the in-memory reference store.
-- **`mcp-usage-control-mcp`** — adapter for `@modelcontextprotocol/server` v2 single-round tools plus opt-in `input_required` suspend/resume accounting.
-- **`mcp-usage-control-redis`** — atomic Redis store using Lua and Redis server time, with optional expiry-recovery observability.
-- **`mcp-usage-control-cloudflare`** — Cloudflare Durable Objects + SQLite store with Worker-local and authenticated remote-client paths.
-- **`mcp-usage-control-firestore`** — server-side Firestore transactional store with multi-budget admission, expiry recovery, and Firestore-specific contention guidance.
+| Package | Purpose |
+| --- | --- |
+| `mcp-usage-control` | Core policy/store contract, leases, settlement, observability, Memory reference store, Store conformance runner |
+| `mcp-usage-control-mcp` | MCP TypeScript SDK v2 tool wrappers, multi-round accounting, flow-store conformance runner |
+| `mcp-usage-control-redis` | Redis `UsageStore` plus shared Redis MCP flow store |
+| `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
+| `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five packages are ESM and require Node.js 20+.
+All five packages currently remain on the source-release version line until a separately authorized release-version change.
+
+## Stability boundary for v1 consideration
+
+| Area | Status | Boundary |
+| --- | --- | --- |
+| Core reserve / liability / renew / settle | **v1 stable candidate** | Failure-safe transaction contract |
+| Multi-budget admission / replay protection | **v1 stable candidate** | Atomic and scoped by logical operation identity |
+| Redis / Cloudflare / Firestore Stores | **v1 stable candidate with documented deployment constraints** | Provider durability/time/HA differences remain explicit |
+| `protectTool()` | **v1 stable candidate** | Single-round MCP tools |
+| `protectMultiRoundTool()` | **v1 stable candidate** | Supported `input_required` multi-round accounting |
+| Shared/durable MRTR compare-and-consume | **v1 direction** | Cross-instance resume without sticky MCP sessions |
+| First-class MCP Tasks wire/runtime adapter | **deferred / experimental upstream** | Accounting semantics are defined; stable adapter is not claimed |
+| New stateless MRTR claim mode | **deferred** | No demonstrated advantage over shared one-time claim |
+| Billing / financial ledger / workflow replay | **out of scope** | Remains outside usage enforcement |
+
+See **[v1.0 readiness review](docs/v1-readiness.md)** for the complete blocker classification and release-time checks.
 
 ## Multi-budget admission
 
-One logical invocation can reserve the same unit cost against several applicable budgets atomically, for example a user daily limit plus a user monthly limit plus a tenant monthly limit:
+One invocation may consume the same quoted units from several budgets atomically:
 
 ```ts
 import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
@@ -82,7 +98,7 @@ const policy: UsagePolicy = {
       decision: 'allow',
       units: request.tool === 'full_export' ? 5 : 1,
       budgets: [
-        { key: `day:user:${request.principal.id}:2026-08-10`, limit: 20 },
+        { key: `day:user:${request.principal.id}:2026-08-13`, limit: 20 },
         { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
         { key: `month:tenant:${tenant}:2026-08`, limit: 2_000 },
       ],
@@ -93,70 +109,24 @@ const policy: UsagePolicy = {
 const control = new UsageControl(new MemoryUsageStore(), policy);
 ```
 
-Admission is **all-or-nothing**. If any participating budget cannot admit the quoted units, no budget is partially reserved.
+If one participating budget cannot admit the units, no participating budget is partially reserved.
 
-The single `budget` form is also accepted as a convenience for one-budget policies.
+## Logical-operation replay scope
 
-## Idempotency scope
-
-Replay protection is scoped to the tuple:
+Replay protection is scoped by:
 
 ```text
 (tenantId, principal.id, tool, operationId)
 ```
 
-Use a stable `operationId` for retries of the same logical invocation. It is an idempotency input, not an authentication or authorization credential.
-
-Settled operations remain replay-protected for a bounded tombstone period. `MemoryUsageStore` and `RedisUsageStore` default to 24 hours (`idempotencyTtlMs`). Pending reservations that expire before becoming cost-liable release capacity and may be retried after recovery.
-
-## Provider-neutral observability
-
-Attach an optional observer to receive structured lifecycle events without coupling enforcement to a telemetry or billing vendor:
-
-```ts
-import { UsageControl, type UsageObserver } from 'mcp-usage-control';
-
-const observer: UsageObserver = {
-  onEvent(event) {
-    console.log(JSON.stringify(event));
-  },
-};
-
-const store = new RedisUsageStore(redis, { observer });
-const control = new UsageControl(store, policy, {
-  observer,
-  metadata: { service: 'my-mcp-server', environment: 'staging' },
-});
-```
-
-Events cover admission accepted/denied, settlement completed, expiry recovery, and policy/store errors. Observer delivery is **best-effort and outside the enforcement outcome**: returned promises are not awaited and observer failures never change quota state. `onEvent()` itself is invoked inline, so keep synchronous work lightweight and offload network/durable I/O. Tool arguments and raw exception messages are not captured automatically; custom metadata is explicit opt-in.
-
-Identical idempotent settlement replay can emit another identical `settlement.completed` event. Downstream analytics that require de-duplication should use a stable key such as `(reservationId, actualUnits, outcome)`; the event stream is not the transactional ledger.
-
-Runtime IDs can be high-cardinality. Do not use unique principal, operation, reservation, or user-specific budget IDs as metric labels. See [Observability](docs/observability.md) for event fields, privacy guidance, Redis aggregate recovery behavior, replay guidance, and delivery guarantees.
-
-## Billing and metering adapter boundary
-
-External billing or metering systems may define balances, entitlements, prices, invoices, receipts, or usage events with guarantees that differ from the enforcement transaction.
-
-Keep those integrations outside the core state machine:
-
-```text
-transactional enforcement core
-        -> stable observer/event contract
-        -> optional billing/telemetry adapter
-```
-
-An adapter may translate stable enforcement outcomes into an external billing or MCP metering schema. External terminology or delivery guarantees must not weaken atomic admission, reservation, `cost-liable` state, idempotency, lease/expiry recovery, or conservative handling of ambiguous settlement.
-
-The observer/event stream is integration evidence, not a financial ledger and not a substitute for the store transaction.
+Use the same stable `operationId` when retrying one logical invocation. `operationId` is an idempotency input, **not** authentication or authorization proof.
 
 ## Direct core example
 
 ```ts
 const admission = await control.reserve({
   operationId: 'logical-request-123',
-  principal: { id: 'user-42', tenantId: 'org-7', plan: 'free' },
+  principal: { id: 'user-42', tenantId: 'org-7' },
   tool: 'search',
   args: { query: 'example' },
 });
@@ -166,28 +136,32 @@ if (!admission.allowed) {
 }
 
 await admission.lease.markLiable();
+
 try {
   const result = await performMeteredWork();
   await admission.lease.settle(1, 'success');
   return result;
 } catch (error) {
-  // Charge the incurred amount. Use zero only when you can prove that no
-  // metered resource was consumed.
+  // Settle zero only when you can prove that no metered cost was incurred.
   await admission.lease.settle(admission.lease.reservedUnits, 'error');
   throw error;
 }
 ```
 
-Long-running work must renew its active lease. The MCP adapter provides a heartbeat by default; direct core users must renew explicitly when needed.
+Long-running direct-core work must renew the lease while authoritative execution remains active.
 
-## MCP SDK v2 adapter
+Successful admission also exposes authoritative `remainingByBudget`; do not recompute remaining capacity from configured limits in another layer.
+
+## MCP TypeScript SDK v2
+
+### Single-round tools
 
 ```ts
 import { protectTool } from 'mcp-usage-control-mcp';
 
 server.registerTool(
   'search',
-  { /* input schema, description, ... */ },
+  { /* schema and metadata */ },
   protectTool(
     {
       control,
@@ -200,30 +174,48 @@ server.registerTool(
 );
 ```
 
-For a tool with **no input schema**, set `noInput: true`. This is explicit because MCP SDK v2's public callback type and observed runtime dispatch shape differ for no-input tools, and an empty object can also be legitimate input for an empty schema.
-
-`protectTool()`:
-
-- reserves before execution;
-- marks the lease cost-liable before handler entry;
-- renews the lease while the handler runs by default;
-- distinguishes success, MCP `{ isError: true }`, and thrown errors;
-- settles classifier failures conservatively with the full reservation before surfacing the classification error;
-- does not blindly retry ambiguous settlement failures.
+`protectTool()` reserves before execution, marks liability immediately before handler entry, renews active leases by default, distinguishes normal success / MCP `{ isError: true }` / thrown exceptions, settles classifier failure conservatively, and does not blindly retry ambiguous settlement failures.
 
 ### Multi-round `input_required`
 
-`protectTool()` remains deliberately single-round and still rejects `input_required`. Use the opt-in `protectMultiRoundTool()` when a logical operation must span fresh MCP retry requests.
+Use `protectMultiRoundTool()` for logical operations that continue across fresh MCP requests.
 
-The multi-round wrapper reserves only on the first round. It keeps the usage lease server-side, replaces the wire `requestState` with an integrity-protected opaque flow reference, and reattaches to the same reservation after the MCP server's `requestState.verify` hook has decoded the retry state. A server-side `McpUsageFlowStore` must atomically compare the trusted principal/tool/args binding and consume a resume token exactly once.
+The wrapper:
 
-`MemoryMcpUsageFlowStore` is a single-process reference implementation. Horizontally scaled servers need a shared/durable flow store with the same atomic compare-and-consume contract. Suspended leases have an explicit `suspendTtlMs`; abandoned cost-liable flows retain the full reserved charge on expiry.
+- reserves once on the first round;
+- stores the resumable lease server-side;
+- requires integrity-verified request state;
+- binds resume to trusted principal / optional tenant / tool / original args hash;
+- atomically consumes a matching resume flow once;
+- resumes the existing lease rather than reserving again;
+- fails closed on replay, mismatch, expiry, corruption, or ambiguous consume failure.
 
-A one-time resume token prevents duplicate handler re-entry for the same retry. It is not a general exactly-once side-effect or completed-result replay mechanism, so destructive/external operations should keep their existing business idempotency/result reconciliation.
+`MemoryMcpUsageFlowStore` is for tests/single-process servers. Horizontal scale needs a shared/durable flow store such as `RedisMcpUsageFlowStore`.
 
-See [MCP SDK v2 integration](docs/mcp-integration.md) for the official `createRequestStateCodec()` setup and the complete trust boundary.
+**Sticky MCP sessions are not required for accounting.** Fresh requests may hit different server instances when `UsageStore` and flow state are shared where required.
 
-## Redis production store
+Business side-effect idempotency/result replay remains application-owned. A consumed usage-flow token is not permission to blindly replay a destructive operation.
+
+See [MCP integration](docs/mcp-integration.md) and [MCP protocol conformance](docs/mcp-conformance.md).
+
+## MCP Tasks accounting
+
+Long-running Tasks use a separate protocol/business state machine, but the accounting rules are already defined:
+
+- one reservation per logical operation, independent of task ID;
+- `working` does not automatically mean cost-liable;
+- mark liability immediately before metered work;
+- renew server-side while authoritative work remains active or intentionally waits for input;
+- a `tasks/cancel` acknowledgement does **not** prove zero cost or authorize a refund;
+- pre-liability cancellation may settle zero when proved;
+- liable crash/unknown usage remains conservative;
+- business task creation/result replay stays outside `UsageStore`.
+
+The upstream Tasks TypeScript integration surface is still experimental, so this project does **not** currently claim a stable first-class Tasks adapter. See [MCP Tasks accounting](docs/mcp-tasks-accounting.md).
+
+## Production Stores
+
+### Redis
 
 ```ts
 import { createClient } from 'redis';
@@ -231,66 +223,92 @@ import { RedisUsageStore } from 'mcp-usage-control-redis';
 
 const redis = createClient({ url: process.env.REDIS_URL });
 await redis.connect();
-
 const store = new RedisUsageStore(redis);
 ```
 
-The v0.1 Redis store performs multi-budget reserve, `markLiable`, renew, settlement, expiry recovery, and replay protection inside one Redis Cluster transaction domain. It uses Redis server `TIME`, not application `Date.now()`, for lease/tombstone decisions.
+Redis uses Lua for atomic transitions and Redis server `TIME` for lease/tombstone decisions. Redis atomicity is **not** financial-ledger durability; configure persistence/HA to match your enforcement risk tolerance.
 
-Lua atomicity is **not** the same as persistence/failover durability. Configure Redis HA and persistence to match the loss tolerance of your enforcement system. If you need a financial-grade durable ledger, reconcile enforcement state to a separate durable system.
+### Cloudflare Durable Objects
 
-See [Redis adapter](docs/redis.md) before production use.
+The Cloudflare adapter uses a Durable Object + SQLite transaction domain. Remote applications use an explicitly authenticated HTTPS gateway. Network/timeout ambiguity is surfaced, not blindly retried.
 
-## Cloudflare Durable Objects store
+Real deployed dogfood has validated the main accounting path, while Issue #24 intentionally remains open for two additional real-platform operational observations. Do not interpret the adapter as proven under every Cloudflare platform-limit condition.
 
-`mcp-usage-control-cloudflare` provides a SQLite-backed Durable Object transaction domain. Workers can use `CloudflareUsageStore` directly; applications outside Cloudflare can use `RemoteCloudflareUsageStore` through an explicitly authenticated Worker gateway. The adapter hashes operation/budget/outcome identifiers before the Cloudflare boundary and does not send tool arguments. Remote timeout/ACK ambiguity is surfaced rather than blindly retried.
+### Firestore
 
-See [Cloudflare adapter](docs/cloudflare.md) for Worker configuration, privacy, cleanup/cost behavior, and GCP/external usage.
+The Firestore adapter is server-side only and uses Firestore transactions for admission, settlement, and expiry recovery. It uses host-clock lease arithmetic with a configurable expiry grace; strongly shared budget documents can become contention hotspots.
+
+See [Redis](docs/redis.md), [Cloudflare](docs/cloudflare.md), and [Firestore](docs/firestore.md) before production deployment.
+
+## Third-party Store compatibility
+
+Implementing the `UsageStore` methods is not enough to call a Store safe.
+
+Use the normative **[Store implementation contract](docs/store-contract.md)** and the reusable runners:
+
+```ts
+import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
+```
+
+Portable conformance proves behavioral state-machine compatibility. Persistence, failover, authoritative time, and lost-ACK behavior still require backend-specific evidence.
+
+## Observability
+
+`UsageObserver` receives structured lifecycle events outside the enforcement transaction. Observer failure cannot turn denial/error into allow or alter settlement.
+
+Tool arguments and raw exception messages are not captured automatically. Unique principal/operation/reservation/budget IDs should not be promoted to metric labels. `projectUsageEvent()` provides a low-cardinality projection for operational logging.
+
+Observability is not a durable billing ledger.
+
+See [Observability](docs/observability.md).
 
 ## Safety invariants
 
-1. Quota comparison and reservation are one store operation; `check -> execute -> record` is not the model.
-2. Every applicable budget reserves atomically or none does.
-3. Replay protection uses `(tenantId, principal.id, tool, operationId)`.
-4. Entering the metered execution boundary marks a reservation cost-liable.
-5. Expired pending reservations release capacity; expired cost-liable reservations retain the full charge.
-6. Long-running active leases are renewable.
-7. `actualUnits` cannot exceed the reserved units in v0.1.
-8. Identical settlement replay is idempotent; conflicting settlement fails.
-9. MCP `isError: true` is not classified as success.
-10. Cost-classification failures settle conservatively before surfacing an error.
-11. Ambiguous settlement failures are surfaced and are not blindly retried.
-12. Storage failures do not turn into an allow decision.
-13. Redis lease/tombstone time comes from Redis, not the application clock.
-14. Observability is outside the enforcement transaction; observer failure cannot convert allow/deny/settlement state.
-15. Multi-round MCP retries do not reserve again; the original server-side usage lease is resumed.
-16. Client-round-tripped MCP request state is never used as accounting authority without integrity verification and a server-side binding check.
-17. A resume token is consumed at most once; mismatched callers cannot consume the legitimate suspended flow.
+1. Admission comparison and reservation are one authoritative Store operation.
+2. Every participating budget reserves atomically or none does.
+3. Replay identity is `(tenantId, principal.id, tool, operationId)`.
+4. Metered execution is preceded by `markLiable()`.
+5. Pending expiry may release capacity; liable expiry conservatively retains the reservation.
+6. Active long-running leases are renewable.
+7. `actualUnits` cannot exceed `reservedUnits`.
+8. Identical settlement replay is idempotent during retention; conflicting settlement fails.
+9. Storage failures do not become allow decisions.
+10. Ambiguous state-changing outcomes are not blindly retried.
+11. MCP multi-round resume is integrity-verified, binding-aware, and one-time.
+12. Resume does not create a second usage reservation.
+13. Client liveness/cancellation ACK alone never proves a refund is safe.
+14. Observability cannot change enforcement state.
+15. Business-operation replay is separate from usage accounting.
 
 ## Documentation
 
-- [Use from source / local tarballs](docs/using-from-source.md)
 - [Getting started](docs/getting-started.md)
-- [MCP SDK v2 integration](docs/mcp-integration.md)
+- [Use from source / local tarballs](docs/using-from-source.md)
+- [MCP integration](docs/mcp-integration.md)
+- [MCP protocol conformance](docs/mcp-conformance.md)
+- [MCP Tasks accounting](docs/mcp-tasks-accounting.md)
+- [Architecture](docs/architecture.md)
+- [Store implementation contract](docs/store-contract.md)
+- [Redis](docs/redis.md)
+- [Cloudflare](docs/cloudflare.md)
+- [Firestore](docs/firestore.md)
 - [Observability](docs/observability.md)
-- [Architecture and invariants](docs/architecture.md)
-- [Redis adapter](docs/redis.md)
-- [Cloudflare adapter](docs/cloudflare.md)
-- [Firestore adapter](docs/firestore.md)
-- [Roadmap](docs/roadmap.md)
 - [API reference](docs/api-reference.md)
+- [Project positioning](docs/positioning.md)
+- [Roadmap](docs/roadmap.md)
+- [v1.0 readiness review](docs/v1-readiness.md)
 - [Release policy](docs/releasing.md)
-- [Documentation index](docs/README.md)
 
 Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
 
-## Scope after v0.1
+## Release boundary
 
-The near-term order is transaction-semantic hardening first: production shared/durable multi-round flow stores and post-claim reconciliation (#41), remaining deployed Cloudflare validation (#24), and final public package-contract review before npm publication (#6).
+v0.2.0 remains the existing historical GitHub/source release boundary. Post-v0.2.0 work is recorded only under `Unreleased` until a future explicitly authorized release.
 
-After that, planned differentiation includes a third-party store invariant test kit, a versioned enforcement event contract, production multi-budget policy examples, and optional billing/telemetry adapters that remain outside the enforcement transaction. See the [Roadmap](docs/roadmap.md).
+The current source tree is assessed as ready for **v1.0 release-candidate/final-release preparation**, but this repository state does not itself create a v1 tag or GitHub Release.
 
-Billing providers, OAuth providers, dashboards, payment protocols, generic rate limiting, and external billing schemas as a replacement for the core state machine remain outside the core runtime.
+**npm publication remains a separate explicitly authorized operation and has not been performed.**
 
 ## License
 
