@@ -62,3 +62,4 @@ See the public guides and reference:
 - [Firestore UsageStore 日本語](../../docs/firestore.ja.md)
 - [API reference](../../docs/api-reference.md)
 - [Use from source / local tarballs](../../docs/using-from-source.md)
+- [Release policy](../../docs/releasing.md)
