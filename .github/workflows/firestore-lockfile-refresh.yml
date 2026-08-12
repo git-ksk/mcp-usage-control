@@ -1,0 +1,45 @@
+name: Firestore Lockfile Refresh
+
+on:
+  push:
+    branches:
+      - feat/firestore-usage-store
+    paths:
+      - '.github/workflows/firestore-lockfile-refresh.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/firestore-usage-store
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Refresh lockfile only
+        run: pnpm install --lockfile-only --ignore-scripts --no-frozen-lockfile
+      - name: Verify generated scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- . ':(exclude)pnpm-lock.yaml'
+          git diff -- pnpm-lock.yaml
+      - name: Commit generated lockfile and remove this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add pnpm-lock.yaml
+          git rm .github/workflows/firestore-lockfile-refresh.yml
+          git commit -m 'chore: refresh lockfile for Firestore adapter'
+          git push origin HEAD:feat/firestore-usage-store
