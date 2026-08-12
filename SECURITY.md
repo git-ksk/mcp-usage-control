@@ -4,9 +4,7 @@
 
 ## Supported versions
 
-Before the first public registry/GitHub release completes, only the latest `main` branch is supported. Release-candidate tags may exist during publication preparation and do not by themselves expand the support matrix.
-
-After public releases begin, supported versions will be listed here explicitly.
+The latest GitHub/source minor line is supported for security fixes. For this policy, v0.2.x is the current supported source-release line and supersedes v0.1.x. npm registry publication is a separate operation and may remain deferred even while the GitHub/source release is supported.
 
 ## Reporting a vulnerability
 
@@ -29,7 +27,9 @@ Changes touching the following areas require tests that demonstrate the invarian
 - settlement and unused-unit release;
 - success/tool-error/thrown-error cost classifiers;
 - principal and tenant scoping;
+- MCP multi-round suspend/resume binding and one-time consumption;
 - Redis atomicity and transaction-domain assumptions;
+- Firestore transaction and server-side authorization boundaries;
 - ambiguous acknowledgement handling;
 - storage failure behavior;
 - user/model-visible denial messages;
@@ -41,7 +41,7 @@ Production stores must not implement quota enforcement as separate `check` and `
 
 A reservation starts pending and can be released on expiry only before the metered execution boundary is entered. Once `markLiable()` succeeds, expiry must not turn a process crash into a refund; the current reference behavior charges the full reservation.
 
-The generic MCP adapter marks a lease cost-liable immediately before handler entry. This is intentionally conservative. Applications that move the liability boundary later must ensure the alternative cannot create a crash-after-cost quota bypass.
+The generic MCP adapters mark a lease cost-liable immediately before handler entry. This is intentionally conservative. Applications that move the liability boundary later must ensure the alternative cannot create a crash-after-cost quota bypass.
 
 Cost-classification hooks are not trusted enforcement state. If `successUnits`, `toolErrorUnits`, or `errorUnits` throws or produces invalid units, the MCP adapter settles the full reservation before surfacing `UsageClassificationError`.
 
@@ -63,17 +63,35 @@ Tool arguments and raw exception messages are not captured automatically. `opera
 
 Runtime events can contain principal, tenant, operation, reservation, tool, and budget identifiers. Treat them as potentially sensitive/high-cardinality data. Do not use unique principal/operation/reservation/user-specific budget identifiers as metrics labels/tags. Apply retention/access controls appropriate to structured logs and traces.
 
+Prefer `projectUsageEvent()` when producing operational structured logs. Its default projection excludes identity fields, reservation/operation IDs, tool/budget identifiers, settlement outcome strings, and unrestricted application reason strings. Enabling projected metadata remains explicit opt-in and does not make caller-provided metadata safe automatically.
+
 Redis lazy recovery intentionally does not persist raw request identities solely to improve telemetry; its recovery events can therefore be aggregate-only. Observability loss must not be treated as evidence that enforcement did not occur.
 
 ## MCP multi-round flows
 
-The v0.1 MCP adapter does not support v2 `input_required` multi-round tool flows. It rejects them explicitly. Do not work around this by generating a new operation ID for every round or by reusing a settled operation ID; either approach can defeat intended accounting semantics. Dedicated suspend/resume support must preserve idempotency and liability across rounds.
+`protectTool()` remains single-round and rejects v2 `input_required`. Applications that need suspend/resume accounting must opt in to `protectMultiRoundTool()`.
+
+The wire `requestState` must be minted with an integrity-protection scheme that the MCP server verifies. The wrapper accepts only the already-decoded payload from the SDK verification hook; raw, malformed, or unverified state fails closed. `UsageLeaseResumeState` is trusted server-side state and must not be exposed to an untrusted client as a credential or bearer token.
+
+Suspended flows are bound to principal, optional tenant, tool, and a hash of the original arguments. `McpUsageFlowStore.consume()` must compare that binding and consume a matching flow atomically. A mismatch must not consume the legitimate flow. `MemoryMcpUsageFlowStore` is process-local; horizontally scaled servers should use a durable store with atomic compare-and-consume semantics, such as `RedisMcpUsageFlowStore`.
+
+The Redis MCP flow store uses binding-aware Lua operations and Redis server-time expiry. Missing, expired, replayed, or mismatched flows fail closed. Ambiguous or lost consume acknowledgements must also fail closed; callers must not generate a new operation ID and re-enter application work after an uncertain consume result.
+
+Multi-round work is marked cost-liable before handler entry. Resume renews the existing reservation rather than reserving quota again. If a process disappears after claiming a flow, expiry conservatively retains the full reserved charge.
 
 ## Cloudflare remote-store boundary
 
 The Cloudflare adapter's public HTTP gateway requires an application-defined authorization callback; it has no unauthenticated default. Non-local remote clients require HTTPS and embedded URL credentials are rejected. Timeout/lost-ack failures are ambiguous and must not be hidden by blind automatic retries.
 
 The adapter hashes operation, budget, and settlement-outcome identifiers before the Cloudflare backend boundary and does not send tool arguments. Hashing is not encryption and does not make secret-bearing identifiers safe.
+
+## Firestore store boundary
+
+The Firestore adapter is server-side enforcement infrastructure. Applications must not grant untrusted clients direct write access to its budget/reservation collections or treat a configurable collection prefix as an authorization boundary.
+
+Reserve, settlement, and expiry recovery update enforcement state through Firestore transactions. Expired pending reservations release capacity; expired liable reservations retain the conservative charge. Lease expiry uses host-clock timestamps with a configurable grace period, so deployments must account for clock skew and contention on heavily shared budget documents.
+
+Budget keys and operation identity tuples are SHA-256 hashed before becoming Firestore document IDs. Hashing reduces accidental identifier disclosure but is not encryption; do not place secrets in identifiers. Firestore IAM/Security Rules and server credential handling remain application/deployment responsibilities.
 
 ## Redis durability boundary
 
