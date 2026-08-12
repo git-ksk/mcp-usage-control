@@ -1,0 +1,34 @@
+name: Clarify README intro
+
+on:
+  push:
+    branches:
+      - docs/clarify-guides
+    paths:
+      - '.github/workflows/clarify-readme-intro.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  clarify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: docs/clarify-guides
+
+      - name: Rewrite README introductions
+        run: node scripts/clarify-readme-intro.mjs
+
+      - name: Commit documentation update
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/clarify-readme-intro.yml
+          rm scripts/clarify-readme-intro.mjs
+          git config user.name 'git-ksk'
+          git config user.email '108925270+git-ksk@users.noreply.github.com'
+          git add README.md README.ja.md .github/workflows/clarify-readme-intro.yml scripts/clarify-readme-intro.mjs
+          git commit -m 'docs: clarify README introduction'
+          git push origin HEAD:docs/clarify-guides
