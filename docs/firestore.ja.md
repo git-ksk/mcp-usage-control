@@ -2,14 +2,14 @@
 
 [English](firestore.md) | [日本語](firestore.ja.md)
 
-`mcp-usage-control/firestore` は、server-side Firestore transactionを使って `UsageStore` contractを実装するadapterです。
+`mcp-usage-control-firestore` は、server-side Firestore transactionを使って `UsageStore` contractを実装するadapterです。
 
-Firebase Admin SDKの `getFirestore()` またはGoogle Cloud Node.js Firestore clientを、structural typeとしてそのまま渡せます。core packageはFirebase / Google Cloud SDK自体へruntime dependencyを持ちません。
+Firebase Admin SDKの `getFirestore()` またはGoogle Cloud Node.js Firestore clientを、structural typeとしてそのまま渡せます。adapter packageはFirebase / Google Cloud SDK自体へruntime dependencyを持ちません。
 
 ```ts
 import { getFirestore } from 'firebase-admin/firestore';
 import { UsageControl } from 'mcp-usage-control';
-import { FirestoreUsageStore } from 'mcp-usage-control/firestore';
+import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
 
 const db = getFirestore();
 const store = new FirestoreUsageStore(db);
