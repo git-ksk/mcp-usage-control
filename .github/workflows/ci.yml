@@ -117,6 +117,17 @@ jobs:
       - run: pnpm check
         if: needs.changes.outputs.run_full == 'true'
 
+      - name: Verify public package versions are aligned
+        if: needs.changes.outputs.run_full == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(node -p "require('./packages/core/package.json').version")"
+          for dir in packages/core packages/mcp packages/redis packages/cloudflare packages/firestore; do
+            actual="$(node -p "require('./${dir}/package.json').version")"
+            test "$actual" = "$expected"
+          done
+
       - name: Pack public packages with npm
         if: needs.changes.outputs.run_full == 'true'
         shell: bash
@@ -163,7 +174,8 @@ jobs:
               exit 1
             fi
           done
-          cloudflare_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-cloudflare-0.1.0.tgz)"
+          version="$(node -p "require('./packages/core/package.json').version")"
+          cloudflare_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-cloudflare-${version}.tgz")"
           grep -qx 'package/dist/worker.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/worker.d.ts' <<<"$cloudflare_listing"
           grep -qx 'package/dist/versioned-worker.js' <<<"$cloudflare_listing"
@@ -173,6 +185,9 @@ jobs:
           grep -qx 'package/dist/maintenance.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance.d.ts' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance-protocol.js' <<<"$cloudflare_listing"
+          redis_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-redis-${version}.tgz")"
+          grep -qx 'package/dist/mcp-flow.js' <<<"$redis_listing"
+          grep -qx 'package/dist/mcp-flow.d.ts' <<<"$redis_listing"
 
       - name: Install tarballs in a clean consumer project
         if: needs.changes.outputs.run_full == 'true'
@@ -183,12 +198,13 @@ jobs:
           mkdir -p /tmp/muc-consumer
           cd /tmp/muc-consumer
           npm init -y >/dev/null
+          version="$(node -p "require('$GITHUB_WORKSPACE/packages/core/package.json').version")"
           npm install \
-            /tmp/muc-packs/mcp-usage-control-0.1.0.tgz \
-            /tmp/muc-packs/mcp-usage-control-mcp-0.1.0.tgz \
-            /tmp/muc-packs/mcp-usage-control-redis-0.1.0.tgz \
-            /tmp/muc-packs/mcp-usage-control-cloudflare-0.1.0.tgz \
-            /tmp/muc-packs/mcp-usage-control-firestore-0.1.0.tgz \
+            /tmp/muc-packs/mcp-usage-control-${version}.tgz \
+            /tmp/muc-packs/mcp-usage-control-mcp-${version}.tgz \
+            /tmp/muc-packs/mcp-usage-control-redis-${version}.tgz \
+            /tmp/muc-packs/mcp-usage-control-cloudflare-${version}.tgz \
+            /tmp/muc-packs/mcp-usage-control-firestore-${version}.tgz \
             @modelcontextprotocol/server@2.0.0 \
             redis@6.2.0 \
             --ignore-scripts
@@ -197,6 +213,7 @@ jobs:
           import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
           import { protectTool } from 'mcp-usage-control-mcp';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
+          import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
           import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
           import {
             createReconciliableCloudflareUsageStoreGateway,
@@ -212,6 +229,7 @@ jobs:
             FirestoreUsageStore,
             protectTool,
             RedisUsageStore,
+            RedisMcpUsageFlowStore,
             CloudflareUsageStore,
             RemoteCloudflareUsageStore,
             createReconciliableCloudflareUsageStoreGateway,

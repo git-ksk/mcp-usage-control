@@ -4,6 +4,56 @@
 
 主なproject changeを記録します。
 
+## Unreleased
+
+未releaseの変更はまだありません。
+
+## [0.2.0] - 2026-08-12
+
+2回目のGitHub/source releaseです。npm registryへの公開は引き続き意図的に分離し、このrelease準備では実施しません。
+
+### Added
+
+- `protectMultiRoundTool()` による安全なMCP v2 multi-round `input_required` accounting。trusted server-side suspend/resume state、integrity-protected wire `requestState`、principal / tenant / tool / arguments binding、one-time resume consume、明示的suspend TTL、bounded roundsを含みます。
+- 2回目のquota reserveを行わずtrusted server-side leaseへ再接続する `UsageLease.toResumeState()` / `UsageControl.resumeLease()`。
+- horizontally scaled MCP multi-round server向けshared Redis flow store `RedisMcpUsageFlowStore`。binding-aware atomic consumeとRedis server-time expiryを使用します。
+- transactional multi-budget admission、replay protection、保守的expiry recovery、hashed storage identifier、adapter-local recovery observabilityを持つstandalone server-side Firestore `UsageStore`、`mcp-usage-control-firestore`。
+- successful admissionの `remainingByBudget` 伝播と、identity / tool・budget key / settlement outcome / raw application reasonをdefaultで除外するlow-cardinality `projectUsageEvent()` structured-log projection。
+- Cloudflare remote call全体を対象にしたbounded timeoutと、response bodyを公開しないtransport errorのHTTP status metadata。
+- multi-budget atomicity、shared-budget concurrency、pending / liable expiry semantics、idempotent settlement、server-client TypeScript compatibilityを検証する実Firestore Emulator integration。
+
+### Packaging / CI / docs
+
+- publish可能な5 packageをすべて `0.2.0` に統一。
+- Redis `mcp-usage-control-redis/mcp-flow` をexplicit public exportへ追加し、npm tarball allow-listへ収録。clean-consumer CIでも直接importします。
+- Node.js 20 / 22 CIで5 packageのversion整合を検証し、tarball名をrelease番号のhard-codeではなくpackage versionから導出。
+- Firestore integrationとCloudflare integrationのtriggerを分離し、required CI checkはdocs-only軽量pathを維持。不明なchange scopeではfull CIへ保守的にfallback。
+- 英日architecture、MCP multi-round、Redis flow store、Firestore、observability、source / tarball、API、release、security、contributor docsをv0.2 behaviorへ同期。
+
+### Security / accounting invariants
+
+- 適用される全budgetのquota reservationは引き続きatomicで、新adapter / MCP multi-roundによって `check -> execute -> record` raceを導入しません。
+- server-side MCP resume stateをclient credentialとして扱わず、wire stateはintegrity-protected opaque referenceのみ。resumeはprincipal、optional tenant、tool、argumentsへbindingします。
+- matching MCP resume tokenはexactly once consume。mismatchは正当なflowをconsumeせず、ambiguous / lost consume ACKはapplication workへ再入場せずfail closed。
+- multi-round workはhandler実行前にcost-liable化。claim後にprocess lossした場合はfull reserved chargeで保守的にexpiryします。
+- Firestore reserve / settle / recoveryはtransaction内で処理。expired pendingはcapacityを解放し、expired liableは保守的chargeを維持。
+- Firestore document IDはoperation / budget identity materialをhash化して保存。adapterはserver-side専用で、clientへenforcement stateの直接write authorityを与えません。
+- observabilityは引き続きbest-effortかつenforcementから隔離。structured projectionはdefaultでlow-cardinality / secret-conscious。
+- Cloudflare remote failureはfail closed、reserve reconciliationはread-onlyのまま、response bodyはtransport errorへ伝播しません。
+
+### Compatibility / known limitations
+
+- Node.js 20+。CIはNode.js 20 / 22を実行。
+- ESM。
+- `@modelcontextprotocol/server` / client v2。CIは2.0.0とofficial `Client + createMcpHandler` protocol pathを実行。
+- Redis 7 integration behavior、node-redis `redis` 6.2.x。
+- Cloudflare Workers / SQLite Durable Objects、local workerd integration。
+- FirestoreはFirebase Local Emulator Suiteと `@google-cloud/firestore` 8.7.0 type compatibilityで検証。
+- Firestore lease timestampはhost clock + configurable expiry graceを使い、強く共有されるbudget documentではhotspotが起こり得ます。deployment guidanceに制約を明記。
+- Redis flow stateはflowごとのCluster hash slot内でatomicですが、Redis persistence / HAはdeployment-specific。
+- `protectTool()` はsingle-roundのまま。`input_required` はopt-in `protectMultiRoundTool()` を使用。
+- npm publishは別のmanual operationで、このrelease PRでは実施しません。
+
 ## [0.1.0] - 2026-08-11
 
 最初のGitHub/source releaseです。npm registryへの公開は意図的に分離し、後日別途実施できます。
@@ -74,15 +124,3 @@
 - Redis 7 integration behavior
 - node-redis `redis` 6.2.x
 - Cloudflare Workers / SQLite Durable Objects（local workerd integration + deployed Free-plan dogfood）
-
-## Unreleased
-
-### Added
-
-- transactional multi-budget admission、replay protection、保守的expiry recovery、hashed storage identifier、adapter-local recovery observabilityを持つstandalone server-side Firestore `UsageStore`、`mcp-usage-control-firestore`。
-- multi-budget atomicity、shared-budget concurrency、pending / liable expiry semantics、idempotent settlementを検証する実Firestore Emulator integrationと、server-client TypeScript compatibility smoke check。
-- Firestore deployment、contention / hotspot、source / tarball利用、API、packageについての英日ドキュメント。
-
-### CI
-
-- Firestore IntegrationはFirestore adapter / core / workflow自身の変更で実行。Firestore-only変更ではCloudflare Integrationを起動しない。

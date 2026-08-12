@@ -4,6 +4,56 @@
 
 All notable project changes are recorded here.
 
+## Unreleased
+
+No unreleased changes yet.
+
+## [0.2.0] - 2026-08-12
+
+Second GitHub/source release. npm registry publication remains intentionally deferred and is not part of this release preparation.
+
+### Added
+
+- Safe MCP v2 multi-round `input_required` accounting via `protectMultiRoundTool()`, including trusted server-side suspend/resume state, integrity-protected wire `requestState`, principal/tenant/tool/argument binding, one-time resume consumption, explicit suspension TTLs, and bounded rounds.
+- `UsageLease.toResumeState()` / `UsageControl.resumeLease()` for trusted server-side lease reattachment without a second quota reservation.
+- `RedisMcpUsageFlowStore` as the durable shared Redis flow store for horizontally scaled MCP multi-round servers, using atomic binding-aware consume and Redis server-time expiry.
+- `mcp-usage-control-firestore`, a standalone server-side Firestore `UsageStore` with transactional multi-budget admission, replay protection, conservative expiry recovery, hashed storage identifiers, and adapter-local recovery observability.
+- Successful admission `remainingByBudget` propagation plus a low-cardinality `projectUsageEvent()` structured-log projection that excludes identities, tool/budget keys, settlement outcomes, and raw application reasons by default.
+- Bounded full-call Cloudflare remote timeouts and HTTP status metadata on transport errors without exposing response bodies.
+- Real Firestore Emulator integration covering multi-budget atomicity, shared-budget concurrency, pending/liable expiry semantics, idempotent settlement, and server-client TypeScript compatibility.
+
+### Packaging / CI / docs
+
+- All five publishable packages are versioned `0.2.0`.
+- Redis `mcp-usage-control-redis/mcp-flow` is now an explicit public export and included in the npm tarball allow-list; clean-consumer CI imports it directly.
+- Node.js 20/22 CI now verifies all package versions stay aligned and derives tarball names from the package version instead of hard-coding a release number.
+- Firestore integration is isolated from Cloudflare integration triggers, while required CI checks keep a lightweight docs-only path and conservatively fall back to full CI when change scope is uncertain.
+- English/Japanese architecture, MCP multi-round, Redis flow-store, Firestore, observability, source/tarball, API, release, security, and contributor documentation are synchronized with the v0.2 behavior.
+
+### Security / accounting invariants
+
+- Quota reservation remains atomic across all participating budgets; no `check -> execute -> record` race is introduced by the new adapters or MCP multi-round flow.
+- MCP resume state kept by the server is never treated as a client credential; wire state is an integrity-protected opaque reference, and resume is bound to principal, optional tenant, tool, and arguments.
+- A matching MCP resume token is consumed exactly once; mismatches do not consume the legitimate flow, and ambiguous/lost consume acknowledgements fail closed rather than re-entering application work.
+- Multi-round work is marked cost-liable before handler execution. If a claimed process disappears, the reservation expires conservatively at its full reserved charge.
+- Firestore reserve/settle/recovery changes run inside transactions; expired pending reservations release capacity, while expired liable reservations retain the conservative charge.
+- Firestore document IDs hash operation/budget identity material before storage. The adapter is server-side only and does not grant clients direct write authority over enforcement state.
+- Observability remains best-effort and isolated from enforcement; the structured projection is low-cardinality and secret-conscious by default.
+- Cloudflare remote failures remain fail-closed, reserve reconciliation remains read-only, and response bodies are not propagated through transport errors.
+
+### Compatibility / known limitations
+
+- Node.js 20+; CI exercises Node.js 20 and 22.
+- ESM.
+- `@modelcontextprotocol/server` / client v2; CI exercises 2.0.0 and the official `Client + createMcpHandler` protocol path.
+- Redis 7 integration behavior with node-redis `redis` 6.2.x.
+- Cloudflare Workers / SQLite Durable Objects with local workerd integration.
+- Firestore is tested against the Firebase Local Emulator Suite and `@google-cloud/firestore` 8.7.0 type compatibility.
+- Firestore uses host-clock lease timestamps with a configurable expiry grace and can hotspot on heavily shared budget documents; deployment guidance documents these limits.
+- Redis flow state is atomic within each flow's Cluster hash slot, but Redis persistence/HA remains deployment-specific.
+- `protectTool()` stays single-round; `input_required` requires the opt-in `protectMultiRoundTool()` path.
+- npm publication is still a separate manual operation and is not performed by this release PR.
+
 ## [0.1.0] - 2026-08-11
 
 Initial GitHub/source release. npm registry publication is intentionally deferred and can happen separately later.
@@ -74,15 +124,3 @@ Initial GitHub/source release. npm registry publication is intentionally deferre
 - Redis 7 integration behavior
 - node-redis `redis` 6.2.x
 - Cloudflare Workers / SQLite Durable Objects, with local workerd integration and deployed Free-plan dogfood
-
-## Unreleased
-
-### Added
-
-- `mcp-usage-control-firestore`, a standalone server-side Firestore `UsageStore` with transactional multi-budget admission, replay protection, conservative expiry recovery, hashed storage identifiers, and adapter-local recovery observability.
-- Real Firestore Emulator integration covering multi-budget atomicity, shared-budget concurrency, pending/liable expiry semantics, and idempotent settlement, plus a server-client TypeScript compatibility smoke check.
-- English/Japanese Firestore deployment, contention/hotspot, source/tarball usage, API, and package documentation.
-
-### CI
-
-- Firestore Integration runs for Firestore adapter, core, or its own workflow changes; Firestore-only changes do not trigger Cloudflare Integration.

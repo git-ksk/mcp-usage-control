@@ -6,7 +6,7 @@
 
 GitHub/source releaseとnpm registry publishは別工程とします。
 
-v0.1 lineには5つのpublish可能なnpm packageがあります。
+pre-1.0 release lineには5つのpublish可能なnpm packageがあります。
 
 - `mcp-usage-control`
 - `mcp-usage-control-mcp`
@@ -16,7 +16,7 @@ v0.1 lineには5つのpublish可能なnpm packageがあります。
 
 npm publishを明示承認する前でもGitHub Releaseは作成できます。registry公開までは [Source / local tarballから使う](using-from-source.ja.md) のrepository checkout / local tarball手順を使います。
 
-v0.1.xでは全packageを同じversionでreleaseします。
+5つのpublish可能なpackageは常に同じrelease versionを使います。
 
 ## Versioning
 
@@ -28,9 +28,9 @@ Semantic Versioningを使います。pre-1.0ではminor releaseにintentional br
 
 pre-1.0 minorでもbreaking changeはrelease notesで明示します。
 
-## v0.1.x gate
+## Pre-1.0 release gate
 
-v0.1.x GitHub/source releaseは、対象surfaceについて次を満たした場合のみreadyとします。
+pre-1.0 GitHub/source releaseは、対象surfaceについて次を満たした場合のみreadyとします。
 
 - 適用可能なMemory / Redis / Cloudflare / Firestore storeでmulti-budget admissionがall-or-nothing。
 - idempotency scope / bounded tombstone retentionをdocument / test済み。

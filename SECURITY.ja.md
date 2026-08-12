@@ -4,9 +4,7 @@
 
 ## Supported versions
 
-最初のpublic registry / GitHub releaseが完了するまではlatest `main` のみをsupport対象とします。publication準備中にrelease-candidate tagが存在する場合がありますが、tagだけでsupport matrixが広がるわけではありません。
-
-public release開始後はsupport versionをここへ明示します。
+security fixのsupport対象はlatest GitHub/source minor lineです。このpolicyではv0.2.xをcurrent supported source-release lineとし、v0.1.xをsupersedeします。npm registry publishは別工程なので、GitHub/source releaseをsupportしていてもnpm公開はdeferできます。
 
 ## 脆弱性の報告
 
@@ -29,7 +27,9 @@ production credential、user data、access token、cookie、secretは含めな�
 - settlement / unused-unit release
 - success / tool-error / thrown-error cost classifier
 - principal / tenant scoping
+- MCP multi-round suspend/resume binding / one-time consume
 - Redis atomicity / transaction-domain assumption
+- Firestore transaction / server-side authorization boundary
 - ambiguous acknowledgement handling
 - storage failure behavior
 - user/model-visible denial message
@@ -63,17 +63,35 @@ tool argumentsとraw exception messageは自動収集しません。`operation.e
 
 runtime eventにはprincipal、tenant、operation、reservation、tool、budget identifierが含まれる場合があります。potentially sensitive / high-cardinality dataとして扱ってください。unique principal / operation / reservation / user-specific budget identifierをmetric label/tagへ使わず、structured log / traceには適切なretention / access controlを適用してください。
 
+operational structured logには `projectUsageEvent()` を優先してください。default projectionではidentity、reservation / operation ID、tool / budget identifier、settlement outcome string、unrestricted application reasonを除外します。projected metadataを有効にする場合もexplicit opt-inであり、caller supplied metadataが自動的にsafeになるわけではありません。
+
 Redis lazy recoveryはtelemetry改善のためだけにraw request identityを永続化しません。そのためrecovery eventはaggregate-onlyになる場合があります。observability lossを「enforcementが起きなかった証拠」として扱わないでください。
 
 ## MCP multi-round flow
 
-v0.1 MCP adapterはv2 `input_required` multi-round tool flowをまだsupportしません。明示的にrejectします。roundごとに新しいoperation IDを生成したり、settled operation IDを再利用して回避しないでください。どちらも意図したaccounting semanticsを壊す可能性があります。dedicated suspend/resume supportではround間のidempotencyとliabilityを維持する必要があります。
+`protectTool()` はsingle-roundのままで、v2 `input_required` をrejectします。suspend/resume accountingが必要なapplicationは `protectMultiRoundTool()` を明示的にopt-inしてください。
+
+wire `requestState` はMCP server側でverifyするintegrity-protection schemeを使ってmintする必要があります。wrapperが受け入れるのはSDK verification hookによって既にdecodeされたpayloadだけで、raw / malformed / unverified stateはfail closedします。`UsageLeaseResumeState` はtrusted server-side stateであり、untrusted clientへcredential / bearer tokenとして渡してはいけません。
+
+suspended flowはprincipal、optional tenant、tool、original argumentsのhashへbindingします。`McpUsageFlowStore.consume()` はそのbindingをcompareし、matching flowだけをatomicにconsumeする必要があります。mismatchで正当なflowをconsumeしてはいけません。`MemoryMcpUsageFlowStore` はprocess-localなので、horizontal scaling時は `RedisMcpUsageFlowStore` のようなatomic compare-and-consume semanticsを持つdurable storeを使ってください。
+
+Redis MCP flow storeはbinding-aware Lua operationとRedis server-time expiryを使います。missing / expired / replayed / mismatched flowはfail closedします。ambiguous / lost consume ACKもfail closedし、不確実なconsume resultの後に新しいoperation IDを生成してapplication workへ再入場してはいけません。
+
+multi-round workはhandler entry前にcost-liable化します。resume時はquotaを再reserveせず既存reservationをrenewします。flow claim後にprocessが消失した場合、expiryはfull reserved chargeを保守的に維持します。
 
 ## Cloudflare remote-store boundary
 
 Cloudflare adapterのpublic HTTP gatewayはapplication-defined authorization callbackを必須とし、unauthenticated defaultを持ちません。local以外のremote clientはHTTPS必須で、URLへ埋め込んだcredentialもrejectします。timeout / lost ACKはambiguousなのでblind automatic retryで隠してはいけません。
 
 operation / budget / settlement-outcome identifierはCloudflare backend boundary前にhash化し、tool argumentsは送りません。hashingはencryptionではなく、secretを含むidentifierを安全にするものではありません。
+
+## Firestore store boundary
+
+Firestore adapterはserver-side enforcement infrastructureです。untrusted clientへbudget / reservation collectionのdirect write accessを与えたり、configurable collection prefixをauthorization boundaryとして扱ってはいけません。
+
+reserve、settlement、expiry recoveryはFirestore transactionでenforcement stateを更新します。expired pending reservationはcapacityを解放し、expired liable reservationは保守的chargeを維持します。lease expiryはhost-clock timestamp + configurable grace periodを使うため、deploymentではclock skewと強く共有されるbudget documentのcontentionを考慮してください。
+
+budget key / operation identity tupleはFirestore document IDになる前にSHA-256 hash化します。hashingはaccidental identifier disclosureを減らしますがencryptionではありません。identifierへsecretを入れないでください。Firestore IAM / Security Rulesとserver credential管理はapplication / deployment側の責任です。
 
 ## Redis durability boundary
 

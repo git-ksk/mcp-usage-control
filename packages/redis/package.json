@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control-redis",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Atomic Redis usage store for mcp-usage-control.",
   "type": "module",
   "license": "Apache-2.0",
@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./mcp-flow": {
+      "types": "./dist/mcp-flow.d.ts",
+      "import": "./dist/mcp-flow.js",
+      "default": "./dist/mcp-flow.js"
     }
   },
   "files": [
@@ -23,6 +28,10 @@
     "dist/scripts.js.map",
     "dist/scripts.d.ts",
     "dist/scripts.d.ts.map",
+    "dist/mcp-flow.js",
+    "dist/mcp-flow.js.map",
+    "dist/mcp-flow.d.ts",
+    "dist/mcp-flow.d.ts.map",
     "README.md",
     "LICENSE"
   ],
