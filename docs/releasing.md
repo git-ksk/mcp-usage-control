@@ -6,7 +6,7 @@
 
 GitHub/source releases and npm registry publication are separate operations.
 
-The v0.1 line contains five publishable npm packages:
+The pre-1.0 release line contains five publishable npm packages:
 
 - `mcp-usage-control`
 - `mcp-usage-control-mcp`
@@ -16,7 +16,7 @@ The v0.1 line contains five publishable npm packages:
 
 A GitHub Release may be created before npm publication. Until registry publication is explicitly authorized, use the repository checkout or local tarballs documented in [Use from source / local tarballs](using-from-source.md).
 
-All packages use the same release version in v0.1.x.
+All five publishable packages use the same release version.
 
 ## Versioning
 
@@ -28,9 +28,9 @@ Semantic Versioning is used with the normal pre-1.0 caveat: a minor release may 
 
 Breaking changes are called out prominently even when they occur in a pre-1.0 minor release.
 
-## v0.1.x gate
+## Pre-1.0 release gate
 
-A v0.1.x GitHub/source release is ready only when the applicable surfaces satisfy these gates:
+A pre-1.0 GitHub/source release is ready only when the applicable surfaces satisfy these gates:
 
 - multi-budget admission is all-or-nothing in Memory, Redis, Cloudflare, and Firestore stores where applicable;
 - idempotency scope and bounded tombstone retention are documented/tested;
