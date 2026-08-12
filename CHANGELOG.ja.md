@@ -6,7 +6,9 @@
 
 ## Unreleased
 
-未releaseの変更はまだありません。
+### Changed
+
+- v0.2.0後の変更としてproject positioning / roadmap guidanceを追加し、failure-safeなtransactional usage-enforcementの境界とpost-v0.2 MCP-native correctness workを明確化しました。これらのdocumentation changeはv0.2.0 source releaseには含めません。
 
 ## [0.2.0] - 2026-08-12
 
