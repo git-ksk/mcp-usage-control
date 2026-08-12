@@ -2,9 +2,27 @@
 
 [English](firestore.md) | [日本語](firestore.ja.md)
 
-`mcp-usage-control-firestore` implements the `UsageStore` contract with server-side Firestore transactions.
+`mcp-usage-control-firestore` is a `UsageStore` adapter backed by server-side Firestore transactions.
 
-You can pass Firebase Admin `getFirestore()` or the Google Cloud Node.js Firestore client directly through a structural type. The adapter package does not add a runtime dependency on either Firebase or Google Cloud SDKs.
+## Short version
+
+Firestore is a good fit when:
+
+- your application already runs on Firebase or GCP;
+- most quotas are user-scoped and use different budget keys per user;
+- you prefer not to operate another stateful service such as Redis.
+
+Load-test carefully when:
+
+- many calls share one strict tenant-wide quota;
+- one system-wide global quota is updated by most requests;
+- admission must run at very high frequency with very low latency.
+
+The reason is simple: **the same budget key maps to the same Firestore document**. A heavily shared budget can therefore become the main transaction-contention point.
+
+## Minimal setup
+
+Pass Firebase Admin `getFirestore()` or the Google Cloud Node.js Firestore client directly:
 
 ```ts
 import { getFirestore } from 'firebase-admin/firestore';
@@ -16,11 +34,62 @@ const store = new FirestoreUsageStore(db);
 const control = new UsageControl(store, policy);
 ```
 
-This adapter targets **Node.js server/Admin clients**. It is not designed to make a browser/mobile Firestore SDK the authoritative quota-enforcement store.
+This adapter is for **trusted server/Admin clients**. It is not designed to make a browser or mobile Firestore SDK the authoritative quota store.
 
-## Atomicity
+The adapter does not depend on Firebase or Google Cloud SDKs at runtime. It accepts the application's existing server Firestore client through a structural interface.
 
-For an invocation with multiple budgets, the adapter reads the reservation document and every budget document in one Firestore transaction, then performs the quota comparison and reservation as one all-or-nothing commit.
+## What is stored in Firestore?
+
+The default layout uses two collections:
+
+```text
+muc_budgets/{sha256(budgetKey)}
+muc_reservations/fs1.{sha256(operationScope)}
+```
+
+Change the `muc` prefix with `collectionPrefix`.
+
+A budget document stores authoritative used/reserved capacity. A reservation document stores the lease state for one logical operation.
+
+Raw principal IDs, tenant IDs, tool names, operation IDs, and budget keys are not stored in document bodies. Document IDs use SHA-256 digests.
+
+Hashing is not encryption. Do not treat hashed document IDs as secrets.
+
+## Most important concept: the budget key defines sharing
+
+The Firestore adapter does not infer whether a budget is a user budget or tenant budget.
+
+**If the application supplies the same `budget.key`, callers share the same budget document.**
+
+### Per-user example
+
+```text
+user:a:daily:2026-08-12 -> document A
+user:b:daily:2026-08-12 -> document B
+user:c:daily:2026-08-12 -> document C
+```
+
+Writes naturally spread across separate documents.
+
+### Shared tenant example
+
+```text
+tenant:company-x:monthly:2026-08
+```
+
+If every user in company-x uses this key, every call updates the same budget document:
+
+```text
+user-a --\
+user-b ----> shared tenant budget document
+user-c --/
+```
+
+That is not an implementation accident. It is the **serialization point required by a strict shared quota**.
+
+## Multiple budgets are enforced in one transaction
+
+For a call that uses user-daily, user-monthly, and tenant-monthly budgets, the adapter processes the reservation document and every participating budget in one Firestore transaction:
 
 ```text
 user daily ----\
@@ -28,115 +97,114 @@ user monthly ---+--> one Firestore transaction --> reservation
 tenant monthly -/
 ```
 
-If any participating budget is insufficient, no other budget is partially reserved.
+If any budget is insufficient, no other budget is partially reserved.
 
-Firestore retries transactions affected by concurrent modifications. The complete transaction either commits or fails. Never convert a Firestore/store failure into unmetered allow behavior.
+Firestore retries transaction conflicts. If it cannot eventually complete the transaction, the call fails with a store error.
 
-## Document layout
+**Never turn a store failure into unmetered allow behavior.**
 
-The default layout uses two top-level collections:
+## What happens with a heavily shared budget?
 
-```text
-muc_budgets/{sha256(budgetKey)}
-muc_reservations/fs1.{sha256(operationScope)}
-```
+Transactions that update the same document can contend with each other.
 
-Change the `muc` portion with `collectionPrefix`.
-
-Raw principal IDs, tenant IDs, tool names, operation IDs, and budget keys are not stored in document bodies. Document IDs use SHA-256 digests. Hashing reduces accidental identifier exposure but is not encryption and does not prevent dictionary attacks against predictable identifiers.
-
-## Important: shared-budget contention / hotspots
-
-Normal per-user budgets naturally distribute across separate documents:
+Firestore retries contention automatically, but sustained contention can eventually fail with an error such as:
 
 ```text
-user-a daily -> budget doc A
-user-b daily -> budget doc B
-user-c daily -> budget doc C
+ABORTED: Too much contention on these documents
 ```
 
-This pattern scales writes across documents as the user population grows.
+Firestore does not publish one universal guarantee such as "a single document is always safe up to X writes per second." Real behavior depends on transaction rate, participant count, network latency, index load, and workload shape.
 
-A tenant- or organization-wide shared budget is different: every user in that tenant updates the same document.
+Load-test realistic traffic when using shared tenant or global budgets.
 
-```text
-user-a --\
-user-b ----> tenant:company-x:monthly
-user-c --/
-```
+Also compare Redis, Durable Objects, or an RDBMS when:
 
-That document is an **intentional serialization point**. Transactions using the same tenant budget contend on the same document because strict shared quota requires a common authoritative value.
+- many users continuously hit the same tenant budget;
+- each invocation updates many budgets;
+- admission requires very low latency at high frequency;
+- one global budget becomes a system-wide hotspot.
 
-Firestore automatically retries transaction contention, but sustained contention can eventually fail with `ABORTED: Too much contention on these documents`. Firestore does not provide a universal fixed guarantee such as "one document is always safe up to X writes/second". Load-test the real workload, including document write rate, transaction participants, index fanout, and network latency.
+Run the Firestore server client close to the database region. Higher latency increases transaction/retry cost.
 
-Compare Redis, Durable Objects, or an RDBMS when:
+## How are expired reservations recovered?
 
-- many users continuously concentrate tool calls into one tenant budget;
-- each invocation updates many budget documents;
-- admission requires very high frequency and very low latency;
-- a shared global budget becomes a system-wide hotspot.
+Do not rely on Firestore TTL to delete pending reservation documents by itself.
 
-Run the Firestore server client close to the database region. Higher network latency lengthens transaction lock/retry paths and can amplify contention.
+If only the reservation disappears, its capacity can remain reserved in budget documents.
 
-References:
-
-- Firestore transactions: https://firebase.google.com/docs/firestore/manage-data/transactions
-- Transaction contention / serializable isolation: https://firebase.google.com/docs/firestore/transaction-data-contention
-- Reads/writes at scale: https://firebase.google.com/docs/firestore/understand-reads-writes-scale
-
-## Expiry recovery
-
-Because Firestore stores budget counters and reservations in separate documents, do not use a Firestore TTL policy to delete pending reservation documents by itself. Deleting only the reservation would leave its reserved capacity in the budget counters.
-
-The adapter keeps `expiresAtMs` queryable in the reservation collection and performs bounded recovery:
+Use the adapter's transactional recovery path instead:
 
 ```ts
 const summary = await store.recoverExpired(100);
 ```
 
-Recovery follows the core semantics:
+Expiry behavior is:
 
-- pending expiry: release reserved units from every budget, then delete the reservation;
-- liable expiry: retain the full reserved units and conservatively settle the reservation;
-- settled tombstone expiry: delete only the replay-protection document; finalized usage remains in the budget.
+| State | On expiry |
+| --- | --- |
+| `pending` | release reserved units from budgets and delete the reservation |
+| `liable` | retain the full reservation and conservatively settle it |
+| settled tombstone | delete only the replay-protection document |
 
-By default, `reserve()` attempts a best-effort cleanup of at most 16 rows, throttled to at most once every five seconds per process. If that cleanup query fails, the failure can only leave stale capacity reserved; it cannot create extra quota capacity, so the authoritative reserve transaction still runs.
+`reserve()` also performs a small bounded best-effort cleanup by default.
 
-For production systems that need a bounded recovery delay, invoke `recoverExpired()` periodically from Cloud Scheduler, cron, or equivalent. `cleanupBatchSize: 0` disables automatic cleanup; an external scheduler is recommended in that mode.
+If production needs a predictable recovery delay, invoke `recoverExpired()` periodically from Cloud Scheduler, cron, or equivalent.
 
-## Clock semantics
+Set `cleanupBatchSize: 0` to disable automatic cleanup. In that mode, an external scheduler is recommended.
 
-The Redis adapter uses Redis server `TIME` as the authoritative lease/tombstone clock.
+## Clock behavior
 
-The Firestore transaction callback does not expose server commit time in a form this structural adapter can use for lease arithmetic, so the Firestore adapter uses the application host's `Date.now()` by default. Multiple application instances therefore need synchronized clocks.
+Firestore lease arithmetic uses the application host's `Date.now()`.
 
-The default `expiryGraceMs: 5000` delays recovery by five seconds to reduce premature recovery from small clock skew. This is not equivalent to an authoritative server-time guarantee.
+Unlike the Redis adapter, it does not use a datastore server clock such as Redis `TIME` as the lease authority.
+
+The default `expiryGraceMs: 5000` adds a five-second grace period to reduce premature recovery caused by small clock skew.
 
 For production:
 
-- synchronize host clocks with NTP or equivalent;
-- make lease TTLs comfortably larger than expected network latency and clock skew;
-- compare Redis server time or a Durable Object when strict centralized lease-time authority is required.
+- keep host clocks synchronized with NTP or equivalent;
+- make TTLs comfortably larger than expected network latency and clock skew;
+- compare Redis or Durable Objects when strict centralized lease-time authority is required.
 
-## Cost / write amplification
+## Firestore access per call
 
-With `N` participating budgets, the rough document-access shape is:
+With `N` participating budgets, the rough access pattern is:
 
-- reserve: read reservation + N budgets; on acceptance write reservation + N budgets;
-- markLiable: transactional reservation update;
-- renew: transactional reservation update;
-- settle: read reservation + N budgets, release unused capacity when needed, then settle the reservation;
-- recovery: transactionally process the expired reservation and its participating budgets.
+- reserve: read reservation + N budgets; on success write reservation + N budgets;
+- `markLiable()`: update only the reservation;
+- `renew()`: update only the reservation;
+- settle: read the reservation and read/write budgets when unused capacity must be released;
+- recovery: transactionally process the expired reservation and required budgets.
 
-Adding user daily + user monthly + tenant monthly budgets therefore increases transaction participants per invocation. Estimate Firestore billing and latency from this write amplification, not only from tool-call count.
+More budgets mean more Firestore operations and transaction participants. Estimate billing and latency from this write amplification, not only from tool-call count.
 
-## Security / operations
+The normal `markLiable()` and `renew()` paths do not read shared budget documents, so heartbeat traffic does not create unnecessary tenant-budget contention.
 
-- allow only trusted server credentials to update enforcement collections;
-- do not grant clients direct write access to budget/reservation collections;
-- do not fall back to allow when Firestore/Admin credentials or the database are unavailable;
-- distinguish business `quota_exceeded` from Firestore availability/contention failures;
-- do not treat hashed document IDs as secrets;
-- do not put raw high-cardinality identity/budget values into metric labels.
+## Security checklist
 
-Firestore is a practical serverless option for small-to-medium MCP backends, especially when **per-user budgets dominate**. If large shared tenant/global budgets dominate, load-test the shared-document hotspot explicitly.
+- use the adapter only from trusted server credentials;
+- do not let clients write directly to budget or reservation collections;
+- derive principal and tenant identity from trusted authentication context;
+- never fall back to unmetered allow when Firestore is unavailable;
+- distinguish business `quota_exceeded` from Firestore availability/contention errors;
+- do not treat hashed IDs as secrets;
+- avoid raw high-cardinality user/budget values as metric labels.
+
+## Which store should I choose?
+
+| Deployment | Good candidate |
+| --- | --- |
+| Firebase/GCP with mostly user-scoped quotas | **Firestore** |
+| High-frequency tenant/shared quotas | Compare Redis |
+| Cloudflare-centric deployment | Compare Durable Objects |
+| Tests/local development | Memory |
+
+Even when Firestore is a good fit, load-test production-like traffic if shared budgets are important.
+
+## References
+
+- Firestore transactions: https://firebase.google.com/docs/firestore/manage-data/transactions
+- Transaction contention / serializable isolation: https://firebase.google.com/docs/firestore/transaction-data-contention
+- Reads/writes at scale: https://firebase.google.com/docs/firestore/understand-reads-writes-scale
+
+See [API reference](api-reference.md) for options and [Architecture](architecture.md) for the full state machine.

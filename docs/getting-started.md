@@ -2,17 +2,50 @@
 
 [English](getting-started.md) | [日本語](getting-started.ja.md)
 
-## Requirements
+This is the shortest introduction to `mcp-usage-control` for first-time readers.
 
-- Node.js 20 or later
-- Redis 7 when using `mcp-usage-control-redis`
-- MCP TypeScript SDK v2 when using `mcp-usage-control-mcp`
+## What does this library do?
+
+It reserves usage capacity **before** an MCP tool starts and settles the actual usage after the tool finishes.
+
+For example, if a user has one unit left and two requests arrive at the same time, a naive `check -> execute -> increment` flow can let both requests start.
+
+`mcp-usage-control` reserves first, so concurrent requests cannot safely spend the same remaining quota twice.
+
+```text
+request
+  -> policy decides the required units
+  -> store atomically reserves quota
+  -> mark the lease cost-liable just before execution
+  -> execute the tool
+  -> settle the actual usage
+```
+
+It is not a payment processor, subscription manager, or invoicing system. Its job is to make the boundary between **tool execution and usage accounting** safe.
+
+## Three concepts to remember
+
+- **Policy** — decides whether a call is allowed, how many units it costs, and which budgets apply.
+- **Store** — atomically updates budgets and reservations. Choose Memory, Redis, Cloudflare, or Firestore.
+- **Lease** — represents one reserved execution slot and exposes `markLiable()`, `renew()`, and `settle()`.
+
+## Which package should I use?
+
+| Package | Use it for |
+| --- | --- |
+| `mcp-usage-control` | Core API and Memory store. Start here |
+| `mcp-usage-control-mcp` | Wrapping MCP SDK v2 tool handlers |
+| `mcp-usage-control-redis` | Redis-backed high-frequency/shared quotas |
+| `mcp-usage-control-cloudflare` | Cloudflare Durable Objects |
+| `mcp-usage-control-firestore` | Firebase/GCP deployments using Firestore as the authoritative store |
+
+The Memory store is for tests and local development. Use a distributed store when multiple production instances must share the same quota.
 
 ## Current installation path
 
-The packages are **not published to npm yet**. For current use, clone the repository and either work directly from the checkout or pack local `.tgz` packages for installation into another project.
+The packages are not published to npm yet. For now, use a repository checkout or locally packed `.tgz` files.
 
-Verify the repository:
+To verify the repository:
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -21,40 +54,30 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-To consume the packages from another application now, follow **[Use from source / local tarballs](using-from-source.md)**. That guide uses the same package artifacts that CI installs into a clean consumer project.
+See [Use from source / local tarballs](using-from-source.md) for exact commands to install the packages into another application.
 
-After the first npm registry publish completes, this section will switch to registry installation as the primary path. Source/tarball installation will remain supported for development and unreleased commits.
+Node.js 20 or later is required.
 
-CI runs the frozen dependency graph on Node.js 20/22 with real Redis 7 and the official MCP SDK v2 client/handler integration path.
+## Smallest example
 
-## Mental model
-
-```text
-principal -> policy -> quote -> atomic reserve -> mark liable -> execute -> settle
-                                 ^                          |
-                                 |----------- renew --------|
-```
-
-The policy decides whether the invocation is eligible, how many units it may consume, and which budgets apply. The store compares and reserves every participating budget atomically.
-
-A reservation is initially `pending`. Immediately before metered execution begins, call `markLiable()`. Pending expiry releases capacity. Cost-liable expiry retains the full reservation so a worker/process crash after execution starts cannot become a refund.
-
-## Define a policy
+Start with the Memory store to understand the API:
 
 ```ts
-import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
+import {
+  MemoryUsageStore,
+  UsageControl,
+  type UsagePolicy,
+} from 'mcp-usage-control';
 
 const policy: UsagePolicy = {
   quote(request) {
-    const tenantId = request.principal.tenantId ?? 'personal';
     return {
       decision: 'allow',
-      units: request.tool === 'full_export' ? 5 : 1,
-      budgets: [
-        { key: `day:user:${request.principal.id}:2026-08-10`, limit: 20 },
-        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
-        { key: `month:tenant:${tenantId}:2026-08`, limit: 2_000 },
-      ],
+      units: 1,
+      budget: {
+        key: `user:${request.principal.id}:daily:2026-08-12`,
+        limit: 20,
+      },
     };
   },
 };
@@ -62,67 +85,94 @@ const policy: UsagePolicy = {
 const control = new UsageControl(new MemoryUsageStore(), policy);
 ```
 
-All listed budgets reserve or none does. Budget keys are application-defined. For calendar windows, use explicit window-qualified keys; the runtime does not guess reset dates.
+This policy means one tool call costs one unit and each user gets 20 units for that day.
 
-A single-budget policy may use `budget` instead of `budgets`.
+Budget keys are application-defined. The runtime does not infer reset dates, so a daily limit should include its window in the key.
 
-## Reserve and settle directly
+## Several budgets can be enforced together
+
+One call can charge a user-daily, user-monthly, and tenant-monthly budget at the same time:
+
+```ts
+const policy: UsagePolicy = {
+  quote(request) {
+    const tenantId = request.principal.tenantId ?? 'personal';
+
+    return {
+      decision: 'allow',
+      units: 1,
+      budgets: [
+        { key: `day:user:${request.principal.id}:2026-08-12`, limit: 20 },
+        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
+        { key: `month:tenant:${tenantId}:2026-08`, limit: 2_000 },
+      ],
+    };
+  },
+};
+```
+
+Admission is **all-or-nothing**: all three budgets reserve successfully, or none of them does.
+
+## Use the core API directly
 
 ```ts
 const admission = await control.reserve({
   operationId: 'logical-request-123',
-  principal: { id: 'user-42', tenantId: 'org-7', plan: 'free' },
+  principal: { id: 'user-42', tenantId: 'org-7' },
   tool: 'search',
   args: { query: 'example' },
 });
 
 if (!admission.allowed) {
-  // quota_exceeded can include limitingBudgetKey and remaining.
   throw new Error(`usage denied: ${admission.reason}`);
 }
 
 await admission.lease.markLiable();
+
 try {
   const result = await performMeteredWork();
   await admission.lease.settle(1, 'success');
   return result;
 } catch (error) {
-  await admission.lease.settle(admission.lease.reservedUnits, 'error');
+  await admission.lease.settle(
+    admission.lease.reservedUnits,
+    'error',
+  );
   throw error;
 }
 ```
 
-Use zero settlement only when the application can prove that the metered resource was not consumed. The in-memory store is for tests/local development, not distributed production enforcement.
+### What does `markLiable()` mean?
 
-## Idempotency
+It marks the point where real cost may have started.
 
-Use the same `operationId` when retrying the same logical invocation. Replay protection is scoped to:
+- A reservation that expires while still `pending` can release its reserved capacity.
+- If a worker dies after `markLiable()`, the full reservation is conservatively retained.
 
-```text
-(tenantId, principal.id, tool, operationId)
-```
+This prevents a process crash from becoming a free refund after execution has already started.
 
-`operationId` is not a credential. Principal and tenant values must come from trusted application/authentication context.
+### What does `settle()` do?
 
-Settled operations remain replay-protected for 24 hours by default. Configure `idempotencyTtlMs` on the Memory or Redis store if your retry horizon requires a different value.
+It finalizes the difference between reserved units and actual units.
 
-## Production Redis store
+Settle to `0` only when the application can determine that no metered resource was consumed.
 
-```ts
-import { createClient } from 'redis';
-import { RedisUsageStore } from 'mcp-usage-control-redis';
+Long-running tools may also need `renew()` to keep the lease alive. The MCP adapter handles heartbeat renewal while a protected handler is running.
 
-const redis = createClient({ url: process.env.REDIS_URL });
-await redis.connect();
+## Choosing a production store
 
-const control = new UsageControl(new RedisUsageStore(redis), policy);
-```
+| Store | Good fit | Main trade-off |
+| --- | --- | --- |
+| Memory | Tests and local development | Not shared across processes |
+| Redis | High frequency, shared quotas, low latency | Requires Redis HA/persistence planning |
+| Cloudflare Durable Objects | Cloudflare-centric deployments | A Durable Object is the serialization point |
+| Firestore | Firebase/GCP, mostly user-scoped quotas | Large shared budgets can create document contention |
 
-Redis performs multi-budget admission and lifecycle changes atomically in one transaction domain. Lease and tombstone time comes from Redis server `TIME`. Review [Redis adapter](redis.md) for HA/persistence, cleanup, Redis Cluster, and acknowledgement-ambiguity details.
+Read [Firestore](firestore.md), [Redis](redis.md), or [Cloudflare](cloudflare.md) before selecting a production store.
 
-## MCP tool handlers
+## Wrap an MCP tool
 
-For `@modelcontextprotocol/server` v2 **single-round** tools, wrap the handler with `protectTool()`:
+Use `protectTool()` for a single-round MCP tool:
 
 ```ts
 import { protectTool } from 'mcp-usage-control-mcp';
@@ -142,25 +192,47 @@ server.registerTool(
 );
 ```
 
-If the MCP tool has no input schema, pass `noInput: true`.
+`protectTool()` handles reserve, cost-liability, heartbeat renewal, handler execution, and settlement.
 
-`protectTool()` reserves, marks the lease cost-liable, renews it while the handler runs, classifies MCP success/tool errors/exceptions, and settles. Classifier failures charge the full reservation before the classification error is surfaced.
+Pass `noInput: true` for a tool with no input schema.
 
-### Multi-round MCP tools
+### Multi-round `input_required` tools
 
-v0.1 intentionally rejects `resultType: 'input_required'` in `protectTool()`. Correct multi-round accounting needs a suspend/resume contract across requests. Do not wrap production `input_required` tools until issue #14 is implemented.
+Use `protectMultiRoundTool()` for multi-round flows.
+
+The first request reserves once. Later rounds reattach to the same server-side lease instead of creating a fresh reservation. Because MCP `requestState` travels through the client and is untrusted, combine the wrapper with the MCP SDK's `createRequestStateCodec()` integrity verification.
+
+See [MCP integration](mcp-integration.md) for the complete configuration.
+
+## Reuse the same `operationId` for retries
+
+Replay protection is scoped to:
+
+```text
+(tenantId, principal.id, tool, operationId)
+```
+
+Use the same `operationId` when retrying the same logical operation.
+
+`operationId` is not an authentication credential. Principal and tenant identity must come from trusted server-side authentication context.
 
 ## Production checklist
 
-Before putting this on an enforcement path:
+Before putting the library on an enforcement path:
 
-- derive principal/tenant IDs from trusted server-side context;
-- use stable logical operation IDs for retries;
-- ensure every applicable daily/monthly/tenant budget is returned by one quote;
-- choose reservation TTL/heartbeat behavior appropriate to tool duration;
-- classify zero-cost failures only when cost non-incurrence can be proven;
-- configure Redis persistence/HA to match acceptable accounting loss;
-- treat Redis atomicity as enforcement correctness, not a durable financial ledger;
-- do not use the v0.1 MCP wrapper for `input_required` flows.
+- derive principal and tenant identity from trusted server-side context;
+- use stable `operationId` values for retries;
+- return every applicable daily/monthly/tenant budget in one quote;
+- choose TTL and renewal behavior that fits tool duration;
+- settle zero units only when cost non-incurrence is known;
+- never turn a store failure into an unmetered allow;
+- understand the durability and contention behavior of the selected store;
+- do not treat usage enforcement state as the financial ledger itself.
 
-See [Architecture](architecture.md), [API reference](api-reference.md), [Redis adapter](redis.md), and [Security policy](../SECURITY.md).
+## What to read next
+
+- Start an MCP integration: [MCP integration](mcp-integration.md)
+- Choose a store: [Redis](redis.md) / [Cloudflare](cloudflare.md) / [Firestore](firestore.md)
+- Understand the design: [Architecture](architecture.md)
+- Look up the public API: [API reference](api-reference.md)
+- Review production security: [Security policy](../SECURITY.md)
