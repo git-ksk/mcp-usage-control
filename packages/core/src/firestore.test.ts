@@ -50,7 +50,10 @@ class FakeQuery implements FirestoreQueryLike {
   where(fieldPath: string, opStr: string, value: unknown): FirestoreQueryLike {
     if (opStr !== '<=' || typeof value !== 'number') throw new Error('unsupported fake query');
     const next = new FakeQuery(this.database, this.collectionPath);
-    next.predicate = row => typeof row[fieldPath] === 'number' && row[fieldPath] <= value;
+    next.predicate = row => {
+      const fieldValue = row[fieldPath];
+      return typeof fieldValue === 'number' && fieldValue <= value;
+    };
     next.max = this.max;
     return next;
   }
@@ -253,7 +256,11 @@ describe('FirestoreUsageStore', () => {
       cleanupBatchSize: 0,
       expiryGraceMs: 0,
       now: () => now,
-      observer: { onEvent: event => events.push(event) },
+      observer: {
+        onEvent(event) {
+          events.push(event);
+        },
+      },
     });
 
     const first = await store.reserve({
