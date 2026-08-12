@@ -29,7 +29,7 @@ const store = new FirestoreUsageStore(getFirestore(), {
 
 ## Emulator integration validation
 
-Unit tests use a deterministic structural Firestore fake. A separate `Firestore Integration` GitHub Actions workflow also runs the built adapter against the real Cloud Firestore Emulator through the official `@google-cloud/firestore` server SDK and type-checks that server client against the adapter's structural constructor contract.
+Unit tests use a deterministic structural Firestore fake. A separate `Firestore Integration` GitHub Actions workflow also runs the built adapter against the real Cloud Firestore Emulator through the official `@google-cloud/firestore` server SDK and type-checks that server client against the adapter's structural constructor contract. The package test source keeps the same compile-time constructor compatibility assertion so ordinary `pnpm check` also guards it.
 
 The emulator suite currently covers:
 
