@@ -37,11 +37,11 @@ pnpm --dir packages/firestore pack --pack-destination "$PWD/.packs"
 This produces:
 
 ```text
-.packs/mcp-usage-control-0.1.0.tgz
-.packs/mcp-usage-control-mcp-0.1.0.tgz
-.packs/mcp-usage-control-redis-0.1.0.tgz
-.packs/mcp-usage-control-cloudflare-0.1.0.tgz
-.packs/mcp-usage-control-firestore-0.1.0.tgz
+.packs/mcp-usage-control-0.2.0.tgz
+.packs/mcp-usage-control-mcp-0.2.0.tgz
+.packs/mcp-usage-control-redis-0.2.0.tgz
+.packs/mcp-usage-control-cloudflare-0.2.0.tgz
+.packs/mcp-usage-control-firestore-0.2.0.tgz
 ```
 
 These tarballs are the closest current equivalent to the future npm packages. CI builds the same tarballs, rejects source/test-file leakage, installs them into a clean consumer project, and verifies their public ESM imports.
@@ -53,15 +53,15 @@ Use absolute or correctly resolved paths from the consumer project. Install the 
 Core only:
 
 ```console
-npm install /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz
+npm install /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz
 ```
 
 Core + MCP adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.2.0.tgz \
   @modelcontextprotocol/server@2.0.0
 ```
 
@@ -69,8 +69,8 @@ Core + Redis adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.2.0.tgz \
   redis@6.2.0
 ```
 
@@ -78,16 +78,16 @@ Core + Cloudflare adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.2.0.tgz
 ```
 
 Core + Firestore adapter (choose a server Firestore client for actual use):
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.2.0.tgz \
   firebase-admin
 ```
 
@@ -97,11 +97,11 @@ All five:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.2.0.tgz \
   @modelcontextprotocol/server@2.0.0 \
   redis@6.2.0
 ```
@@ -113,10 +113,11 @@ node --input-type=module <<'NODE'
 import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
 import { protectTool } from 'mcp-usage-control-mcp';
 import { RedisUsageStore } from 'mcp-usage-control-redis';
+import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
 import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
 import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
 
-if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore, FirestoreUsageStore].every(Boolean)) {
+if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, RedisMcpUsageFlowStore, CloudflareUsageStore, RemoteCloudflareUsageStore, FirestoreUsageStore].every(Boolean)) {
   throw new Error('mcp-usage-control local package import failed');
 }
 
