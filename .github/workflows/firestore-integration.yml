@@ -37,6 +37,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter mcp-usage-control build
       - run: pnpm --filter mcp-usage-control-firestore build
+      - name: Type-check server Firestore client compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat_file='packages/firestore/client-compat.mts'
+          trap 'rm -f "$compat_file"' EXIT
+          cat > "$compat_file" <<'TS'
+          import type { Firestore } from '@google-cloud/firestore';
+          import { FirestoreUsageStore } from './dist/index.js';
+
+          declare const firestore: Firestore;
+          new FirestoreUsageStore(firestore);
+          TS
+          pnpm exec tsc \
+            --noEmit \
+            --strict \
+            --skipLibCheck \
+            --target ES2022 \
+            --module NodeNext \
+            --moduleResolution NodeNext \
+            --types node \
+            "$compat_file"
       - name: Run Firestore adapter against Local Emulator Suite
         shell: bash
         run: >-
