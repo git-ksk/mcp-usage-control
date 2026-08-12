@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./conformance": {
+      "types": "./dist/store-conformance.d.ts",
+      "import": "./dist/store-conformance.js",
+      "default": "./dist/store-conformance.js"
     }
   },
   "files": [
@@ -23,6 +28,10 @@
     "dist/observability.js.map",
     "dist/observability.d.ts",
     "dist/observability.d.ts.map",
+    "dist/store-conformance.js",
+    "dist/store-conformance.js.map",
+    "dist/store-conformance.d.ts",
+    "dist/store-conformance.d.ts.map",
     "README.md",
     "LICENSE"
   ],
