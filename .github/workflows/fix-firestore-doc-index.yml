@@ -1,0 +1,224 @@
+name: Fix Firestore documentation index
+
+on:
+  push:
+    branches: [feat/firestore-usage-store]
+    paths:
+      - '.github/workflows/fix-firestore-doc-index.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/firestore-usage-store
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Update docs index, API reference, and changelog
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, got {count}: {old!r}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'docs/README.md',
+              '- [API reference](api-reference.md) — v0.1 core, MCP, Redis, and Cloudflare public surface/defaults.',
+              '- [API reference](api-reference.md) — v0.1 core, MCP, Redis, Cloudflare, and Firestore public surface/defaults.',
+          )
+          replace_once(
+              'docs/README.md',
+              '- [Cloudflare adapter](cloudflare.md) — Durable Objects + SQLite transaction domain, Worker-local/remote use, privacy, ACK ambiguity, cleanup and cost behavior.\n- [Release policy](releasing.md)',
+              '- [Cloudflare adapter](cloudflare.md) — Durable Objects + SQLite transaction domain, Worker-local/remote use, privacy, ACK ambiguity, cleanup and cost behavior.\n- [Firestore adapter](firestore.md) — server-side Firestore transaction model, contention/hotspot guidance, expiry recovery, clock semantics, and operational trade-offs.\n- [Release policy](releasing.md)',
+          )
+          replace_once(
+              'docs/README.md',
+              '- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md)\n\n## Documentation rules',
+              '- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md)\n- [`mcp-usage-control-firestore`](../packages/firestore/README.md)\n\n## Documentation rules',
+          )
+
+          replace_once(
+              'docs/README.ja.md',
+              '- [API reference](api-reference.ja.md) — v0.1 core / MCP / Redis / Cloudflare public surfaceとdefault。',
+              '- [API reference](api-reference.ja.md) — v0.1 core / MCP / Redis / Cloudflare / Firestore public surfaceとdefault。',
+          )
+          replace_once(
+              'docs/README.ja.md',
+              '- [Cloudflare adapter](cloudflare.ja.md) — Durable Objects + SQLite transaction domain、Worker-local / remote利用、privacy、ACK ambiguity、cleanup / cost behavior。\n- [Release policy](releasing.ja.md)',
+              '- [Cloudflare adapter](cloudflare.ja.md) — Durable Objects + SQLite transaction domain、Worker-local / remote利用、privacy、ACK ambiguity、cleanup / cost behavior。\n- [Firestore adapter](firestore.ja.md) — server-side Firestore transaction model、contention / hotspot guidance、expiry recovery、clock semantics、運用trade-off。\n- [Release policy](releasing.ja.md)',
+          )
+          replace_once(
+              'docs/README.ja.md',
+              '- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md)\n\n## ドキュメント運用ルール',
+              '- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md)\n- [`mcp-usage-control-firestore`](../packages/firestore/README.md)\n\n## ドキュメント運用ルール',
+          )
+
+          firestore_api_en = '''## `mcp-usage-control-firestore`
+
+### `FirestoreUsageStore`
+
+```ts
+new FirestoreUsageStore(firestore, options?)
+```
+
+`firestore` is a server-side Firestore client satisfying the adapter's structural contract. `@google-cloud/firestore` `Firestore` is supported directly; Firebase Admin `getFirestore()` returns that same server `Firestore` type.
+
+### `FirestoreUsageStoreOptions`
+
+```ts
+interface FirestoreUsageStoreOptions {
+  collectionPrefix?: string;
+  idempotencyTtlMs?: number;
+  cleanupBatchSize?: number;
+  cleanupIntervalMs?: number;
+  expiryGraceMs?: number;
+  observer?: FirestoreRecoveryObserver;
+  now?: () => number;
+}
+```
+
+Defaults:
+
+- `collectionPrefix`: `muc`
+- `idempotencyTtlMs`: `86_400_000` (24 hours)
+- `cleanupBatchSize`: `16`
+- `cleanupIntervalMs`: `5_000`
+- `expiryGraceMs`: `5_000`
+
+`now` is a test hook; production normally uses `Date.now()`. Unlike the Redis adapter, Firestore lease/tombstone arithmetic therefore uses the application-host clock plus `expiryGraceMs`, so production hosts must be time-synchronized.
+
+The adapter stores hashed operation/budget identifiers, performs all-or-nothing multi-budget admission in one Firestore transaction, keeps active `markLiable()` / `renew()` traffic on the reservation document, and recovers expired pending/liable/tombstone state conservatively.
+
+### `recoverExpired(limit?)`
+
+Runs bounded explicit expiry recovery and returns `FirestoreRecoverySummary` with pending/liable counts and units plus deleted tombstones. `reserve()` also performs throttled best-effort cleanup unless `cleanupBatchSize` is `0`.
+
+`FirestoreRecoveryObserver` receives adapter-local best-effort `reservation.recovered` events for pending release and liable retention. Observer failure never changes enforcement state.
+
+Shared tenant/global budgets intentionally serialize on one budget document and can become contention hotspots. See [Firestore adapter](firestore.md) for document layout, contention, cleanup, clock, cost, and deployment guidance.
+
+'''
+          replace_once(
+              'docs/api-reference.md',
+              'See [Cloudflare adapter](cloudflare.md) for deployment and trust-boundary details.\n\n## Numeric validation',
+              'See [Cloudflare adapter](cloudflare.md) for deployment and trust-boundary details.\n\n' + firestore_api_en + '## Numeric validation',
+          )
+          replace_once(
+              'docs/api-reference.md',
+              '- node-redis `redis` 6.2.x\n\nPre-1.0 minor releases',
+              '- node-redis `redis` 6.2.x\n- `@google-cloud/firestore` server-client compatibility; Firestore Emulator integration currently validates 8.7.0\n- Firebase Admin `getFirestore()` uses the same server `Firestore` type\n\nPre-1.0 minor releases',
+          )
+
+          firestore_api_ja = '''## `mcp-usage-control-firestore`
+
+### `FirestoreUsageStore`
+
+```ts
+new FirestoreUsageStore(firestore, options?)
+```
+
+`firestore` にはadapterのstructural contractを満たすserver-side Firestore clientを渡します。`@google-cloud/firestore` の `Firestore` を直接利用でき、Firebase Admin `getFirestore()` も同じserver `Firestore` typeを返します。
+
+### `FirestoreUsageStoreOptions`
+
+```ts
+interface FirestoreUsageStoreOptions {
+  collectionPrefix?: string;
+  idempotencyTtlMs?: number;
+  cleanupBatchSize?: number;
+  cleanupIntervalMs?: number;
+  expiryGraceMs?: number;
+  observer?: FirestoreRecoveryObserver;
+  now?: () => number;
+}
+```
+
+default:
+
+- `collectionPrefix`: `muc`
+- `idempotencyTtlMs`: `86_400_000`（24時間）
+- `cleanupBatchSize`: `16`
+- `cleanupIntervalMs`: `5_000`
+- `expiryGraceMs`: `5_000`
+
+`now` はtest hookで、productionでは通常 `Date.now()` を使います。Redis adapterと異なり、Firestoreのlease / tombstone計算はapplication host clock + `expiryGraceMs` を使うため、production hostは時刻同期が必要です。
+
+adapterはoperation / budget identifierをhash化して保存し、1 Firestore transactionでall-or-nothing multi-budget admissionを行います。activeな `markLiable()` / `renew()` はreservation documentだけを触り、expired pending / liable / tombstoneは保守的にrecoveryします。
+
+### `recoverExpired(limit?)`
+
+boundedなexplicit expiry recoveryを実行し、pending / liableのcount・unitsと削除tombstone数を `FirestoreRecoverySummary` で返します。`cleanupBatchSize: 0` で無効化しない限り、`reserve()` もthrottled best-effort cleanupを行います。
+
+`FirestoreRecoveryObserver` はpending release / liable retentionのadapter-local best-effort `reservation.recovered` eventを受け取ります。observer failureがenforcement stateを変更することはありません。
+
+shared tenant / global budgetは意図的に1 budget documentへserializeされ、contention hotspotになり得ます。document layout、contention、cleanup、clock、cost、deployment guidanceは [Firestore adapter](firestore.ja.md) を参照してください。
+
+'''
+          replace_once(
+              'docs/api-reference.ja.md',
+              '詳細は [Cloudflare adapter](cloudflare.ja.md) を参照してください。\n\n## Numeric validation',
+              '詳細は [Cloudflare adapter](cloudflare.ja.md) を参照してください。\n\n' + firestore_api_ja + '## Numeric validation',
+          )
+          replace_once(
+              'docs/api-reference.ja.md',
+              '- node-redis `redis` 6.2.x\n\npre-1.0 minor release',
+              '- node-redis `redis` 6.2.x\n- `@google-cloud/firestore` server-client compatibility。Firestore Emulator integrationでは現在8.7.0を検証\n- Firebase Admin `getFirestore()` は同じserver `Firestore` typeを利用\n\npre-1.0 minor release',
+          )
+
+          replace_once(
+              'CHANGELOG.md',
+              '## Unreleased\n\nNo unreleased user-visible changes yet.',
+              '''## Unreleased
+
+### Added
+
+- `mcp-usage-control-firestore`, a standalone server-side Firestore `UsageStore` with transactional multi-budget admission, replay protection, conservative expiry recovery, hashed storage identifiers, and adapter-local recovery observability.
+- Real Firestore Emulator integration covering multi-budget atomicity, shared-budget concurrency, pending/liable expiry semantics, and idempotent settlement, plus a server-client TypeScript compatibility smoke check.
+- English/Japanese Firestore deployment, contention/hotspot, source/tarball usage, API, and package documentation.
+
+### CI
+
+- Firestore Integration runs for Firestore adapter, core, or its own workflow changes; Firestore-only changes do not trigger Cloudflare Integration.''',
+          )
+          replace_once(
+              'CHANGELOG.ja.md',
+              '## Unreleased\n\n未releaseのuser-visible changeは現在ありません。',
+              '''## Unreleased
+
+### Added
+
+- transactional multi-budget admission、replay protection、保守的expiry recovery、hashed storage identifier、adapter-local recovery observabilityを持つstandalone server-side Firestore `UsageStore`、`mcp-usage-control-firestore`。
+- multi-budget atomicity、shared-budget concurrency、pending / liable expiry semantics、idempotent settlementを検証する実Firestore Emulator integrationと、server-client TypeScript compatibility smoke check。
+- Firestore deployment、contention / hotspot、source / tarball利用、API、packageについての英日ドキュメント。
+
+### CI
+
+- Firestore IntegrationはFirestore adapter / core / workflow自身の変更で実行。Firestore-only変更ではCloudflare Integrationを起動しない。''',
+          )
+          PY
+      - name: Commit documentation fix and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/fix-firestore-doc-index.yml
+          git config user.name 'git-ksk'
+          git config user.email '108925270+git-ksk@users.noreply.github.com'
+          git add docs/README.md docs/README.ja.md docs/api-reference.md docs/api-reference.ja.md CHANGELOG.md CHANGELOG.ja.md .github/workflows/fix-firestore-doc-index.yml
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'no documentation changes produced'
+            exit 1
+          fi
+          git commit -m 'docs: complete Firestore public documentation surface'
+          git push origin HEAD:feat/firestore-usage-store
