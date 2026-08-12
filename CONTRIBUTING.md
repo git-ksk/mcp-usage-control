@@ -21,6 +21,8 @@ pnpm check
 
 CI tests Node.js 20/22, real Redis 7, and MCP SDK v2 protocol integration behavior.
 
+Pull requests that change only `docs/**` and Markdown (`*.md`) use a lightweight path that preserves the required check names while skipping Redis startup, Node/pnpm setup, dependency installation, tests, package packing, and clean-consumer installation. If any non-Markdown path changes, the full CI runs.
+
 ## Repository layout
 
 ```text
