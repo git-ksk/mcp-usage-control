@@ -4,11 +4,13 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**Concurrency-safe transactional usage enforcement for MCP tool execution.**
+**A library for enforcing MCP tool usage limits safely under concurrency and retries.**
 
-`mcp-usage-control` is a provider-neutral runtime for enforcing entitlements and usage budgets around Model Context Protocol (MCP) tool execution. v0.1 focuses on correct admission and settlement under concurrency, retries, failures, long-running handlers, and process loss.
+`mcp-usage-control` reserves usage quota **before** a tool starts and settles actual usage afterward. If two requests arrive when only one unit remains, they cannot both safely spend the same remaining capacity and start metered work.
 
-It is not a payment processor, MCP gateway, OAuth provider, billing dashboard, or generic rate limiter.
+The library focuses on the boundary between tool execution and usage accounting. It is not a payment processor, invoicing system, subscription manager, OAuth provider, or MCP gateway.
+
+> First time here? Start with **[Getting started](docs/getting-started.md)** for the smallest example and a quick Memory / Redis / Cloudflare / Firestore comparison.
 
 ## Current distribution status
 

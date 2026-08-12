@@ -4,11 +4,13 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**MCP tool実行向けの、同時実行に強いtransactional usage enforcement runtimeです。**
+**MCP toolの利用上限を、同時実行やretryがあっても安全に守るためのライブラリです。**
 
-`mcp-usage-control` は、Model Context Protocol (MCP) のtool実行を対象に、entitlement・usage budget・credit消費を安全に制御するprovider-neutral runtimeです。v0.1では、parallel call、retry、failure、長時間handler、process消失があってもadmission / settlementを壊しにくいことを中心にしています。
+`mcp-usage-control` は、toolを実行する**前**にusage quotaをreserveし、実行後に実際の消費量をsettleします。たとえば「残り1回」のときに2 requestが同時到着しても、両方が同じ残量を使って実行を開始するraceを防ぎます。
 
-payment processor、MCP Gateway、OAuth provider、billing dashboard、一般的なrate limiter自体は対象外です。
+扱うのはtool executionとusage accountingの境界です。payment、請求書、subscription管理、OAuth、MCP Gatewayそのものは対象外です。
+
+> 初めて読む場合は **[Getting started](docs/getting-started.ja.md)** から見ると、最小例とMemory / Redis / Cloudflare / Firestoreの選び方を短く確認できます。
 
 ## 現在の配布状況
 
