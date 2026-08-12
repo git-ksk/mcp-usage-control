@@ -29,7 +29,7 @@ Broader platforms may offer dashboards, pricing catalogs, organization-wide gove
 ## Current priorities
 
 1. **Production multi-round hardening** — `input_required` suspend/resume accounting is implemented; continue shared/durable flow-store and post-claim reconciliation work without weakening one-time consume or fail-closed semantics. Tracked in #41.
-2. **Current MCP protocol conformance** — explicitly validate the adapter against the current MCP protocol/SDK behavior, including fresh-request multi-round retry semantics, stateless server deployment assumptions, and long-running Tasks accounting. Keep any stateless-friendly MRTR option subject to the same trusted binding and accounting invariants.
+2. **Current MCP protocol conformance** — explicitly validate the adapter against the current MCP protocol/SDK behavior, including fresh-request multi-round retry semantics, stateless server deployment assumptions, and long-running Tasks accounting. Keep any stateless-friendly MRTR option subject to the same trusted binding and accounting invariants. Tracked in #63.
 3. **Third-party store invariant kit** — make the project's correctness contract executable so external stores can prove semantic compatibility rather than merely implement the same method names.
 4. **Real Cloudflare operational evidence** — complete the remaining credential-rotation and genuine platform-limit/failure observations for the deployed Durable Objects adapter. Tracked in #24.
 5. **Public package contract review / npm publication** — keep the first registry publication explicitly gated and perform final registry-facing contract/metadata verification immediately before publication. Tracked in #6.
