@@ -68,9 +68,10 @@ protectTool()
 - [MCP protocol conformance](mcp-conformance.ja.md) — current protocol / SDK baseline、fresh-request multi-round proof、horizontal scale / session affinityの前提
 - [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
-- [API reference](api-reference.ja.md) — core / MCP / Redis / Cloudflare / Firestoreのpublic API
+- [API reference](api-reference.ja.md) — current sourceのpublic API / package entry point
 - [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics
-- [Roadmap](roadmap.ja.md) — current priority、MCP-native correctness、外部billing / gateway等との境界
+- [Roadmap](roadmap.ja.md) — current priorityとpost-v1 boundary
+- [v1.0 readiness review](v1-readiness.ja.md) — production-readiness監査、blocker分類、stable / deferred境界、release時の最終確認
 
 ## 運用・リリース
 
