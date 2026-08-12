@@ -10,6 +10,7 @@
 
 - v0.2.0後の変更としてproject positioning / roadmap guidanceを追加し、failure-safeなtransactional usage-enforcementの境界とpost-v0.2 MCP-native correctness workを明確化しました。これらのdocumentation changeはv0.2.0 source releaseには含めません。
 - MCP `2026-07-28` / SDK `2.0.0` に対するexplicit conformance proofを追加し、fresh-request multi-round retryとcross-handler resumeでもreservationが1回であること、horizontal scaleではshared accounting / flow stateは必要でもsticky MCP sessionは不要であることを記録しました。Tasks supportと新しいstateless MRTR resume modeは、別途failure semanticsをproofするまで引き続き保留します。
+- long-running MCP Tasksのaccounting state machineを定義・proof test化し、liability、renewal、completion / failure / cancellation、abandonment、worker crash、ambiguous ACK、reconciliationまで明示しました。v1のMRTR方針は現行shared / durable compare-and-consumeを維持し、upstream extensionがexperimentalな間はfirst-class Tasks protocol integrationをdeferredとします。
 
 ## [0.2.0] - 2026-08-12
 

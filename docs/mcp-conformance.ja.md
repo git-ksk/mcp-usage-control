@@ -61,13 +61,13 @@ conformance testでは2つの独立したhandler instanceをまたいでresume�
 
 これらは独立した保証ではなく、組み合わせて守る必要があります。特にshared flow claimを単純なclient-carried stateだけへ置き換えても、one-time consumeやlost consume ACKの安全性は証明できません。
 
-## Stateless-friendly MRTRの判断
+## v1に向けたStateless-friendly MRTRの判断
 
-今回のproofでは新しいstateless MRTR resume modeを追加しません。
+**v1では現行のshared / durable compare-and-consume方式を採用します。新しいstateless MRTR resume modeはv1 boundaryへ追加しません。**
 
 現行設計はすでに必要なdeployment propertyを満たしています。fresh protocol requestが別server instanceへ到達してもsticky MCP sessionなしでresumeでき、そのために必要な最小限のauthoritative flow claimだけをshared server-side stateへ残します。
 
-将来stateless-friendlyなrepresentationを採用する場合も、少なくとも次を同じ強さでproofできることが条件です。
+client-carried stateなどのstateless-friendly方式を採用するなら、concurrencyとACK ambiguityの下でも次を同じ強さでproofする必要があります。
 
 - logical operationごとにreservation 1回;
 - trusted principal / tenant / tool / args binding;
@@ -75,12 +75,24 @@ conformance testでは2つの独立したhandler instanceをまたいでresume�
 - ambiguous claim ACK後にhandlerへblind re-entryしない;
 - cost-liable / crash-expiry behaviorを変えない。
 
-既存のshared compare-and-consume designより強いproofがない段階で新方式を足すと、accounting contractを改善せずsurface areaだけが増えるため、現時点では採用しません。
+現時点ではshared claimを置き換えるだけのcorrectness上・運用上の明確な利点が証明されていません。v1前に追加するとaccounting contractを改善せずsurface areaだけ増えるため、**deferred** とします。v1 blockerではありません。
 
-## Tasksは別工程
+## Tasks accounting
 
-今回first-class MCP Tasks supportは追加しません。task lifetime、renewal、cancellation、abandonment、settlement、worker lossのsemanticsをaccounting state machineとして先に定義してから実装判断します。
+長時間実行するTasksのaccounting state machineは [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) に定義しました。
 
-Task / business resultのreplayもusage ledgerの外に置きます。usage accountingが保証するのはquotaがreserveされ、liableになり、settleされたかどうかまでであり、arbitraryなbusiness side effectをreplayするgeneric workflow engineにはしません。
+既存core invariantをそのまま守ります。
 
-core failure semanticsは [Architecture](architecture.ja.md)、残るTasks / MCP-native workは [Roadmap](roadmap.ja.md) を参照してください。
+- task IDとは独立してlogical operationごとにreservation 1回;
+- `working` からliabilityを推測せず、metered work直前に `markLiable()`;
+- 長時間の `working` / `input_required` 中はserver-sideで同じleaseをrenew;
+- `tasks/cancel` ACKだけではrefundしない;
+- pending worker lossはexpiryで解放し、liable worker lossはreservationを保守的に保持;
+- identical terminal settlement replayはidempotentにできるが、conflicting replayはfail closed;
+- business task creation/result replayやworker ownershipは `UsageStore` の外に置く。
+
+`packages/core/src/task-accounting-proof.test.ts` では既存lease/store primitiveだけを使ってこれらをproofします。新しいcore runtime APIは不要です。
+
+2026-08-13時点では `io.modelcontextprotocol/tasks` extensionとTypeScript integration surfaceはstable TypeScript SDK coreとは別に管理され、upstreamでも明示的にexperimentalです。そのためstableなfirst-class MCP Tasks adapterはまだ宣言しません。README/package docsでprotocol-level Tasks supportをdeferred / experimentalと明記する限り、これはv1のaccounting blockerではなくintegration boundaryです。
+
+core failure semanticsは [Architecture](architecture.ja.md)、残るv1-readiness workは [Roadmap](roadmap.ja.md) を参照してください。

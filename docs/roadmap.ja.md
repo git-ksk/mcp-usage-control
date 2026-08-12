@@ -28,12 +28,13 @@ generic agent-budget、gateway、billing、governance productへ広げるので�
 
 ## Current priorities
 
-1. **Production multi-round hardening** — `input_required` suspend / resume accounting自体は実装済みです。one-time consume / fail-closed semanticsを弱めず、shared / durable flow-storeとpost-claim reconciliationを進めます。Issue #41で追跡します。
-2. **Current MCP protocol conformance** — fresh-request multi-round retry semantics、stateless server deployment assumption、long-running Tasks accountingを含め、current MCP protocol / SDK behaviorとの整合を明示的に検証します。stateless-friendlyなMRTR optionを追加する場合も、trusted bindingとaccounting invariantは維持します。Issue #63で追跡します。
+1. **Production multi-round hardening** — `input_required` suspend / resume accountingは実装済みで、current-protocol proofによりsticky MCP sessionが不要なことも確認済みです。v1では現行のshared / durable compare-and-consume flow stateを採用し、新しいstateless MRTR modeはより強い安全性・運用上の利点をproofできるまでdeferredとします。Issue #41 / #63で追跡します。
+2. **MCP Tasks accounting** — long-running accounting state machineは定義・core proof testまで完了しました。upstream Tasks extension / TypeScript surfaceがexperimentalな間はfirst-class protocol adapterをdeferredとし、stable supportとは宣伝しません。Issue #63で追跡します。
 3. **Third-party Store invariant kit** — 外部Storeが同じmethod名を実装しただけでなくsemantic compatibilityを実証できるよう、projectのcorrectness contractを実行可能なtest kitにします。
-4. **Real Cloudflare operational evidence** — deployed Durable Objects adapterについて、残っているcredential rotationと実platform-limit / failure観測を完了します。Issue #24で追跡します。
-5. **Public package contract review / npm publication** — first registry publicationは明示的にgateしたままにし、publish直前にregistry-facing contract / metadataを最終確認します。Issue #6で追跡します。
-6. **Failure semantics documentation** — crash recovery、lost / ambiguous ACK、cost liability、multi-round claim / recovery、task lifetime、reconciliation expectationをarchitecture / adapter docsで明示し続けます。
+4. **Production-readiness audit** — public API / export / version、Store invariant、security、horizontal scale、tarball / clean-consumer、Node support、CI / release、TODO / Issue、breaking-change候補をv1判定前に最終監査します。
+5. **Real Cloudflare operational evidence** — deployed Durable Objects adapterについて、残っているcredential rotationと実platform-limit / failure観測を完了します。Issue #24で追跡し、残件が本当にv1 blockerかも明示的に分類します。
+6. **Public package contract review / npm publication** — first registry publicationは明示的にgateしたままにし、publish直前にregistry-facing contract / metadataを最終確認します。Issue #6で追跡します。現在のv1-readiness reviewにnpm publicationは不要で、manual / deferredを維持します。
+7. **Failure semantics documentation** — crash recovery、lost / ambiguous ACK、cost liability、multi-round claim / recovery、task lifetime、reconciliation expectationをarchitecture / adapter docsで明示し続けます。
 
 ## MCP-native correctness
 
@@ -43,7 +44,9 @@ protocol-specificな機能は、execution boundaryのaccounting safetyを変え�
 
 fresh MCP requestをまたぐ場合でも、1つのlogical operationに対してusage reservationは1つだけ維持します。client経由でround-tripするrequest stateはintegrity verificationを通し、trustedなserver-side principal / tool / argument identityへ再bindingしてからaccounting stateをresumeします。
 
-stateless-friendlyなresume designは、少なくとも次を維持できる場合にのみ検討します。
+**v1方針**は、atomic compare-and-consumeを持つ現行のshared / durable flow claimです。この方式ですでに、fresh requestが別server instanceへ着地してもsticky MCP sessionなしでresumeできます。
+
+将来stateless-friendlyなresume designを採用する場合も、少なくとも次を維持・proofできることが条件です。
 
 - logical operationあたり1 reservation;
 - 必要な箇所のone-time resume / claim behavior;
@@ -55,15 +58,20 @@ stateless transportだからaccountingまでstatelessである必要はありま
 
 ### MCP Tasks
 
-long-running Tasksをfirst-class supportと主張する前に、accounting semanticsを定義します。最低限、次を明確にします。
+long-running Tasksのaccounting state machineは [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) に定義し、`packages/core/src/task-accounting-proof.test.ts` で既存primitiveに対してproofします。
 
-- いつreservationがcost-liableになるか;
-- task active中にleaseをどうrenewするか;
-- completion / failure / cancellation / abandonmentをどうsettleするか;
-- worker / process lossでoptimistic refundを起こさない方法;
-- task resultやbusiness-side reconciliationをusage ledgerからどう分離するか。
+明示したcontractは次です。
 
-usage storeをgeneric task / workflow engineにはしません。
+- task IDと独立したlogical operationあたり1 admission / reservation;
+- task statusからliabilityを推測せず、metered work直前をcost-liable boundaryにする;
+- active execution / 意図した `input_required` wait中のlease renewal;
+- completion / failure / cancellation / abandonment / worker crash;
+- ambiguous reserve / liability / renew / settlement ACKの保守的な扱い;
+- cooperative cancellation ACKだけではoptimistic refundしない;
+- business operationをblind replayしないreconciliation;
+- task / result / worker stateをusage ledgerから分離する。
+
+新しいcore runtime primitiveは不要です。upstream extensionがexperimentalな間はfirst-class MCP Tasks adapterをdeferredとします。public API / docsでstableなprotocol-level Tasks supportを主張しない限り、これはv1 accounting blockerではありません。
 
 ## Third-party Store invariant kit
 
