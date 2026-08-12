@@ -55,7 +55,10 @@ export interface FirestoreTransactionLike {
   getAll(
     ...references: readonly FirestoreDocumentReferenceLike[]
   ): Promise<FirestoreDocumentSnapshotLike[]>;
-  set(reference: FirestoreDocumentReferenceLike, data: Record<string, unknown>): FirestoreTransactionLike;
+  set(
+    reference: FirestoreDocumentReferenceLike,
+    data: Record<string, unknown>,
+  ): FirestoreTransactionLike;
   delete(reference: FirestoreDocumentReferenceLike): FirestoreTransactionLike;
 }
 
@@ -105,11 +108,6 @@ interface StoredReservation {
   expiresAtMs: number;
   actualUnits?: number;
   outcomeHash?: string;
-}
-
-interface StoredBudget {
-  schemaVersion: 1;
-  used: number;
 }
 
 interface RecoveryResult {
@@ -192,7 +190,6 @@ export class FirestoreUsageStore implements UsageStore {
     const reservationId = reservationIdFor(input.request);
     const reservationRef = this.reservations().doc(reservationId);
     const currentBudgetIds = budgets.map(budget => digest(budget.key));
-    const budgetById = new Map(currentBudgetIds.map((id, index) => [id, budgets[index]!]));
 
     const transactionResult = await this.firestore.runTransaction<ReserveTransactionResult>(
       async transaction => {
@@ -200,12 +197,11 @@ export class FirestoreUsageStore implements UsageStore {
         const existing = readReservation(existingSnapshot);
         const existingBudgetIds = existing?.budgetIds ?? [];
         const allBudgetIds = uniqueSorted([...currentBudgetIds, ...existingBudgetIds]);
-        const budgetRefs = allBudgetIds.map(id => this.budgets().doc(id));
-        const budgetSnapshots = await transaction.getAll(...budgetRefs);
-        const usedById = new Map<string, number>();
-        for (let index = 0; index < allBudgetIds.length; index += 1) {
-          usedById.set(allBudgetIds[index]!, readBudgetUsed(budgetSnapshots[index]));
-        }
+        const usedById = await readBudgets(
+          transaction,
+          this.budgets(),
+          allBudgetIds,
+        );
 
         let recovery: RecoveryResult | undefined;
         if (existing) {
@@ -217,29 +213,40 @@ export class FirestoreUsageStore implements UsageStore {
 
           recovery = recoverStoredReservation(existing, usedById);
           if (recovery.kind === 'liable_retained') {
-            transaction.set(reservationRef, settledFromExpiredLiable(existing, now, this.idempotencyTtlMs));
-            writeUsedBudgets(transaction, this.budgets(), usedById, existingBudgetIds, now);
+            transaction.set(
+              reservationRef,
+              settledFromExpiredLiable(existing, now, this.idempotencyTtlMs),
+            );
             return {
               result: { accepted: false, reason: 'duplicate_operation' },
               recovery,
             };
           }
-          if (recovery.kind === 'tombstone_deleted') {
-            transaction.delete(reservationRef);
-          }
         }
 
         const remainingByBudget: BudgetRemaining[] = budgets.map((budget, index) => ({
           key: budget.key,
-          remaining: Math.max(0, budget.limit - (usedById.get(currentBudgetIds[index]!) ?? 0)),
+          remaining: Math.max(
+            0,
+            budget.limit - (usedById.get(currentBudgetIds[index]!) ?? 0),
+          ),
         }));
         const limiting = remainingByBudget.find(balance => input.units > balance.remaining);
 
         if (limiting) {
           if (recovery?.kind === 'pending_released') {
-            writeUsedBudgets(transaction, this.budgets(), usedById, existingBudgetIds, now);
+            writeUsedBudgets(
+              transaction,
+              this.budgets(),
+              usedById,
+              existingBudgetIds,
+              now,
+            );
+            transaction.delete(reservationRef);
+          } else if (recovery?.kind === 'tombstone_deleted') {
             transaction.delete(reservationRef);
           }
+
           return {
             result: {
               accepted: false,
@@ -252,7 +259,11 @@ export class FirestoreUsageStore implements UsageStore {
         }
 
         for (const budgetId of currentBudgetIds) {
-          const next = safeAdd(usedById.get(budgetId) ?? 0, input.units, 'budget usage');
+          const next = safeAdd(
+            usedById.get(budgetId) ?? 0,
+            input.units,
+            'budget usage',
+          );
           usedById.set(budgetId, next);
         }
 
@@ -269,8 +280,19 @@ export class FirestoreUsageStore implements UsageStore {
           ...currentBudgetIds,
           ...(recovery?.kind === 'pending_released' ? existingBudgetIds : []),
         ]);
-        writeUsedBudgets(transaction, this.budgets(), usedById, touchedBudgetIds, now);
-        transaction.set(reservationRef, stored as unknown as Record<string, unknown>);
+        writeUsedBudgets(
+          transaction,
+          this.budgets(),
+          usedById,
+          touchedBudgetIds,
+          now,
+        );
+        // An expired settled tombstone can be overwritten directly. Avoid a
+        // delete+set pair against the same document in one transaction.
+        transaction.set(
+          reservationRef,
+          stored as unknown as Record<string, unknown>,
+        );
 
         return {
           result: {
@@ -300,7 +322,9 @@ export class FirestoreUsageStore implements UsageStore {
       },
     );
 
-    if (transactionResult.recovery) this.emitRecovery(transactionResult.recovery, reservationId, now);
+    if (transactionResult.recovery) {
+      this.emitRecovery(transactionResult.recovery, reservationId, now);
+    }
     return transactionResult.result;
   }
 
@@ -321,7 +345,9 @@ export class FirestoreUsageStore implements UsageStore {
         };
       },
     );
-    if (!result.ok) throw new UsageStateError('Active reservation not found or expired');
+    if (!result.ok) {
+      throw new UsageStateError('Active reservation not found or expired');
+    }
     return result.value;
   }
 
@@ -341,7 +367,9 @@ export class FirestoreUsageStore implements UsageStore {
         return { reservationId: input.reservationId, expiresAt };
       },
     );
-    if (!result.ok) throw new UsageStateError('Active reservation not found or expired');
+    if (!result.ok) {
+      throw new UsageStateError('Active reservation not found or expired');
+    }
     return result.value;
   }
 
@@ -354,28 +382,22 @@ export class FirestoreUsageStore implements UsageStore {
 
     const transactionResult = await this.firestore.runTransaction<
       | { ok: true; settlement: SettlementResult }
-      | { ok: false; reason: 'missing' | 'invalid_units' | 'conflict'; recovery?: RecoveryResult }
+      | {
+          ok: false;
+          reason: 'missing' | 'invalid_units' | 'conflict';
+          recovery?: RecoveryResult;
+        }
     >(async transaction => {
       const snapshot = await transaction.get(reference);
       const reservation = readReservation(snapshot);
       if (!reservation) return { ok: false, reason: 'missing' };
 
-      const budgetRefs = reservation.budgetIds.map(id => this.budgets().doc(id));
-      const budgetSnapshots = await transaction.getAll(...budgetRefs);
-      const usedById = new Map<string, number>();
-      for (let index = 0; index < reservation.budgetIds.length; index += 1) {
-        usedById.set(reservation.budgetIds[index]!, readBudgetUsed(budgetSnapshots[index]));
-      }
-
       if (this.isExpired(reservation, now)) {
-        const recovery = recoverStoredReservation(reservation, usedById);
-        applyRecoveryWrites(
+        const recovery = await recoverExpiredReservation(
           transaction,
           reference,
           this.budgets(),
           reservation,
-          usedById,
-          recovery,
           now,
           this.idempotencyTtlMs,
         );
@@ -383,7 +405,10 @@ export class FirestoreUsageStore implements UsageStore {
       }
 
       if (reservation.state === 'settled') {
-        if (reservation.actualUnits !== input.actualUnits || reservation.outcomeHash !== outcomeHash) {
+        if (
+          reservation.actualUnits !== input.actualUnits ||
+          reservation.outcomeHash !== outcomeHash
+        ) {
           return { ok: false, reason: 'conflict' };
         }
         return {
@@ -404,8 +429,23 @@ export class FirestoreUsageStore implements UsageStore {
 
       const releasedUnits = reservation.reservedUnits - input.actualUnits;
       if (releasedUnits > 0) {
-        releaseAcrossBudgets(usedById, reservation.budgetIds, releasedUnits);
-        writeUsedBudgets(transaction, this.budgets(), usedById, reservation.budgetIds, now);
+        const usedById = await readBudgets(
+          transaction,
+          this.budgets(),
+          reservation.budgetIds,
+        );
+        releaseAcrossBudgets(
+          usedById,
+          reservation.budgetIds,
+          releasedUnits,
+        );
+        writeUsedBudgets(
+          transaction,
+          this.budgets(),
+          usedById,
+          reservation.budgetIds,
+          now,
+        );
       }
 
       transaction.set(reference, {
@@ -432,13 +472,19 @@ export class FirestoreUsageStore implements UsageStore {
 
     if (!transactionResult.ok) {
       if (transactionResult.recovery) {
-        this.emitRecovery(transactionResult.recovery, input.reservationId, now);
+        this.emitRecovery(
+          transactionResult.recovery,
+          input.reservationId,
+          now,
+        );
       }
       if (transactionResult.reason === 'invalid_units') {
         throw new UsageStateError('actualUnits cannot exceed reservedUnits');
       }
       if (transactionResult.reason === 'conflict') {
-        throw new UsageStateError('Reservation was already settled with a different result');
+        throw new UsageStateError(
+          'Reservation was already settled with a different result',
+        );
       }
       throw new UsageStateError('Reservation not found or expired');
     }
@@ -452,11 +498,16 @@ export class FirestoreUsageStore implements UsageStore {
    * A scheduler may call this explicitly. `reserve()` also invokes a throttled,
    * best-effort pass so abandoned pending reservations do not hold capacity forever.
    */
-  async recoverExpired(limit = this.cleanupBatchSize || 16): Promise<FirestoreRecoverySummary> {
+  async recoverExpired(
+    limit = this.cleanupBatchSize || 16,
+  ): Promise<FirestoreRecoverySummary> {
     assertPositiveInteger(limit, 'limit');
     const now = this.nowMs();
     const cutoff = now - this.expiryGraceMs;
-    const snapshot = await this.reservations().where('expiresAtMs', '<=', cutoff).limit(limit).get();
+    const snapshot = await this.reservations()
+      .where('expiresAtMs', '<=', cutoff)
+      .limit(limit)
+      .get();
     const summary: FirestoreRecoverySummary = {
       pendingCount: 0,
       pendingUnits: 0,
@@ -497,39 +548,42 @@ export class FirestoreUsageStore implements UsageStore {
     >(async transaction => {
       const snapshot = await transaction.get(reference);
       const reservation = readReservation(snapshot);
-      if (!reservation || reservation.state === 'settled') return { ok: false };
-
-      const budgetRefs = reservation.budgetIds.map(id => this.budgets().doc(id));
-      const budgetSnapshots = await transaction.getAll(...budgetRefs);
-      const usedById = new Map<string, number>();
-      for (let index = 0; index < reservation.budgetIds.length; index += 1) {
-        usedById.set(reservation.budgetIds[index]!, readBudgetUsed(budgetSnapshots[index]));
+      if (!reservation || reservation.state === 'settled') {
+        return { ok: false };
       }
 
-      if (this.isExpired(reservation, now)) {
-        const recovery = recoverStoredReservation(reservation, usedById);
-        applyRecoveryWrites(
-          transaction,
-          reference,
-          this.budgets(),
-          reservation,
-          usedById,
-          recovery,
-          now,
-          this.idempotencyTtlMs,
-        );
-        return { ok: false, recovery };
+      // The common path touches only the reservation document. In particular,
+      // heartbeat renewals must not read a shared tenant budget and turn it into
+      // an unnecessary contention point. Participating budgets are read only if
+      // an expired pending reservation actually needs capacity released.
+      if (!this.isExpired(reservation, now)) {
+        return { ok: true, value: mutate(transaction, reference, reservation) };
       }
 
-      return { ok: true, value: mutate(transaction, reference, reservation) };
+      const recovery = await recoverExpiredReservation(
+        transaction,
+        reference,
+        this.budgets(),
+        reservation,
+        now,
+        this.idempotencyTtlMs,
+      );
+      return { ok: false, recovery };
     });
 
-    if (!result.ok && result.recovery) this.emitRecovery(result.recovery, reservationId, now);
+    if (!result.ok && result.recovery) {
+      this.emitRecovery(result.recovery, reservationId, now);
+    }
     return result;
   }
 
-  private async recoverReservation(reservationId: string, now: number): Promise<RecoveryResult> {
-    if (!RESERVATION_ID_PATTERN.test(reservationId)) return { kind: 'none', reservedUnits: 0 };
+  private async recoverReservation(
+    reservationId: string,
+    now: number,
+  ): Promise<RecoveryResult> {
+    if (!RESERVATION_ID_PATTERN.test(reservationId)) {
+      return { kind: 'none', reservedUnits: 0 };
+    }
     const reference = this.reservations().doc(reservationId);
     return this.firestore.runTransaction<RecoveryResult>(async transaction => {
       const snapshot = await transaction.get(reference);
@@ -538,25 +592,14 @@ export class FirestoreUsageStore implements UsageStore {
         return { kind: 'none', reservedUnits: 0 };
       }
 
-      const budgetRefs = reservation.budgetIds.map(id => this.budgets().doc(id));
-      const budgetSnapshots = await transaction.getAll(...budgetRefs);
-      const usedById = new Map<string, number>();
-      for (let index = 0; index < reservation.budgetIds.length; index += 1) {
-        usedById.set(reservation.budgetIds[index]!, readBudgetUsed(budgetSnapshots[index]));
-      }
-
-      const recovery = recoverStoredReservation(reservation, usedById);
-      applyRecoveryWrites(
+      return recoverExpiredReservation(
         transaction,
         reference,
         this.budgets(),
         reservation,
-        usedById,
-        recovery,
         now,
         this.idempotencyTtlMs,
       );
-      return recovery;
     });
   }
 
@@ -577,8 +620,17 @@ export class FirestoreUsageStore implements UsageStore {
     return reservation.expiresAtMs <= now - this.expiryGraceMs;
   }
 
-  private emitRecovery(recovery: RecoveryResult, reservationId: string, now: number): void {
-    if (recovery.kind !== 'pending_released' && recovery.kind !== 'liable_retained') return;
+  private emitRecovery(
+    recovery: RecoveryResult,
+    reservationId: string,
+    now: number,
+  ): void {
+    if (
+      recovery.kind !== 'pending_released' &&
+      recovery.kind !== 'liable_retained'
+    ) {
+      return;
+    }
     emitUsageEvent(this.observer, {
       type: 'reservation.recovered',
       timestamp: now,
@@ -601,32 +653,62 @@ export class FirestoreUsageStore implements UsageStore {
   private nowMs(): number {
     const value = this.now();
     if (!Number.isSafeInteger(value) || value < 0) {
-      throw new UsageStateError('Firestore usage store clock returned an invalid timestamp');
+      throw new UsageStateError(
+        'Firestore usage store clock returned an invalid timestamp',
+      );
     }
     return value;
   }
 }
 
-function applyRecoveryWrites(
+async function recoverExpiredReservation(
   transaction: FirestoreTransactionLike,
   reservationRef: FirestoreDocumentReferenceLike,
   budgetCollection: FirestoreCollectionReferenceLike,
   reservation: StoredReservation,
-  usedById: Map<string, number>,
-  recovery: RecoveryResult,
   now: number,
   idempotencyTtlMs: number,
-): void {
-  if (recovery.kind === 'pending_released') {
-    writeUsedBudgets(transaction, budgetCollection, usedById, reservation.budgetIds, now);
+): Promise<RecoveryResult> {
+  if (reservation.state === 'pending') {
+    const usedById = await readBudgets(
+      transaction,
+      budgetCollection,
+      reservation.budgetIds,
+    );
+    releaseAcrossBudgets(
+      usedById,
+      reservation.budgetIds,
+      reservation.reservedUnits,
+    );
+    writeUsedBudgets(
+      transaction,
+      budgetCollection,
+      usedById,
+      reservation.budgetIds,
+      now,
+    );
     transaction.delete(reservationRef);
-    return;
+    return {
+      kind: 'pending_released',
+      reservedUnits: reservation.reservedUnits,
+    };
   }
-  if (recovery.kind === 'liable_retained') {
-    transaction.set(reservationRef, settledFromExpiredLiable(reservation, now, idempotencyTtlMs));
-    return;
+
+  if (reservation.state === 'liable') {
+    // Full reservation remains charged. No budget read/write is necessary.
+    transaction.set(
+      reservationRef,
+      settledFromExpiredLiable(reservation, now, idempotencyTtlMs),
+    );
+    return {
+      kind: 'liable_retained',
+      reservedUnits: reservation.reservedUnits,
+    };
   }
-  if (recovery.kind === 'tombstone_deleted') transaction.delete(reservationRef);
+
+  // A settled tombstone no longer owns releasable capacity.
+  transaction.delete(reservationRef);
+  return { kind: 'tombstone_deleted', reservedUnits: 0 };
 }
 
 function recoverStoredReservation(
@@ -634,11 +716,21 @@ function recoverStoredReservation(
   usedById: Map<string, number>,
 ): RecoveryResult {
   if (reservation.state === 'pending') {
-    releaseAcrossBudgets(usedById, reservation.budgetIds, reservation.reservedUnits);
-    return { kind: 'pending_released', reservedUnits: reservation.reservedUnits };
+    releaseAcrossBudgets(
+      usedById,
+      reservation.budgetIds,
+      reservation.reservedUnits,
+    );
+    return {
+      kind: 'pending_released',
+      reservedUnits: reservation.reservedUnits,
+    };
   }
   if (reservation.state === 'liable') {
-    return { kind: 'liable_retained', reservedUnits: reservation.reservedUnits };
+    return {
+      kind: 'liable_retained',
+      reservedUnits: reservation.reservedUnits,
+    };
   }
   return { kind: 'tombstone_deleted', reservedUnits: 0 };
 }
@@ -657,6 +749,22 @@ function settledFromExpiredLiable(
     actualUnits: reservation.reservedUnits,
     outcomeHash: digest(EXPIRED_LIABLE_OUTCOME),
   };
+}
+
+async function readBudgets(
+  transaction: FirestoreTransactionLike,
+  collection: FirestoreCollectionReferenceLike,
+  budgetIds: readonly string[],
+): Promise<Map<string, number>> {
+  const normalized = uniqueSorted(budgetIds);
+  if (normalized.length === 0) return new Map();
+  const references = normalized.map(id => collection.doc(id));
+  const snapshots = await transaction.getAll(...references);
+  const usedById = new Map<string, number>();
+  for (let index = 0; index < normalized.length; index += 1) {
+    usedById.set(normalized[index]!, readBudgetUsed(snapshots[index]));
+  }
+  return usedById;
 }
 
 function writeUsedBudgets(
@@ -692,26 +800,49 @@ function releaseAcrossBudgets(
   }
 }
 
-function readReservation(snapshot: FirestoreDocumentSnapshotLike): StoredReservation | undefined {
+function readReservation(
+  snapshot: FirestoreDocumentSnapshotLike,
+): StoredReservation | undefined {
   if (!snapshot.exists) return undefined;
   const data = snapshot.data();
-  if (!data) throw new UsageStateError('Firestore reservation document had no data');
+  if (!data) {
+    throw new UsageStateError('Firestore reservation document had no data');
+  }
   if (data.schemaVersion !== 1) {
-    throw new UsageStateError('Unsupported Firestore reservation schema version');
+    throw new UsageStateError(
+      'Unsupported Firestore reservation schema version',
+    );
   }
   const state = data.state;
   if (state !== 'pending' && state !== 'liable' && state !== 'settled') {
-    throw new UsageStateError('Firestore reservation document had an invalid state');
+    throw new UsageStateError(
+      'Firestore reservation document had an invalid state',
+    );
   }
   const budgetIds = data.budgetIds;
-  if (!Array.isArray(budgetIds) || !budgetIds.every(value => typeof value === 'string' && HASH_PATTERN.test(value))) {
-    throw new UsageStateError('Firestore reservation document had invalid budget IDs');
+  if (
+    !Array.isArray(budgetIds) ||
+    !budgetIds.every(
+      value => typeof value === 'string' && HASH_PATTERN.test(value),
+    )
+  ) {
+    throw new UsageStateError(
+      'Firestore reservation document had invalid budget IDs',
+    );
   }
   if (new Set(budgetIds).size !== budgetIds.length) {
-    throw new UsageStateError('Firestore reservation document had duplicate budget IDs');
+    throw new UsageStateError(
+      'Firestore reservation document had duplicate budget IDs',
+    );
   }
-  const reservedUnits = readSafeNonNegativeInteger(data.reservedUnits, 'reservedUnits');
-  const expiresAtMs = readSafeNonNegativeInteger(data.expiresAtMs, 'expiresAtMs');
+  const reservedUnits = readSafeNonNegativeInteger(
+    data.reservedUnits,
+    'reservedUnits',
+  );
+  const expiresAtMs = readSafeNonNegativeInteger(
+    data.expiresAtMs,
+    'expiresAtMs',
+  );
 
   const result: StoredReservation = {
     schemaVersion: 1,
@@ -721,30 +852,51 @@ function readReservation(snapshot: FirestoreDocumentSnapshotLike): StoredReserva
     expiresAtMs,
   };
   if (data.actualUnits !== undefined) {
-    result.actualUnits = readSafeNonNegativeInteger(data.actualUnits, 'actualUnits');
+    result.actualUnits = readSafeNonNegativeInteger(
+      data.actualUnits,
+      'actualUnits',
+    );
   }
   if (data.outcomeHash !== undefined) {
-    if (typeof data.outcomeHash !== 'string' || !HASH_PATTERN.test(data.outcomeHash)) {
-      throw new UsageStateError('Firestore reservation document had an invalid outcome hash');
+    if (
+      typeof data.outcomeHash !== 'string' ||
+      !HASH_PATTERN.test(data.outcomeHash)
+    ) {
+      throw new UsageStateError(
+        'Firestore reservation document had an invalid outcome hash',
+      );
     }
     result.outcomeHash = data.outcomeHash;
   }
-  if (state === 'settled' && (result.actualUnits === undefined || result.outcomeHash === undefined)) {
-    throw new UsageStateError('Firestore settled reservation was incomplete');
+  if (
+    state === 'settled' &&
+    (result.actualUnits === undefined || result.outcomeHash === undefined)
+  ) {
+    throw new UsageStateError(
+      'Firestore settled reservation was incomplete',
+    );
   }
   return result;
 }
 
-function readBudgetUsed(snapshot: FirestoreDocumentSnapshotLike | undefined): number {
+function readBudgetUsed(
+  snapshot: FirestoreDocumentSnapshotLike | undefined,
+): number {
   if (!snapshot || !snapshot.exists) return 0;
   const data = snapshot.data();
-  if (!data) throw new UsageStateError('Firestore budget document had no data');
-  if (data.schemaVersion !== 1) throw new UsageStateError('Unsupported Firestore budget schema version');
+  if (!data) {
+    throw new UsageStateError('Firestore budget document had no data');
+  }
+  if (data.schemaVersion !== 1) {
+    throw new UsageStateError('Unsupported Firestore budget schema version');
+  }
   return readSafeNonNegativeInteger(data.used, 'budget used');
 }
 
 function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
-  if (budgets.length === 0) throw new RangeError('budgets must contain at least one budget');
+  if (budgets.length === 0) {
+    throw new RangeError('budgets must contain at least one budget');
+  }
   const normalized = budgets.map(budget => {
     if (typeof budget.key !== 'string' || budget.key.length === 0) {
       throw new RangeError('budget.key must be a non-empty string');
@@ -762,9 +914,15 @@ function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
-  if (!request.operationId) throw new RangeError('operationId must be non-empty');
-  if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
-  if (!request.tool) throw new RangeError('tool must be non-empty');
+  if (!request.operationId) {
+    throw new RangeError('operationId must be non-empty');
+  }
+  if (!request.principal.id) {
+    throw new RangeError('principal.id must be non-empty');
+  }
+  if (!request.tool) {
+    throw new RangeError('tool must be non-empty');
+  }
 }
 
 function reservationIdFor(request: UsageRequest): string {
@@ -793,7 +951,11 @@ function uniqueSorted(values: readonly string[]): string[] {
 }
 
 function readSafeNonNegativeInteger(value: unknown, name: string): number {
-  if (!Number.isSafeInteger(value) || typeof value !== 'number' || value < 0) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 0
+  ) {
     throw new UsageStateError(`Firestore document had an invalid ${name}`);
   }
   return value;
