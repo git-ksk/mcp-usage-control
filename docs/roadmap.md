@@ -2,109 +2,112 @@
 
 This roadmap protects the project's core category: **failure-safe transactional usage enforcement around MCP execution**.
 
-The core lifecycle is intentionally different from ordinary request rate limiting, post-hoc usage metering, or a general agent-budget platform:
-
 ```text
 quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 ```
 
-The roadmap prioritizes correctness of that transaction model before broader integrations. See [Project positioning](positioning.md) for the strategic boundary.
+The project should deepen correctness at that boundary rather than expand into a generic agent-budget, gateway, billing, governance, or workflow product. See [Project positioning](positioning.md).
 
-## Strategic direction
+## v1 readiness status
 
-The project should deepen its correctness guarantees rather than expand into a generic agent-budget, gateway, billing, or governance product.
+The post-v0.2 correctness program is complete enough to begin v1.0 release-candidate/final-release preparation. The detailed audit and blocker classification are in [v1.0 readiness review](v1-readiness.md).
 
-The strongest differentiators to preserve and strengthen are:
+Completed before the v1 decision:
 
-- atomic admission before metered execution;
-- the explicit `pending -> cost-liable` boundary;
-- conservative crash/expiry behavior after execution may have started;
-- safe handling of lost or ambiguous acknowledgements;
-- idempotent logical-operation replay and conflicting-settlement rejection;
-- MCP-native retry/multi-round continuity without duplicate reservation;
-- provider-neutral store semantics that can be verified independently.
+- current MCP `2026-07-28` / TypeScript SDK v2 fresh-request multi-round proof;
+- principal/tenant/tool/args-bound one-time resume with fail-closed ambiguous consume handling;
+- explicit decision to keep shared/durable compare-and-consume as the v1 MRTR model, without sticky MCP sessions;
+- long-running MCP Tasks accounting semantics and core proof tests;
+- explicit separation of usage accounting from business task/result replay;
+- normative third-party `UsageStore` / `McpUsageFlowStore` safety contracts;
+- reusable portable conformance runners and package/clean-consumer coverage;
+- public API/export/version, built-in Store, security, horizontal-scale, Node support, CI, release, and npm-publication workflow audit;
+- README/API documentation synchronization and explicit stable/experimental/deferred boundaries.
 
-Broader platforms may offer dashboards, pricing catalogs, organization-wide governance, routing, payment flows, or multi-language agent integrations. Those capabilities are adjacent, but they are not a roadmap template for this runtime.
+No known correctness blocker currently requires a new runtime feature or redesign before v1.0.
 
 ## Current priorities
 
-1. **Production multi-round hardening** — `input_required` suspend/resume accounting is implemented and current-protocol proof shows no sticky MCP session is required. For v1, keep the existing shared/durable compare-and-consume flow state; a new stateless MRTR mode is deferred unless it can prove a stronger safety/operational result. Tracked in #41 and #63.
-2. **MCP Tasks accounting** — the long-running accounting state machine is now defined and covered by core proof tests. First-class protocol adapter support remains deferred while the upstream Tasks extension / TypeScript surface is experimental; do not advertise it as stable support. Tracked in #63.
-3. **Third-party Store invariant kit** — make the project's correctness contract executable so external stores can prove semantic compatibility rather than merely implement the same method names.
-4. **Production-readiness audit** — finish public API/export/version, Store invariant, security, horizontal-scale, tarball/clean-consumer, Node support, CI/release, TODO/Issue, and breaking-change review before the v1 decision.
-5. **Real Cloudflare operational evidence** — complete the remaining credential-rotation and genuine platform-limit/failure observations for the deployed Durable Objects adapter. Tracked in #24; classify whether any remaining evidence is a v1 blocker rather than assuming it is.
-6. **Public package contract review / npm publication** — keep the first registry publication explicitly gated and perform final registry-facing contract/metadata verification immediately before publication. Tracked in #6. npm publication is not required for the current v1-readiness review and must remain manual/deferred.
-7. **Failure semantics documentation** — keep crash recovery, lost/ambiguous ACK, cost liability, multi-round claim/recovery, task lifetime, and reconciliation expectations explicit in architecture and adapter docs.
+1. **Release-candidate / API-freeze mechanics** — when explicitly authorized, choose the exact release commit, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
+2. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
+3. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
+4. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
+5. **Observer/event compatibility** — treat the current event/log types as part of the API-freeze review. A future standalone wire-schema/version field may be introduced only when an external telemetry/billing adapter actually needs one; it must remain outside the enforcement transaction and follow SemVer.
 
 ## MCP-native correctness
 
-Protocol-specific work belongs in the project when it changes accounting safety at the execution boundary.
+Protocol-specific work belongs in core only when it changes accounting safety at the execution boundary.
 
 ### Multi-round request/response
 
-Maintain one logical usage reservation across fresh MCP requests. Client-round-tripped request state must remain integrity-verified and rebound to trusted server-side principal/tool/argument identity before it can resume accounting state.
+The **v1 direction** is the existing shared/durable flow claim with atomic compare-and-consume.
 
-The **v1 direction** is the current shared/durable flow claim with atomic compare-and-consume. It already permits fresh requests to land on different server instances without sticky MCP session affinity.
-
-A future stateless-friendly resume design should only be adopted where it can preserve and prove:
+It preserves:
 
 - one reservation per logical operation;
-- one-time resume/claim behavior where required;
-- fail-closed handling of ambiguous state transitions;
+- integrity-verified client-round-tripped request state;
 - trusted principal / tenant / tool / args binding;
-- conservative post-execution liability semantics.
+- one-time resume claim;
+- mismatch preservation of legitimate state;
+- fail-closed ambiguous consume acknowledgement;
+- no sticky MCP session requirement;
+- conservative post-execution liability behavior.
 
-Stateless transport does not require stateless accounting. Shared state remains acceptable where atomic quota enforcement needs it; avoid unnecessary MCP session affinity or generic workflow state.
+A new stateless/client-carried claim design is deferred unless it proves the same invariants under concurrency and acknowledgement ambiguity and offers a concrete operational advantage.
+
+Stateless transport does not imply stateless accounting.
 
 ### MCP Tasks
 
-The accounting state machine for long-running Tasks is defined in [MCP Tasks accounting](mcp-tasks-accounting.md) and exercised by `packages/core/src/task-accounting-proof.test.ts`.
+[MCP Tasks accounting](mcp-tasks-accounting.md) defines and proof-tests:
 
-The contract now explicitly covers:
-
-- one admission/reservation per logical operation, independent of task ID;
-- the liability boundary immediately before metered work rather than inferring liability from task status;
-- lease renewal during active execution and intentional `input_required` waits;
+- one admission/reservation per logical operation independent of task ID;
+- liability immediately before metered work, not inferred from `working`;
+- renewal during authoritative execution and intentional input waits;
 - completion, failure, cancellation, abandonment, and worker crash;
-- conservative treatment of ambiguous reserve/liability/renew/settlement acknowledgements;
-- no optimistic refund on cooperative cancellation acknowledgement;
+- conservative reserve/liability/renew/settlement ambiguity handling;
+- no refund merely because cooperative cancellation was acknowledged;
 - reconciliation without blind business replay;
-- strict separation of task/result/worker state from the usage ledger.
+- strict separation of task/result/worker ownership from `UsageStore`.
 
-No new core runtime primitive is required. First-class MCP Tasks adapter support remains deferred while the upstream extension is experimental. That integration is not a v1 accounting blocker as long as the public API/docs do not claim stable protocol-level Tasks support.
+No new core primitive is required. First-class Tasks protocol integration remains **deferred/experimental** while the upstream TypeScript extension surface is experimental. Do not advertise stable Tasks adapter support until that boundary changes.
 
-## Third-party store invariant kit
+## Third-party Store contract
 
-Provide a reusable compatibility test kit for stores that want to implement the usage-store contract. A store should not claim compatibility unless it can demonstrate at least:
+The planned invariant kit is now implemented. See [Store implementation contract](store-contract.md).
 
-- atomic all-or-nothing multi-budget reservation;
-- idempotent replay behavior;
-- pending-vs-cost-liable expiry recovery;
-- renewable/resumable lease behavior where applicable;
+Portable runners are available at:
+
+```ts
+import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
+```
+
+A Store should not claim behavioral compatibility unless it can prove, as applicable:
+
+- atomic all-or-nothing multi-budget admission;
+- concurrent admission correctness;
+- logical-operation replay semantics;
+- idempotent liability and settlement replay;
+- pending-vs-liable expiry recovery;
+- renewable/resumable state;
 - conflicting settlement rejection;
-- fail-closed storage behavior;
-- an authoritative store-time model where required;
-- safe handling of ambiguous reserve/settlement outcomes.
+- binding-aware one-time MCP flow consumption;
+- fail-closed invalid/corrupt state behavior.
 
-The kit should make the project's differentiator measurable: correctness under concurrency, retry, crash, expiry, and acknowledgement ambiguity.
+Passing the portable runner is necessary but not sufficient for a production-safe claim. Backend-specific durability, failover, authoritative time, and lost-ACK evidence remain required.
 
-## Stable enforcement event contract
-
-Version the observer/event schema so telemetry and billing adapters can consume enforcement outcomes without becoming part of the transaction result.
-
-Observer/exporter failures must remain unable to change admission or settlement state.
-
-## External billing and metering adapters
+## External billing and metering
 
 Keep this boundary explicit:
 
 ```text
 transactional enforcement core
-        -> stable observer/event contract
+        -> best-effort observer / stable package API
         -> optional billing/telemetry adapter
 ```
 
-External billing or MCP metering specifications may define balances, entitlements, prices, invoices, receipts, or usage events with different guarantees. Adapters may translate stable enforcement outcomes into those schemas, but external terminology or semantics must not weaken or replace:
+External billing schemas may define balances, prices, invoices, receipts, or events with different guarantees. They must not weaken or replace:
 
 - atomic admission;
 - reservation;
@@ -113,23 +116,24 @@ External billing or MCP metering specifications may define balances, entitlement
 - lease/expiry recovery;
 - conservative handling of ambiguous settlement.
 
-Do not rename core concepts merely to resemble an external billing protocol unless the semantics are actually equivalent.
+A financial-grade ledger remains a separate system boundary where required.
 
-## Policy examples
+## Post-v1 candidates
 
-Add production-oriented examples for atomic combinations such as:
+Only add these when there is a concrete user/integration need and the change preserves the stable transaction model:
 
-- per-user daily + monthly budgets;
-- per-user + tenant budgets;
-- tool-weighted units;
-- free/paid entitlement policy inputs;
-- reconciliation with a separate durable financial ledger where required.
+- a standalone versioned telemetry/event wire schema;
+- optional external billing/metering adapters;
+- additional production policy examples;
+- a first-class MCP Tasks adapter after upstream stabilization;
+- alternative MRTR claim representations only with equivalent one-time/ambiguity proof;
+- additional provider Stores that can satisfy the same conformance/failure contract.
 
 ## Non-goals
 
 The core runtime should not become:
 
-- a generic agent runtime or agent-budget authority;
+- a generic agent runtime or budget authority;
 - a generic HTTP/API rate limiter;
 - a payment processor or subscription checkout system;
 - an OAuth/identity provider;
@@ -138,6 +142,6 @@ The core runtime should not become:
 - a gateway/router product;
 - an implementation of a vendor billing protocol;
 - a workflow engine for replaying arbitrary business side effects;
-- a system that blindly retries ambiguous state-changing settlement calls.
+- a system that blindly retries ambiguous state-changing operations.
 
 Integrations with those systems belong at explicit adapter/policy boundaries.
