@@ -12,11 +12,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./firestore": {
-      "types": "./dist/firestore.d.ts",
-      "import": "./dist/firestore.js",
-      "default": "./dist/firestore.js"
     }
   },
   "files": [
@@ -28,10 +23,6 @@
     "dist/observability.js.map",
     "dist/observability.d.ts",
     "dist/observability.d.ts.map",
-    "dist/firestore.js",
-    "dist/firestore.js.map",
-    "dist/firestore.d.ts",
-    "dist/firestore.d.ts.map",
     "README.md",
     "LICENSE"
   ],
@@ -43,7 +34,7 @@
   },
   "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
   "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
-  "keywords": ["mcp", "model-context-protocol", "usage", "quota", "entitlements", "credits", "observability", "firestore"],
+  "keywords": ["mcp", "model-context-protocol", "usage", "quota", "entitlements", "credits", "observability"],
   "publishConfig": { "access": "public" },
   "scripts": {
     "build": "tsc -p tsconfig.json",

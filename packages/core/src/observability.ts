@@ -51,7 +51,7 @@ export type UsageEvent =
       })
   | (UsageEventBase & {
       type: 'reservation.recovered';
-      store: 'memory' | 'redis' | 'cloudflare' | 'firestore';
+      store: 'memory' | 'redis' | 'cloudflare';
       recovery: 'pending_released' | 'liable_retained';
       /** Distributed-store recovery IDs are opaque hashes; memory-store IDs are local reference IDs. */
       reservationId?: string;
@@ -100,7 +100,7 @@ export interface UsageLogRecord {
   source?: 'policy' | 'store' | 'runtime';
   denialReason?: UsageLogDenialReason;
   errorClass?: UsageLogErrorClass;
-  store?: 'memory' | 'redis' | 'cloudflare' | 'firestore';
+  store?: 'memory' | 'redis' | 'cloudflare';
   recovery?: 'pending_released' | 'liable_retained';
   reservedUnits?: number;
   actualUnits?: number;
