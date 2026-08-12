@@ -48,6 +48,8 @@ protectTool()
 
 迷った場合は [はじめに](getting-started.ja.md#本番ではどのstoreを選ぶ) の比較表から確認してください。
 
+独自Storeを実装する場合は **[Store実装contract](store-contract.ja.md)** を読み、再利用可能なconformance kitを通してからcompatibleと判断してください。
+
 ## Firestoreを使う場合
 
 [Firestoreを利用状況の保存先にする](firestore.ja.md) では、特に次を日本語で説明しています。
@@ -64,6 +66,8 @@ protectTool()
 - [Project positioning](positioning.ja.md) — failure-safeなtransactional enforcementへ集中する理由、競争上の境界、coreへ入れないもの
 - [Architecture](architecture.ja.md) — reserve、`markLiable()`、settle、retry、crash時の考え方
 - [MCP protocol conformance](mcp-conformance.ja.md) — current protocol / SDK baseline、fresh-request multi-round proof、horizontal scale / session affinityの前提
+- [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
+- [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
 - [API reference](api-reference.ja.md) — core / MCP / Redis / Cloudflare / Firestoreのpublic API
 - [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics
 - [Roadmap](roadmap.ja.md) — current priority、MCP-native correctness、外部billing / gateway等との境界
