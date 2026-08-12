@@ -1,49 +1,85 @@
-# ドキュメント
+# 日本語ドキュメント
 
 [English](README.md) | [日本語](README.ja.md)
 
-`mcp-usage-control` の利用者向けドキュメントです。
+`mcp-usage-control` の日本語ドキュメントです。
 
-## まず読む
+API名やclass名は英語のまま使いますが、説明文はできるだけ日本語として自然に読める形にしています。
 
-初めてなら、この順で十分です。
+## 初めて読むなら
 
-1. **[Getting started](getting-started.ja.md)** — 何を解決するライブラリか、最小例、package / storeの選び方。
-2. **[Source / local tarballから使う](using-from-source.ja.md)** — npm公開前の現在のinstall手順。
-3. **[MCP integration](mcp-integration.ja.md)** — `protectTool()` と `protectMultiRoundTool()` の実装例。
+まずは次の3ページだけで十分です。
 
-## Storeを選ぶ
+1. **[はじめに](getting-started.ja.md)**  
+   何を解決するライブラリなのか、最小構成、各packageとStoreの違いを説明します。
 
-| Store | まず読むページ | 向いているケース |
+2. **[Source / local tarballから使う](using-from-source.ja.md)**  
+   npm公開前の現在のinstall方法です。
+
+3. **[MCPサーバへの組み込み](mcp-integration.ja.md)**  
+   `mcp-usage-control-mcp` が何をするpackageなのか、`protectTool()` / `protectMultiRoundTool()` の使い方を説明します。
+
+## `mcp-usage-control-mcp` が分かりにくい場合
+
+これはMCPクライアントとMCPサーバの間に置くproxyではありません。
+
+**MCPサーバ内の既存tool handlerを包んで、利用枠の予約・更新・確定を自動化するラッパー**です。
+
+```text
+MCP Client
+   ↓
+MCP Server
+   ↓
+protectTool()
+   ↓
+元のtool handler
+```
+
+詳しくは [MCPサーバへの組み込み](mcp-integration.ja.md) を参照してください。
+
+## 利用状況の保存先を選ぶ
+
+| Store | 向いている構成 | 詳細 |
 | --- | --- | --- |
-| Memory | [Getting started](getting-started.ja.md) | test / local development |
-| Redis | [Redis adapter](redis.ja.md) | 高頻度、shared quota、低latency |
-| Cloudflare Durable Objects | [Cloudflare adapter](cloudflare.ja.md) | Cloudflare中心の構成 |
-| Firestore | [Firestore adapter](firestore.ja.md) | Firebase / GCP、user単位quota中心 |
+| Memory | test / local development | [はじめに](getting-started.ja.md) |
+| Redis | 高頻度、tenant共有quota、低latency | [Redis adapter](redis.ja.md) |
+| Cloudflare Durable Objects | Cloudflare中心の構成 | [Cloudflare adapter](cloudflare.ja.md) |
+| Firestore | Firebase / GCP、ユーザー単位quota中心 | [Firestore](firestore.ja.md) |
 
-迷ったら [Getting startedのstore比較](getting-started.ja.md#production-storeの選び方) から確認してください。
+迷った場合は [はじめに](getting-started.ja.md#本番ではどのstoreを選ぶ) の比較表から確認してください。
 
-## 仕組みを深く知る
+## Firestoreを使う場合
 
-- [Architecture](architecture.ja.md) — reserve / liability / settlement、multi-budget atomicity、crash / retry時の安全性。
-- [API reference](api-reference.ja.md) — core / MCP / Redis / Cloudflare / Firestoreのpublic APIとdefault。
-- [Observability](observability.ja.md) — lifecycle event、privacy、cardinality、best-effort delivery。
-- [Roadmap](roadmap.ja.md) — 今後の方向性と、billing / telemetryなど外部systemとの境界。
+[Firestoreを利用状況の保存先にする](firestore.ja.md) では、特に次を日本語で説明しています。
+
+- 同じbudget keyが同じdocumentを共有する仕組み
+- ユーザー単位quotaではwrite先が分散する理由
+- tenant / global共有quotaで更新競合が起こりやすい理由
+- reservationの期限切れをTTLだけで削除してはいけない理由
+- `recoverExpired()` の使い方
+- Firestore / Redis / Durable Objectsの選び分け
+
+## 仕組みを詳しく知りたい
+
+- [Architecture](architecture.ja.md) — reserve、`markLiable()`、settle、retry、crash時の考え方
+- [API reference](api-reference.ja.md) — core / MCP / Redis / Cloudflare / Firestoreのpublic API
+- [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics
+- [Roadmap](roadmap.ja.md) — 今後の方向性と外部billing / telemetryとの境界
 
 ## 運用・リリース
 
-- [Release policy](releasing.ja.md) — versioning、package release、npm publish手順。
-- [Changelog](../CHANGELOG.ja.md) — released feature、互換性、known limitation。
-- [Security policy](../SECURITY.ja.md) — vulnerability reportとsecurity policy。
-- [Support](../SUPPORT.ja.md) — support範囲。
+- [Release policy](releasing.ja.md) — versioning、release、npm publish手順
+- [Changelog](../CHANGELOG.ja.md) — 変更履歴、互換性、既知の制約
+- [Security policy](../SECURITY.ja.md) — vulnerability reportとsecurity policy
+- [Support](../SUPPORT.ja.md) — support範囲
 
-## Package entry points
+## Package一覧
 
 - [`mcp-usage-control`](../packages/core/README.md) — core + Memory store
-- [`mcp-usage-control-mcp`](../packages/mcp/README.md) — MCP SDK adapter
-- [`mcp-usage-control-redis`](../packages/redis/README.md) — Redis store
-- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md) — Durable Objects store
-- [`mcp-usage-control-firestore`](../packages/firestore/README.md) — Firestore store
+- [`mcp-usage-control-mcp`](../packages/mcp/README.md) — MCPサーバのtool handler用ラッパー
+- [`mcp-usage-control-redis`](../packages/redis/README.md) — Redis Store
+- [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md) — Durable Objects Store
+- [`mcp-usage-control-firestore`](../packages/firestore/README.md) — Firestore Store
 
 ## Project policies
 
@@ -51,8 +87,10 @@
 - [Code of Conduct](../CODE_OF_CONDUCT.ja.md)
 - [License](../LICENSE)
 
-## ドキュメント運用ルール
+## 日本語ドキュメントの方針
 
-public API名 / source identifierは英語を正とし、利用者向けdocsは英語・日本語を維持します。
+public API名、class名、method名、source identifierは英語表記を維持します。
 
-behaviorやaccounting / security invariantを変更する場合は、同じPull Requestで両言語を更新し、exampleとsupport boundaryの意味を揃えます。
+一方で説明文まで英語の語順や用語をそのまま持ち込まず、まず日本語で意味が分かるように書きます。必要な専門用語は、その意味を日本語で説明したうえで併記します。
+
+behaviorやsecurity / accounting上の保証を変える場合は、英語版と日本語版で意味がずれないよう同じPull Requestで更新します。

@@ -1,14 +1,48 @@
-# MCP integration — v0.1
+# MCPサーバへの組み込み
 
 [English](mcp-integration.md) | [日本語](mcp-integration.ja.md)
 
-`mcp-usage-control-mcp` はcore lifecycleを `@modelcontextprotocol/server` v2 tool handlerへ接続するadapterです。single-round toolには `protectTool()`、MCP v2 `input_required` の明示的なsuspend/resume flowには `protectMultiRoundTool()` を使います。
+`mcp-usage-control-mcp` は、**MCPサーバのtool handlerを包んで、利用枠の予約から確定までを自動化するためのラッパー**です。
 
-> **現在の配布状況:** adapterはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) に従ってlocal core + MCP tarballをinstallし、`@modelcontextprotocol/server@2.0.0` を組み合わせてください。
+MCPクライアントとMCPサーバの間に置くproxyやGatewayではありません。
 
-adapter自体はauthenticationやsubscription判定を行いません。application側でtrustedな `Principal` とlogical `operationId` を導出します。
+```text
+MCP Client
+   ↓
+MCP Server
+   ↓
+protectTool() / protectMultiRoundTool()
+   ↓
+元のtool handler
+```
 
-## Single-round protected toolを登録
+MCPサーバ側で既存のhandlerを包むだけなので、usage controlのために通信経路を増やす必要はありません。
+
+> 現在packageはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) の手順でcore + MCP adapterをinstallしてください。CIでは `@modelcontextprotocol/server@2.0.0` と組み合わせて検証しています。
+
+## 何を自動化してくれる？
+
+通常のsingle-round toolでは `protectTool()` が次を担当します。
+
+```text
+利用枠を予約する
+  ↓
+handler開始直前に markLiable()
+  ↓
+実行中はleaseを定期更新
+  ↓
+元のhandlerを実行
+  ↓
+成功・tool error・例外を判定
+  ↓
+実際の消費量をsettle
+```
+
+元のhandler側に `reserve()` や `settle()` を毎回手書きする必要がなくなります。
+
+ただし、このadapterは認証やsubscription判定そのものを行いません。`principal` や `operationId` はapplication側で信頼できる情報から渡します。
+
+## 一般的なtoolを包む
 
 ```ts
 import { protectTool } from 'mcp-usage-control-mcp';
@@ -33,11 +67,11 @@ server.registerTool(
 );
 ```
 
-MCP SDK本来のargument validationはwrapped application handlerより前にそのまま動作します。
+MCP SDK本来の入力検証は、そのまま元のhandlerより前に動きます。
 
-## Input schemaがないtool
+## 入力がないtool
 
-`noInput: true` を明示します。
+input schemaを持たないtoolでは `noInput: true` を指定します。
 
 ```ts
 server.registerTool(
@@ -58,27 +92,125 @@ server.registerTool(
 );
 ```
 
-このflagは意図的に明示します。SDK public TypeScript callback modelではno-input toolを `(ctx)` と表現しますが、server dispatchでは `({}, ctx)` として観測される場合があります。一方 `{}` はempty object schemaの正当なinputでもあるためruntime値だけで推測しません。`noInput: true` では `args === undefined` と正しい `ServerContext` へnormalizeします。
+これは自動判定にはしていません。MCP SDKの型上は「入力なし」と「空objectを入力に取るtool」をruntime値だけで完全には区別できないためです。
 
-## Single-round execution lifecycle
+`noInput: true` を指定した場合、adapterがhandlerへ渡す形を正規化します。
 
-`protectTool()` のadmission後:
+## `markLiable()` をhandler開始直前に置く理由
 
-```text
-reserve -> markLiable -> heartbeat -> handler -> stop heartbeat -> classify -> settle
+`protectTool()` は、application handlerへ入る直前にleaseを `markLiable()` します。
+
+これは「ここから先は外部APIやDBなどの実コストが発生した可能性がある」とみなす境界です。
+
+汎用adapterには、各providerの本当の課金開始地点までは分かりません。そのため安全側に寄せてhandler開始直前を境界にしています。
+
+もっと遅い地点で `markLiable()` したい場合は、core APIを直接使ってください。
+
+## 長時間toolのheartbeat
+
+handlerの実行中は、leaseが途中で期限切れにならないようadapterが定期的に `renew()` します。
+
+通常はTTLのおよそ3分の1の間隔で更新します。settlementやsuspendへ移る前にはheartbeatを止め、実行中のrenewが終わるのを待ちます。
+
+renewの通信が失敗した場合、「backendでは更新済みだが応答だけ届かなかった」可能性があります。そのためadapterは勝手にupstream処理をcancelしません。
+
+lease loss時に即座に処理を止める必要がある場合は、provider固有のcancellationやfencingを別途実装してください。
+
+## 成功・失敗時に何unit確定する？
+
+### 正常終了
+
+`successUnits` を指定しなければ、予約した全unitを消費したものとして確定します。
+
+実際の消費量が結果から分かる場合はcallbackで返せます。
+
+```ts
+successUnits: ({ result }) => result.usageUnits
 ```
 
-liability boundaryはapplication handler entry直前です。generic adapterはprovider-specificな実コスト発生点を知らないため保守的な境界を採用します。より遅いprovider-awareな `markLiable()` が必要ならcore lifecycleを直接利用してください。
+### MCP tool error (`isError: true`)
 
-## MCP v2 `input_required` suspend/resume
+`{ isError: true }` は正常成功とは分けて扱います。
 
-MCP 2026-eraの `input_required` は、同じlogical callをfresh MCP requestとしてretryします。fresh JSON-RPC request IDごとにusage reservationを作り直してはいけません。
+実際の消費量をapplication側で判断できる場合だけ `toolErrorUnits` を設定してください。
 
-このflowでは `protectMultiRoundTool()` を使います。初回roundだけ `operationId()` を呼んでreserveし、後続roundは同じserver-side leaseへ再attachします。policy quoteやreserveを再実行しません。
+### 例外がthrowされた場合
 
-### Request-state integrity
+初期値では予約した全unitを確定します。
 
-MCP `requestState` はclientを往復するためuntrustedです。公式SDKのverification seamを設定し、同じcodecのmint関数をwrapperへ渡します。
+外部処理を始める前のvalidation errorなど、コストが発生していないと判断できる場合だけ値を下げます。
+
+```ts
+errorUnits: ({ error, lease }) => {
+  if (error instanceof ValidationBeforeUpstreamError) return 0;
+  return lease.reservedUnits;
+}
+```
+
+### unit判定callback自体が失敗した場合
+
+callbackがthrowしたり、不正な値を返したりしても、usageを未確定のまま放置しません。
+
+安全側に倒して予約した全unitをsettleしたあと、`UsageClassificationError` を返します。
+
+## `input_required` を使うmulti-round tool
+
+1回のMCP requestだけで完結せず、途中でユーザー入力を求めて別requestで再開するtoolには `protectMultiRoundTool()` を使います。
+
+たとえば:
+
+```text
+1回目: 削除を実行しますか？ → input_required
+2回目: ユーザーが確認 → 実行継続
+```
+
+この2回を別々のtool利用として数えるのではなく、**1つのlogical operationとして同じleaseを引き継ぐ**のが目的です。
+
+### なぜ `protectTool()` ではだめ？
+
+`protectTool()` は1requestで完結するtool専用です。
+
+handlerが `input_required` を返した場合は、そのreservationを安全側にsettleして `UnsupportedMcpUsageFlowError` を返します。
+
+multi-round flowを使う場合だけ `protectMultiRoundTool()` を選んでください。
+
+## Multi-roundの流れ
+
+```text
+初回request
+  ↓
+reserve
+  ↓
+markLiable
+  ↓
+handler
+  ↓
+input_required
+  ↓
+leaseを延長してserver-sideへ保存
+  ↓
+signed requestStateをclientへ返す
+
+次のrequest
+  ↓
+requestStateを検証
+  ↓
+保存済みflowを1回だけ取り出す
+  ↓
+同じleaseへ再接続
+  ↓
+handlerを続行
+  ↓
+settle
+```
+
+重要なのは、**2回目以降で新しくreserveしないこと**です。
+
+## `requestState` は信用しない
+
+`requestState` はclientを経由して戻ってくるため、そのまま信頼できるデータではありません。
+
+MCP SDKの `createRequestStateCodec()` を使って署名・検証し、server-sideに保存した正規のflowへ紐づけます。
 
 ```ts
 import {
@@ -94,12 +226,10 @@ import {
 } from 'mcp-usage-control-mcp';
 
 const stateCodec = createRequestStateCodec<McpUsageRequestStatePayload>({
-  key: process.env.REQUEST_STATE_SECRET!, // 32 bytes以上、server-side secret
+  key: process.env.REQUEST_STATE_SECRET!,
   ttlSeconds: 600,
 });
 
-// per-request createMcpHandler factoryの外側で保持します。
-// 複数processへrequestが分散する場合はshared/durable implementationを使います。
 const flowStore = new MemoryMcpUsageFlowStore();
 
 const protectedConfirm = protectMultiRoundTool(
@@ -118,8 +248,6 @@ const protectedConfirm = protectMultiRoundTool(
     if (flow.round === 0) {
       return inputRequired({
         inputRequests: {},
-        // application側の任意state。wireへそのまま信用して出さず、
-        // wrapperがserver-sideに保持してsigned flow tokenへ置換します。
         requestState: 'awaiting-confirmation',
       });
     }
@@ -137,60 +265,84 @@ const handler = createMcpHandler(() => {
     { name: 'example', version: '1.0.0' },
     { requestState: { verify: stateCodec.verify } },
   );
-  server.registerTool('confirm-write', { description: 'Confirm then write' }, protectedConfirm);
+
+  server.registerTool(
+    'confirm-write',
+    { description: 'Confirm then write' },
+    protectedConfirm,
+  );
+
   return server;
 });
 ```
 
-`ctx.mcpReq.requestState()` がverified decoded payloadではなくraw stringなら、wrapperは `McpUsageResumeError` でfail-closeします。verificationを無効にしたままclient echoのstringを手動でaccounting authorityとして信用しないでください。
+検証済みのpayloadではなくraw stringが戻ってきた場合、adapterは `McpUsageResumeError` でfail-closeします。
 
-### Server-side flow store
+clientから返された文字列をusage accountingの根拠として直接信用しないでください。
 
-clientへ渡すのはintegrity-protectedなopaque flow referenceだけです。resumable usage leaseを含むtrusted recordはserver-sideに残します。
+## Flow Storeはserver-sideに置く
 
-`McpUsageFlowStore.consume(flowId, binding)` はsecurity-criticalなcontractです。
+multi-roundで引き継ぐleaseやtrusted stateはserver-sideに保存します。
 
-1. 保存済みbindingを現在のtrusted principal / tenant / tool / canonical args hashと比較する。
-2. mismatchなら正規flowを**consumeせず**no recordを返す。
-3. matchならflowをatomicにexactly one callerへconsumeして返す。
+`MemoryMcpUsageFlowStore` はtestや1process構成向けです。
 
-`MemoryMcpUsageFlowStore` はtest / single process向けです。modern `createMcpHandler` requestが別instanceへ到達し得るhorizontal scale構成には使えません。Redis、transactional DB、Durable Objects等、atomic compare-and-consumeを実装できるshared storeを利用してください。
+複数instanceへrequestが分散する本番環境では、Redis、transactional DB、Durable Objectsなど、複数processで共有できる実装が必要です。
 
-### Lifecycle / abandonment
+特に `consume(flowId, binding)` は重要で、次をatomicに行う必要があります。
 
-multi-round lifecycle:
+1. 保存済みflowと現在のprincipal / tenant / tool / argsが一致するか確認
+2. 一致しなければ正規flowを消費しない
+3. 一致した場合だけ、1callerだけがflowを取得できるようconsumeする
+
+これにより、別のprincipalや別toolから正規flowを奪うことを防ぎます。
+
+## Resume tokenは1回しか使えない
+
+resume tokenはone-timeです。
+
+同じtokenで同時に複数requestが再開を試みても、application handlerへ進めるのは1callerだけです。それ以外は `McpUsageResumeError` で失敗します。
+
+principal / tenant / tool / argsが一致しないrequestは、正規flowをconsumeできません。つまり、不正な再開attemptによって本物のflowまで失われないようにしています。
+
+## 放置されたmulti-round flowの扱い
+
+初回handlerへ入る前にすでに `markLiable()` 済みなので、`input_required` のあとclientが戻ってこなかった場合でも「コストが絶対に発生していない」とは扱いません。
+
+suspendされたflowが放置された場合や、resume tokenを取得した直後にprocessが落ちた場合は、lease expiry時に予約した全unitを安全側に保持します。
+
+実行済みかもしれない処理を、timeoutだけで自動refundしないためです。
+
+`maxRounds` でsuspend回数の上限も設定できます。上限を超えた場合は予約した全unitをsettleし、`McpUsageRoundsExceededError` を返します。
+
+## Multi-roundでもexactly-onceまでは保証しない
+
+one-time resume tokenにより、同じtokenから複数handlerが同時再開することは防ぎます。
+
+ただし、application側の任意の副作用までexactly-onceにする仕組みではありません。
+
+たとえば外部APIへのwrite自体は成功したのにresponseだけ失われた場合、そのbusiness resultを自動でcacheして返す機能までは持ちません。
+
+削除、課金、外部writeなど重要な処理では、application側のidempotencyや結果照合も併用してください。
+
+## `operationId` の考え方
+
+同じlogical operationのretryでは、同じ `operationId` を使います。
+
+coreのreplay protectionは次の組み合わせを単位にしています。
 
 ```text
-reserve -> markLiable -> handler
-  -> input_required
-  -> stop heartbeat -> renew(suspendTtlMs) -> persist flow -> signed requestStateを返す
-  -> fresh request -> verify requestState -> atomic consume -> resume lease -> renew
-  -> handler -> ... -> classify -> settle
+(tenantId, principal.id, tool, operationId)
 ```
 
-reservationは初回application handlerへ入る前にcost-liableです。そのためsuspended flowがabandonされた場合や、one-time resume token claim後にprocess crashした場合は、lease expiryでfull reserved chargeを保守的に維持します。実行済みかもしれないworkをsilent refundしません。
+single-roundではapplication側がstableなIDを返してください。
 
-`maxRounds` で繰り返しsuspendを上限化します。超過時はfull reservationをsettleして `McpUsageRoundsExceededError` を返します。
+multi-roundでは `operationId()` は初回だけ評価され、以後は保存済みflowのIDを引き継ぎます。
 
-### Replay semantics
+各roundの新しいJSON-RPC request IDを、そのままlogical operation IDとして使わないでください。
 
-resume tokenはone-timeです。同じtokenのconcurrent identical resumeではapplication handlerへ再入場できるcallerは1つだけで、それ以外は `McpUsageResumeError` でfail-closeします。principal / tool / args mismatchのattemptは正規flowをconsumeできません。
+`operationId` はidempotencyのための識別子であり、認証情報ではありません。
 
-これによりduplicate usage reservationと同じresume tokenによるduplicate handler entryを防ぎます。ただし任意のapplication side effectをexactly-onceにする仕組みではなく、token claim後にbusiness responseだけ失われた場合のcompleted result cache/replayも行いません。destructive / externally metered operationでは既存のbusiness idempotency / result reconciliationを併用してください。
-
-### Logical operation ID
-
-`operationId()` は初回roundだけ評価します。stable logical operation IDはtrusted lease stateで維持し、resume後は `flow.operationId` で参照できます。
-
-multi-round accounting identityを各retryのfresh `ctx.mcpReq.id` から作らないでください。MCP clientは `input_required` fulfillment時にfresh request IDを使えます。
-
-## Observability
-
-MCP adapter側で別のtelemetry systemを定義しません。どちらのwrapperでも使用する `UsageControl` へprovider-neutralな `UsageObserver` を設定すると、direct coreと同じlifecycleでreserve / denial / settlement / error eventを受け取れます。storeがRedisの場合は同じobserverを `RedisUsageStore` にも渡すとexpiry recovery eventも含められます。
-
-tool argumentsはusage eventへ自動コピーしません。privacy、cardinality、metadata、delivery semanticsは [Observability](observability.ja.md) を参照してください。
-
-## Principal trust
+## Principalは信頼できるserver-side情報から作る
 
 ```ts
 interface Principal {
@@ -200,83 +352,57 @@ interface Principal {
 }
 ```
 
-principal / tenant / planはapplicationがすでにtrustしているserver-side contextから導出します。caller supplied accounting identityをauthorizationなしで信用しないでください。
+principal / tenant / planを、callerが送ってきた値から無条件に採用しないでください。
 
-## Operation ID / replay scope
+認証済みsessionやserver-side auth contextなど、applicationが信頼できる情報から作ります。
 
-core replay protectionのscope:
+## Settlement失敗時
 
-```text
-(tenantId, principal.id, tool, operationId)
-```
+settlementで通信errorが起きても、「書き込み自体は成功してACKだけ失った」可能性があります。
 
-single-round toolでは `operationId` は同じlogical executionのretryでstable、intentional new executionではdifferentである必要があります。non-secretなidempotency identityでありauthorization proofではありません。
+そのためadapterはblind retryしません。`UsageSettlementError` としてapplicationへ返します。
 
-`ctx.mcpReq.id` はrequest-scoped用途やtestには使えますが、logical retry間でclient/hostが同じJSON-RPC request IDを維持すると仮定しないでください。`protectMultiRoundTool()` では初回roundだけapplicationの `operationId()` callbackを呼び、resume roundはtrusted original identityを再利用します。
+Store側が持つidempotent settlement replayやreconciliationとは別の責務です。
 
-## Lease heartbeat
+## 利用上限で拒否された場合
 
-両wrapperともactively executingなleaseをdefaultでTTLのおよそ3分の1間隔でrenewします。settlement / suspension前にはheartbeatを停止しin-flight renewalを待ちます。
+admission denialでは `UsageDeniedError` を返します。
 
-renewal errorだけではbackend側でrenewが適用されたか断定できません。そのため任意のupstream workを自動cancelしません。lease loss時点で即fenceが必要ならprovider-specific cancellation / fencingを実装してください。
+外向けmessageは意図的に一般化した `Usage denied by usage policy` で、詳細reasonはprogrammaticに保持します。
 
-## Result / cost classification
+ユーザーやmodelに表示される可能性があるreasonへ、secretや内部tenant ID、private balanceなどを入れないでください。
 
-### Normal success
+## Observability
 
-`successUnits` 未指定時はfull reservationをchargeします。dynamic costではsafe maximumをreserveしactual unitsを返します。
+MCP adapter専用の別telemetry方式は持ちません。
 
-```ts
-successUnits: ({ result }) => result.usageUnits
-```
+`UsageControl` へ `UsageObserver` を設定すれば、coreと同じreserve / denial / settlement / error eventを取得できます。
 
-### MCP tool error (`isError: true`)
+詳しくは [Observability](observability.ja.md) を参照してください。
 
-明示的な `{ isError: true }` resultはsuccessではなくtool errorです。actual costが分かる場合だけ `toolErrorUnits` を指定します。
+## 本番導入前の確認
 
-### Thrown error
+- `mcp-usage-control-mcp` はproxyではなくserver-side wrapperとして使う
+- principal / tenantは信頼できるserver-side情報から作る
+- retryではstableな `operationId` を使う
+- single-roundは `protectTool()`、multi-roundは `protectMultiRoundTool()` を使い分ける
+- multi-roundの `requestState` は必ず検証する
+- 複数instance構成ではsharedなFlow Storeを使う
+- destructiveな処理ではbusiness側のidempotencyも維持する
+- Store errorやsettlement errorを無視して処理成功扱いにしない
 
-thrown errorはdefaultでfull reservationをchargeします。より小さいcostを証明できる場合だけ `errorUnits` を下げます。
+## CIで確認しているもの
 
-```ts
-errorUnits: ({ error, lease }) => {
-  if (error instanceof ValidationBeforeUpstreamError) return 0;
-  return lease.reservedUnits;
-}
-```
+CIでは、adapter単体だけでなく公式MCP SDK v2の `Client + createMcpHandler` 経路でも確認しています。
 
-### Classifier failure
+主な対象は次のとおりです。
 
-classifierがthrow、negative / unsafe / reserved超過値を返した場合もusageを未settledのまま残しません。full reservationをsettleしてから `UsageClassificationError` をthrowします。
+- inputなしtoolの正規化
+- input schemaありtoolの `(args, ctx)`
+- `{ isError: true }` のusage accounting
+- denial message
+- `protectTool()` が `input_required` を明示的に拒否すること
+- `createRequestStateCodec()` を使った実multi-round retry
+- retry requestをまたいでもreserveが1回だけで、最後にsettleされること
 
-## `protectTool()` support boundary
-
-`protectTool()` は意図的にsingle-roundのままです。handlerが `input_required` を返した場合はcurrent reservationを保守的にsettleして `UnsupportedMcpUsageFlowError` を返し、retryを新規callとしてsilent accountingしません。
-
-verified request-stateとserver-side flow-store要件を満たせる場合だけ `protectMultiRoundTool()` を利用してください。
-
-## Settlement failure
-
-settlement failureは `UsageSettlementError` として表面化します。store writeがcommit済みでACKだけ失った可能性があるためblind retryしません。
-
-store-specificなidentical settlement replay / reconciliationはMCP flow retry semanticsとは別責務です。
-
-## Denial / disclosure
-
-admission denialでは `UsageDeniedError` をthrowします。error messageは意図的にgenericな `Usage denied by usage policy` で、詳細 `.reason` はprogrammaticに保持します。
-
-user/model-visible contentへ後からmapされ得るdenial reasonへsecret、private tenant identifier、entitlement internal、balanceを入れないでください。
-
-## Protocol integration test
-
-CIではdirect wrapper testと公式SDK v2 `Client + createMcpHandler` in-process pathの両方をtestします。
-
-- explicit no-input normalization。
-- input-schemaのvalidated `(args, ctx)` behavior。
-- `isError: true` accounting。
-- generic denial message。
-- single-round `protectTool()` の明示的 `input_required` reject。
-- modern protocol negotiation + `createRequestStateCodec` verificationを通したreal `input_required` retry。
-- fresh retry requestを跨いでもquote / reservationが1回だけで、最後にsettleされること。
-
-adapterはpublic `@modelcontextprotocol/server` v2 APIを対象にし、v0.1 CIでは現在v2.0.0をresolveします。coreはMCP SDKをimportしません。
+core package自体はMCP SDKへ依存しません。

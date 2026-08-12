@@ -1,28 +1,31 @@
-# Firestore UsageStore
+# Firestoreを利用状況の保存先にする
 
 [English](firestore.md) | [日本語](firestore.ja.md)
 
-`mcp-usage-control-firestore` は、server-side Firestore transactionを使う `UsageStore` adapterです。
+`mcp-usage-control-firestore` は、Firestoreを利用上限の判定とreservation管理に使うためのStore実装です。
 
-## 先に結論
+Firebase Admin SDKやGoogle CloudのNode.js Firestore clientを、そのまま渡して使えます。
 
-Firestoreは次の構成なら使いやすいです。
+## まず結論
 
-- すでにFirebase / GCPを使っている。
-- quotaの中心がuser単位で、userごとに別budget keyを使う。
-- serverless構成で、Redisなど別のstateful serviceを増やしたくない。
+Firestoreが向いているのは、次のような構成です。
 
-一方、次の構成では事前にload testしてください。
+- すでにFirebase / GCPを使っている
+- 利用上限の中心が「ユーザーごと」になっている
+- Redisなど別の常駐サービスを増やしたくない
+- serverless構成との相性を重視したい
 
-- 1 tenant全体で共有する厳密なquotaへ大量のcallが集中する。
-- system-wide global quotaを1つのbudgetで管理する。
-- とても低いlatencyで高頻度のadmissionが必要。
+一方で、次のような構成では事前に負荷試験をおすすめします。
 
-理由は、**同じbudget keyは同じFirestore documentになる**からです。大きなshared budgetでは、そのdocumentがtransaction contentionの中心になります。
+- 1つのtenant全体で共有するquotaへ大量のtool callが集中する
+- system全体で1つのglobal quotaを共有する
+- 非常に低いlatencyで大量のadmissionを処理したい
+
+理由は単純で、**同じbudget keyは同じFirestore documentを更新する**からです。
+
+共有範囲が大きいほど、その1documentへ更新が集中しやすくなります。
 
 ## 最小構成
-
-Firebase Admin SDKの `getFirestore()` またはGoogle Cloud Node.js Firestore clientをそのまま渡せます。
 
 ```ts
 import { getFirestore } from 'firebase-admin/firestore';
@@ -34,34 +37,49 @@ const store = new FirestoreUsageStore(db);
 const control = new UsageControl(store, policy);
 ```
 
-このadapterは**trusted server / Admin client向け**です。browser / mobile Firestore SDKをauthoritative quota storeとして直接使う設計ではありません。
+このadapterは**server-side専用**です。
 
-Firebase / Google Cloud SDKはadapterのruntime dependencyには含めていません。application側が使っているserver Firestore clientをstructural interface経由で受け取ります。
+browserやmobileのFirestore SDKから、利用上限の元データを直接更新する使い方は想定していません。
 
-## Firestoreに何を保存する？
+利用上限を最終的に判定するStoreなので、信頼できるserver credentialからだけ更新してください。
 
-defaultでは2 collectionを使います。
+## Firebase SDKはruntime dependencyに含めていない
+
+`mcp-usage-control-firestore` 自体はFirebase Admin SDKやGoogle Cloud SDKをruntime dependencyに持ちません。
+
+application側ですでに使っているserver Firestore clientを、必要なmethodだけを持つstructural interfaceとして受け取ります。
+
+そのためFirebase AdminでもGoogle Cloud clientでも利用できます。
+
+## Firestoreに保存するもの
+
+defaultでは2つのtop-level collectionを使います。
 
 ```text
 muc_budgets/{sha256(budgetKey)}
 muc_reservations/fs1.{sha256(operationScope)}
 ```
 
-`collectionPrefix` で `muc` を変更できます。
+`collectionPrefix` を指定すると `muc` の部分を変更できます。
 
-budget documentは現在のreserved/settled usageを保持し、reservation documentは1 logical operationのlease状態を保持します。
+役割は次のとおりです。
 
-raw principal ID、tenant ID、tool name、operation ID、budget keyはdocument bodyへ保存しません。document IDにはSHA-256 digestを使います。
+- `muc_budgets` — そのbudgetで現在どれだけ利用済み・予約済みかを管理
+- `muc_reservations` — 1つのlogical operationに対応するlease状態を管理
 
-ただしhashはencryptionではありません。hash化document IDをsecretとして扱わないでください。
+principal ID、tenant ID、tool名、operation ID、budget keyそのものはdocument bodyへ保存しません。
 
-## 一番大事: budget keyが共有範囲を決める
+document IDにはSHA-256 digestを使います。
 
-Firestore adapterは「これはuser budget」「これはtenant budget」と自動判定しません。
+ただし、**hash化は暗号化ではありません**。hash化したdocument IDをsecretとして扱わないでください。
 
-**applicationが渡した `budget.key` が同じなら、同じbudget documentを共有します。**
+## 一番大事なのはbudget keyの決め方
 
-### userごとに分ける例
+Firestore adapterは、「これはuser budget」「これはtenant budget」と自動判定しません。
+
+applicationが渡す `budget.key` が同じなら、同じbudgetとして扱います。
+
+### ユーザーごとに分ける場合
 
 ```text
 user:a:daily:2026-08-12 -> document A
@@ -69,137 +87,165 @@ user:b:daily:2026-08-12 -> document B
 user:c:daily:2026-08-12 -> document C
 ```
 
-この形ならwrite先がuserごとに分散します。
+各ユーザーが別documentを更新するので、書き込み先が自然に分散します。
 
-### tenant全体で共有する例
+### tenant全体で共有する場合
 
 ```text
 tenant:company-x:monthly:2026-08
 ```
 
-company-xの全userがこの同じkeyを使えば、全callが同じbudget documentを更新します。
+company-xの全ユーザーがこのkeyを使うと、全requestが同じdocumentを更新します。
 
 ```text
 user-a --\
-user-b ----> shared tenant budget document
+user-b ----> company-xの共有budget document
 user-c --/
 ```
 
-これはバグではなく、**厳密なshared quotaを守るためのserialization point**です。
+これは不具合ではありません。
 
-## 複数budgetも1 transactionで守る
+**tenant全体の厳密な上限を守るには、全員が同じ値を見て更新する必要があるためです。**
 
-1 invocationがuser daily + user monthly + tenant monthlyを使う場合、reservation documentと全budget documentを1つのFirestore transactionで処理します。
+その代わり、利用が集中すると同じdocumentへの更新競合が増えます。
+
+## 複数のbudgetもまとめて判定する
+
+1回のtool callで、たとえば次の3つを同時に守れます。
+
+- user daily
+- user monthly
+- tenant monthly
+
+Firestoreではこれらを1つのtransactionで処理します。
 
 ```text
 user daily ----\
-user monthly ---+--> one Firestore transaction --> reservation
+user monthly ---+--> 1つのFirestore transaction --> reservation
 tenant monthly -/
 ```
 
-どれか1つでもquota不足なら、他budgetだけがpartial reserveされることはありません。
+どれか1つでも上限に達していれば、他のbudgetだけを部分的に予約することはありません。
 
-Firestore側でtransaction conflictが起きた場合はSDKがretryします。最終的にtransactionが完了できなければstore errorとして失敗します。
+**全部成功するか、全部失敗するか**です。
 
-**store errorを「quota判定できなかったのでallow」へfallbackしないでください。**
+Firestore側で同時更新がぶつかった場合はSDKがtransactionをretryします。
 
-## Shared budgetで何が起きる？
+最終的に完了できなければStore errorとして失敗します。
 
-同じdocumentを複数transactionが同時に更新するとcontentionが発生します。
+Store errorを「上限を確認できなかったから今回は通す」という扱いにしないでください。
 
-Firestoreは自動retryしますが、競合が強すぎると最終的に次のようなerrorになることがあります。
+## 共有budgetにアクセスが集中するとどうなる？
+
+同じdocumentを複数transactionが同時に更新すると、Firestore内部で競合が発生します。
+
+Firestoreは自動でretryしますが、競合が強すぎると最終的に次のようなerrorになることがあります。
 
 ```text
 ABORTED: Too much contention on these documents
 ```
 
-Firestoreには「単一documentなら必ずX writes/secまで安全」という一律の保証値はありません。実際のtransaction数、参加document数、network latency、index負荷などで変わります。
+Firestoreには「1documentなら必ず毎秒X回まで安全」という一律の保証値はありません。
 
-そのためshared tenant/global budgetを使う場合は、想定trafficでload testしてください。
+実際の性能は、次のような条件に左右されます。
 
-特に次ならRedis / Durable Objects / RDBも比較する価値があります。
+- 同時transaction数
+- 1transactionに参加するdocument数
+- network latency
+- indexの負荷
+- database regionとの距離
 
-- 1 tenantへ多数userのtool callが継続的に集中する。
-- 1 invocationが多数budgetを同時更新する。
-- very low latencyが必要。
-- 1つのglobal budgetがsystem全体のhotspotになる。
+そのため、大きなtenant共有quotaやglobal quotaを使う場合は、本番に近いtrafficで負荷試験してください。
 
-Firestore clientはdatabaseに近いregionから使う方が安全です。latencyが大きいほどtransaction retryの影響も大きくなります。
+特に次の構成ならRedis / Durable Objects / RDBも比較する価値があります。
 
-## Reservation expiryはどう回収する？
+- 1tenantへ大量のtool callが継続的に集中する
+- 1callで多数のbudgetを更新する
+- 低latencyを強く求める
+- system全体で1つのglobal budgetを使う
 
-pending reservationをFirestore TTLだけで削除してはいけません。
+Firestore clientはdatabaseに近いregionから使う方が、transaction retryの影響を抑えやすくなります。
 
-理由は、reservation documentだけ消すとbudget側に残ったreserved capacityを解放できないからです。
+## 期限切れreservationの回収
 
-adapterは `recoverExpired()` でtransactionalに回収します。
+pendingのreservationをFirestore TTLだけで削除してはいけません。
+
+reservation documentだけ消すと、budget側に残っている予約済みcapacityを戻せなくなるためです。
+
+adapterは `recoverExpired()` で、budgetとreservationをまとめて安全に回収します。
 
 ```ts
 const summary = await store.recoverExpired(100);
 ```
 
-状態ごとの扱いは次です。
+状態ごとの扱いは次のとおりです。
 
-| 状態 | expire時の扱い |
+| 状態 | 期限切れ時の扱い |
 | --- | --- |
-| `pending` | budgetからreserved unitsを解放し、reservationを削除 |
-| `liable` | full reserved unitsを維持し、保守的にsettled化 |
-| `settled` tombstone | replay-protection documentだけ削除 |
+| `pending` | 予約したunitをbudgetへ戻し、reservationを削除 |
+| `liable` | 実コストが発生した可能性があるため、予約量をそのまま確定扱いにする |
+| `settled` tombstone | replay protection用documentだけ削除。確定済みusageはbudget側に残す |
 
-`reserve()` もdefaultではsmall bounded cleanupをbest-effortで実行します。
+`reserve()` も自動cleanupをbest-effortで試します。
 
-確実な回収時間が必要ならCloud Scheduler / cron等から `recoverExpired()` を定期実行してください。
+defaultでは、1回に最大16件を対象にし、同じprocess内では少なくとも5秒間隔を空けます。
 
-`cleanupBatchSize: 0` でautomatic cleanupを無効化できます。その場合は外部schedulerを推奨します。
+このcleanupが失敗しても、余分なquotaが増える方向には倒れません。古いreservationが残って利用可能capacityが少なく見えるだけなので、authoritativeなreserve transaction自体は続行します。
 
-## Clockについて
+期限切れreservationを一定時間以内に確実に処理したい場合は、Cloud Schedulerやcronなどから `recoverExpired()` を定期実行してください。
 
-Firestore adapterのlease計算はapplication hostの `Date.now()` を使います。
+`cleanupBatchSize: 0` で自動cleanupを無効化できます。その場合は外部schedulerの利用を推奨します。
 
-Redis adapterのようにserver `TIME` をauthoritative clockとして使う構成ではありません。
+## 時刻の扱い
 
-そのためdefaultで `expiryGraceMs: 5000` を持ち、軽いclock skewで早すぎるrecoveryが起きにくいようにしています。
+Firestore adapterのlease計算には、application hostの `Date.now()` を使います。
 
-productionでは:
+Redis adapterのように、Store側のserver timeを直接使う方式ではありません。
 
-- host clockをNTP等で同期する。
-- TTLをnetwork latencyや想定clock skewより十分長くする。
-- 厳密なserver-time authorityが必要ならRedis / Durable Objectsも比較する。
+そのためdefaultでは `expiryGraceMs: 5000` を設定し、わずかなclockずれで早すぎるrecoveryが起こりにくいようにしています。
 
-## 1 callあたりのFirestore access
+本番では次を守ってください。
 
-budget数を `N` とすると概ね:
+- host clockをNTPなどで同期する
+- lease TTLをnetwork latencyや想定clock skewより十分長くする
+- 厳密なserver-time基準が必要ならRedisやDurable Objectsも比較する
 
-- reserve: reservation + N budgetをread。acceptedならreservation + N budgetをwrite。
-- `markLiable()`: reservationのみ更新。
-- `renew()`: reservationのみ更新。
-- settle: reservationをreadし、unused capacityを返す場合は対象budgetもread/write。
-- recovery: expired reservationと必要なbudgetをtransactionで処理。
+## 1回のtool callで何回Firestoreへ触る？
 
-user daily + user monthly + tenant monthlyのようにbudgetを増やすほど、Firestore billingとlatencyも増えます。
+budget数を `N` とすると、おおよそ次のaccessが発生します。
 
-`markLiable()` / `renew()` の通常pathではshared budgetを読まないため、heartbeatがtenant budgetの不要なcontentionを増やさないようにしています。
+- reserve — reservation + N budgetをreadし、成功時はreservation + N budgetをwrite
+- `markLiable()` — reservationを更新
+- `renew()` — reservationを更新
+- settle — reservationを確認し、余ったcapacityを返す場合はbudgetも更新
+- recovery — 期限切れreservationと必要なbudgetをtransactionで処理
 
-## Security checklist
+user daily + user monthly + tenant monthlyのようにbudget数を増やすほど、Firestoreのread/write数とlatencyも増えます。
 
-- Firestore adapterはtrusted server credentialからだけ使う。
-- clientからbudget / reservation collectionを直接変更できるRulesにしない。
-- principal / tenantはtrusted auth contextから決める。
-- Firestore failureをunmetered allowへfallbackしない。
-- `quota_exceeded` とFirestore availability/contention errorを区別する。
-- hash化IDをsecretとして扱わない。
-- raw user ID / budget keyをmetric labelへ出しすぎない。
+一方、通常の `markLiable()` / `renew()` ではshared budget documentを触りません。
 
-## どのstoreを選ぶべき？
+長時間toolのheartbeatがtenant共有budgetの競合を増やさないようにしています。
+
+## セキュリティ上の注意
+
+- Firestore adapterは信頼できるserver credentialからだけ使う
+- clientがbudget / reservation collectionを直接変更できるSecurity Rulesにしない
+- principal / tenantは認証済みのserver-side contextから決める
+- Firestore障害時にunmetered allowへfallbackしない
+- `quota_exceeded` とFirestore availability / contention errorを区別する
+- hash化document IDをsecretとして扱わない
+- user IDやbudget keyのような高cardinality値をmetric labelへ大量に出さない
+
+## Store選びの目安
 
 | 構成 | 候補 |
 | --- | --- |
-| Firebase / GCPでuser単位quota中心 | **Firestoreが扱いやすい** |
-| 高頻度のtenant/shared quota | Redisを比較 |
-| Cloudflare中心 | Durable Objectsを比較 |
-| test / local | Memory |
+| Firebase / GCPで、ユーザー単位の利用上限が中心 | **Firestoreが使いやすい** |
+| 高頻度のtenant共有quota | Redisも比較する |
+| Cloudflare中心 | Durable Objectsも比較する |
+| test / local development | Memory |
 
-Firestoreを選ぶ場合でも、shared budgetが重要なら本番trafficに近いload testを推奨します。
+Firestoreを選ぶ場合でも、共有budgetが重要な要件なら本番trafficに近い負荷試験をおすすめします。
 
 ## 参考
 
@@ -207,4 +253,4 @@ Firestoreを選ぶ場合でも、shared budgetが重要なら本番trafficに近
 - Transaction contention / serializable isolation: https://firebase.google.com/docs/firestore/transaction-data-contention
 - Reads/writes at scale: https://firebase.google.com/docs/firestore/understand-reads-writes-scale
 
-API optionsは [API reference](api-reference.ja.md)、全体のstate machineは [Architecture](architecture.ja.md) を参照してください。
+API optionは [API reference](api-reference.ja.md)、全体のstate machineは [Architecture](architecture.ja.md) を参照してください。
