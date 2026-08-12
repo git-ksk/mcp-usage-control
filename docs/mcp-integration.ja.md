@@ -294,7 +294,25 @@ multi-roundで引き継ぐleaseやtrusted stateはserver-sideに保存します�
 2. 一致しなければ正規flowを消費しない
 3. 一致した場合だけ、1callerだけがflowを取得できるようconsumeする
 
-これにより、同じresume tokenを使った二重実行を防ぎます。
+これにより、別のprincipalや別toolから正規flowを奪うことを防ぎます。
+
+## Resume tokenは1回しか使えない
+
+resume tokenはone-timeです。
+
+同じtokenで同時に複数requestが再開を試みても、application handlerへ進めるのは1callerだけです。それ以外は `McpUsageResumeError` で失敗します。
+
+principal / tenant / tool / argsが一致しないrequestは、正規flowをconsumeできません。つまり、不正な再開attemptによって本物のflowまで失われないようにしています。
+
+## 放置されたmulti-round flowの扱い
+
+初回handlerへ入る前にすでに `markLiable()` 済みなので、`input_required` のあとclientが戻ってこなかった場合でも「コストが絶対に発生していない」とは扱いません。
+
+suspendされたflowが放置された場合や、resume tokenを取得した直後にprocessが落ちた場合は、lease expiry時に予約した全unitを安全側に保持します。
+
+実行済みかもしれない処理を、timeoutだけで自動refundしないためです。
+
+`maxRounds` でsuspend回数の上限も設定できます。上限を超えた場合は予約した全unitをsettleし、`McpUsageRoundsExceededError` を返します。
 
 ## Multi-roundでもexactly-onceまでは保証しない
 
@@ -310,11 +328,19 @@ one-time resume tokenにより、同じtokenから複数handlerが同時再開�
 
 同じlogical operationのretryでは、同じ `operationId` を使います。
 
+coreのreplay protectionは次の組み合わせを単位にしています。
+
+```text
+(tenantId, principal.id, tool, operationId)
+```
+
 single-roundではapplication側がstableなIDを返してください。
 
 multi-roundでは `operationId()` は初回だけ評価され、以後は保存済みflowのIDを引き継ぎます。
 
 各roundの新しいJSON-RPC request IDを、そのままlogical operation IDとして使わないでください。
+
+`operationId` はidempotencyのための識別子であり、認証情報ではありません。
 
 ## Principalは信頼できるserver-side情報から作る
 
