@@ -184,9 +184,13 @@ const summary = await store.recoverExpired(100);
 | --- | --- |
 | `pending` | 予約したunitをbudgetへ戻し、reservationを削除 |
 | `liable` | 実コストが発生した可能性があるため、予約量をそのまま確定扱いにする |
-| `settled` tombstone | replay protection用documentだけ削除 |
+| `settled` tombstone | replay protection用documentだけ削除。確定済みusageはbudget側に残す |
 
-`reserve()` もdefaultでは小さな件数のcleanupをbest-effortで試します。
+`reserve()` も自動cleanupをbest-effortで試します。
+
+defaultでは、1回に最大16件を対象にし、同じprocess内では少なくとも5秒間隔を空けます。
+
+このcleanupが失敗しても、余分なquotaが増える方向には倒れません。古いreservationが残って利用可能capacityが少なく見えるだけなので、authoritativeなreserve transaction自体は続行します。
 
 期限切れreservationを一定時間以内に確実に処理したい場合は、Cloud Schedulerやcronなどから `recoverExpired()` を定期実行してください。
 
