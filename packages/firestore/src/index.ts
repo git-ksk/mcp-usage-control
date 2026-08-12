@@ -59,10 +59,19 @@ export interface FirestoreTransactionLike {
   delete(reference: FirestoreDocumentReferenceLike): FirestoreTransactionLike;
 }
 
+/**
+ * Public structural boundary for an official server-side Firestore client.
+ *
+ * The callback parameter is deliberately broad because TypeScript cannot
+ * structurally assign the SDK's overloaded Transaction methods to the smaller
+ * adapter transaction interface through the higher-order runTransaction()
+ * signature. Adapter internals narrow the callback back to
+ * FirestoreTransactionLike via the private runTransaction() helper.
+ */
 export interface FirestoreLike {
-  collection(collectionPath: string): FirestoreCollectionReferenceLike;
+  collection(collectionPath: string): unknown;
   runTransaction<T>(
-    updateFunction: (transaction: FirestoreTransactionLike) => Promise<T>,
+    updateFunction: (transaction: any) => Promise<T>,
   ): Promise<T>;
 }
 
@@ -202,7 +211,7 @@ export class FirestoreUsageStore implements UsageStore {
     const reservationRef = this.reservations().doc(reservationId);
     const currentBudgetIds = budgets.map(budget => digest(budget.key));
 
-    const transactionResult = await this.firestore.runTransaction<ReserveTransactionResult>(
+    const transactionResult = await this.runTransaction<ReserveTransactionResult>(
       async transaction => {
         const existingSnapshot = await transaction.get(reservationRef);
         const existing = readReservation(existingSnapshot);
@@ -362,7 +371,7 @@ export class FirestoreUsageStore implements UsageStore {
     const reference = this.reservations().doc(input.reservationId);
     const outcomeHash = digest(input.outcome);
 
-    const transactionResult = await this.firestore.runTransaction<
+    const transactionResult = await this.runTransaction<
       | { ok: true; settlement: SettlementResult }
       | {
           ok: false;
@@ -515,7 +524,7 @@ export class FirestoreUsageStore implements UsageStore {
     ) => T,
   ): Promise<ActiveTransactionResult<T> | FailedActiveTransactionResult> {
     const reference = this.reservations().doc(reservationId);
-    const result = await this.firestore.runTransaction<
+    const result = await this.runTransaction<
       ActiveTransactionResult<T> | FailedActiveTransactionResult
     >(async transaction => {
       const snapshot = await transaction.get(reference);
@@ -555,7 +564,7 @@ export class FirestoreUsageStore implements UsageStore {
       return { kind: 'none', reservedUnits: 0 };
     }
     const reference = this.reservations().doc(reservationId);
-    return this.firestore.runTransaction<RecoveryResult>(async transaction => {
+    return this.runTransaction<RecoveryResult>(async transaction => {
       const snapshot = await transaction.get(reference);
       const reservation = readReservation(snapshot);
       if (!reservation || !this.isExpired(reservation, now)) {
@@ -612,12 +621,18 @@ export class FirestoreUsageStore implements UsageStore {
     });
   }
 
+  private runTransaction<T>(
+    updateFunction: (transaction: FirestoreTransactionLike) => Promise<T>,
+  ): Promise<T> {
+    return this.firestore.runTransaction(updateFunction);
+  }
+
   private budgets(): FirestoreCollectionReferenceLike {
-    return this.firestore.collection(`${this.prefix}_budgets`);
+    return this.firestore.collection(`${this.prefix}_budgets`) as FirestoreCollectionReferenceLike;
   }
 
   private reservations(): FirestoreCollectionReferenceLike {
-    return this.firestore.collection(`${this.prefix}_reservations`);
+    return this.firestore.collection(`${this.prefix}_reservations`) as FirestoreCollectionReferenceLike;
   }
 
   private nowMs(): number {

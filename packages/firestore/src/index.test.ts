@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UsageRequest } from 'mcp-usage-control';
+import type { Firestore } from '@google-cloud/firestore';
 import {
   FirestoreUsageStore,
   type FirestoreRecoveryEvent,
@@ -182,6 +183,13 @@ function request(operationId: string, principalId = 'user-a'): UsageRequest {
     args: {},
   };
 }
+
+// Compile-time contract: the official server Firestore client must be accepted
+// directly by the adapter constructor without a consumer-side cast.
+function assertServerClientTypeCompatibility(firestore: Firestore): void {
+  new FirestoreUsageStore(firestore);
+}
+void assertServerClientTypeCompatibility;
 
 describe('FirestoreUsageStore', () => {
   it('atomically enforces user and shared tenant budgets', async () => {
