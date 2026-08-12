@@ -23,11 +23,15 @@ If this is your first visit, read these in order:
 
 If you are unsure, start with the [store comparison in Getting started](getting-started.md#choosing-a-production-store).
 
+If you are implementing a custom store, read the **[Store implementation contract](store-contract.md)** and run the reusable conformance kits before claiming compatibility.
+
 ## Understand the design
 
 - [Project positioning](positioning.md) — the failure-safe transactional enforcement focus, competitive boundary, and what intentionally stays outside core.
 - [Architecture](architecture.md) — reserve/liability/settlement, multi-budget atomicity, and crash/retry safety.
 - [MCP protocol conformance](mcp-conformance.md) — the current protocol/SDK baseline, fresh-request multi-round proof, and horizontal-scale/session-affinity assumptions.
+- [MCP Tasks accounting](mcp-tasks-accounting.md) — the long-running task accounting state machine and its separation from business task/result replay.
+- [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
 - [API reference](api-reference.md) — public API and defaults for core, MCP, Redis, Cloudflare, and Firestore.
 - [Observability](observability.md) — lifecycle events, privacy, cardinality, and best-effort delivery.
 - [Roadmap](roadmap.md) — current priorities, MCP-native correctness work, and the boundary with billing, gateways, and other external systems.
