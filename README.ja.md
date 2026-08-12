@@ -4,104 +4,19 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**MCPサーバで、toolの利用回数や利用量の上限を安全に守るためのライブラリです。**
+**MCP tool実行のまわりで、利用枠をfailure-safeに予約・確定するためのtransactional usage enforcementライブラリです。**
 
-特に、同時実行・retry・長時間処理・process crashがある環境でも、利用枠を二重に使ってしまわないことを重視しています。
+同時実行、retry、長時間処理、process crash、MCP multi-round flowがあっても、単純な `check -> execute -> increment` で利用枠を二重消費しないことを重視しています。
 
-## 何を防ぐもの？
+このprojectが扱うのは **tool executionとusage accountingの境界**です。payment processor、financial ledger、subscription system、OAuth provider、generic gateway、workflow engine、一般的なHTTP rate limiterにはしません。
 
-たとえば、あるユーザーの残り利用回数が1回しかないとします。
-
-単純に「残り回数を確認 → tool実行 → 回数を減らす」という実装だと、2requestがほぼ同時に来たとき、両方が「まだ1回残っている」と判断して実行を始めることがあります。
-
-```text
-残り1回
-  ├─ request A → 「1回残ってる」→ 実行
-  └─ request B → 「1回残ってる」→ 実行
-
-結果: 1回しか残っていないのに2回実行される
-```
-
-`mcp-usage-control` は、toolを実行する**前**に利用枠を予約します。
-
-```text
-利用量を決める
-  ↓
-利用枠を予約する（reserve）
-  ↓
-実コストが発生する直前に markLiable()
-  ↓
-toolを実行
-  ↓
-実際に使った量を確定する（settle）
-```
-
-先に予約することで、同じ利用枠を複数requestが同時に使うことを防ぎます。
-
-## 何をしないライブラリ？
-
-このprojectが扱うのは、**tool実行と利用量管理の境界**です。
-
-次の機能そのものは提供しません。
-
-- 決済
-- 請求書発行
-- subscription販売
-- OAuth provider
-- MCP Gateway / proxy
-- 一般的なHTTP rate limiter
-
-既存の認証・billing・MCPサーバと組み合わせて使う想定です。
-
-## Package構成
-
-| Package | 役割 |
-| --- | --- |
-| `mcp-usage-control` | 本体。Policy、UsageControl、Memory Storeを含む |
-| `mcp-usage-control-mcp` | **MCPサーバのtool handlerを包むラッパー**。予約・heartbeat・settlementを自動化 |
-| `mcp-usage-control-redis` | Redisを利用状況の保存先にする |
-| `mcp-usage-control-cloudflare` | Cloudflare Durable Objectsを保存先にする |
-| `mcp-usage-control-firestore` | Firestoreを保存先にする |
-
-5 packageともESM / Node.js 20+です。
-
-### `mcp-usage-control-mcp` はproxyではない
-
-ここは名前だけだと分かりにくいですが、MCPクライアントとMCPサーバの間に置く中継サービスではありません。
-
-```text
-MCP Client
-   ↓
-MCP Server
-   ↓
-protectTool()  ← mcp-usage-control-mcp
-   ↓
-元のtool handler
-```
-
-MCPサーバ内で既存handlerを `protectTool()` で包み、次を自動化します。
-
-```text
-reserve
-  ↓
-markLiable
-  ↓
-heartbeat / renew
-  ↓
-元のhandlerを実行
-  ↓
-settle
-```
-
-詳しくは [MCPサーバへの組み込み](docs/mcp-integration.ja.md) を参照してください。
+> 初めてなら **[はじめに](docs/getting-started.ja.md)** からどうぞ。
 
 ## 現在の配布状況
 
 **まだnpmへ公開していません。**
 
-現在はrepositoryをcloneして使うか、ローカルで`.tgz` packageを作って別projectへinstallします。
-
-repositoryを確認するだけなら:
+現在はrepository checkoutまたはlocal tarballを使います。npm publicationは別のmanual operationとして明示的にdeferredしています。
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -110,28 +25,81 @@ pnpm install --frozen-lockfile
 pnpm check
 ```
 
-別projectへinstallする手順は [Source / local tarballから使う](docs/using-from-source.ja.md) を参照してください。
+別projectへのinstallは [Source / local tarballから使う](docs/using-from-source.ja.md) を参照してください。
 
-## 最小例
+要件は **Node.js 20+ / ESM**。CIではNode.js 20 / 22、Redis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
 
-まずはMemory Storeで試せます。
+## Core lifecycle
+
+```text
+principal -> policy -> quote -> atomic reserve -> mark liable -> execute -> settle
+                                      ^                           |
+                                      |---------- renew ----------|
+```
+
+reservationは `pending` で始まり、metered costが発生し得るworkの直前で `cost-liable` になります。
+
+- **pending** のままexpire: capacityを解放できる
+- **cost-liable** になった後にexpire: actual usageが不明ならfull reservationを保守的に保持
+
+execution開始後のprocess crashがautomatic refundにならない設計です。
+
+## 普通のrate limiterと何が違う？
+
+残り1 unitのとき、2 requestが両方
+
+```text
+remaining確認 -> paid work実行 -> counter加算
+```
+
+をすると、両方が同じ1 unitを見て実行開始できてしまいます。
+
+`mcp-usage-control` はadmissionとreservationをauthoritative Storeの1 transitionとして扱います。複数budgetを使う場合は **全部reserveするか、1つもreserveしない** 方式です。
+
+## Package構成
+
+| Package | 役割 |
+| --- | --- |
+| `mcp-usage-control` | Core policy / Store contract、lease、settlement、observability、Memory reference Store、Store conformance runner |
+| `mcp-usage-control-mcp` | MCP TypeScript SDK v2 wrapper、multi-round accounting、flow-store conformance runner |
+| `mcp-usage-control-redis` | Redis `UsageStore` + shared Redis MCP flow store |
+| `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
+| `mcp-usage-control-firestore` | server-side Firestore transactional Store |
+
+## v1検討時のstable / deferred境界
+
+| 領域 | 状態 | 境界 |
+| --- | --- | --- |
+| Core reserve / liability / renew / settle | **v1 stable候補** | failure-safe transaction contract |
+| Multi-budget / replay protection | **v1 stable候補** | atomic + logical operation単位 |
+| Redis / Cloudflare / Firestore Store | **v1 stable候補（provider constraint明記）** | durability / time / HA差は隠さない |
+| `protectTool()` | **v1 stable候補** | single-round MCP tool |
+| `protectMultiRoundTool()` | **v1 stable候補** | 現在対応する `input_required` accounting |
+| shared / durable MRTR compare-and-consume | **v1方針** | sticky MCP sessionなしのcross-instance resume |
+| first-class MCP Tasks wire/runtime adapter | **deferred / upstream experimental** | accounting semanticsは完成、stable adapterは未宣言 |
+| 新stateless MRTR claim mode | **deferred** | 現行shared one-time claimより明確な利点なし |
+| billing / financial ledger / workflow replay | **out of scope** | enforcement外 |
+
+詳しいblocker分類は **[v1.0 readiness review](docs/v1-readiness.ja.md)** にまとめています。
+
+## Multi-budget admission
+
+1回のinvocationを複数budgetへatomicに計上できます。
 
 ```ts
-import {
-  MemoryUsageStore,
-  UsageControl,
-  type UsagePolicy,
-} from 'mcp-usage-control';
+import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
 
 const policy: UsagePolicy = {
   quote(request) {
+    const tenant = request.principal.tenantId ?? 'personal';
     return {
       decision: 'allow',
-      units: 1,
-      budget: {
-        key: `user:${request.principal.id}:daily:2026-08-12`,
-        limit: 20,
-      },
+      units: request.tool === 'full_export' ? 5 : 1,
+      budgets: [
+        { key: `day:user:${request.principal.id}:2026-08-13`, limit: 20 },
+        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
+        { key: `month:tenant:${tenant}:2026-08`, limit: 2_000 },
+      ],
     };
   },
 };
@@ -139,43 +107,19 @@ const policy: UsagePolicy = {
 const control = new UsageControl(new MemoryUsageStore(), policy);
 ```
 
-この例では、1回のtool callで1 unit消費し、1ユーザーにつき1日20 unitまで許可します。
+どれか1つでもadmitできなければ、他budgetだけpartial reserveすることはありません。
 
-日付の切り替えはruntimeが自動判定しません。日次上限なら、上のように日付をbudget keyへ含めます。
+## Retryとlogical operation
 
-## 複数の利用上限を同時に守る
+replay protectionのscopeは次です。
 
-1回のtool callを、複数のbudgetへ同時に計上できます。
-
-たとえば:
-
-- ユーザーの日次上限
-- ユーザーの月次上限
-- tenant全体の月次上限
-
-```ts
-const policy: UsagePolicy = {
-  quote(request) {
-    const tenantId = request.principal.tenantId ?? 'personal';
-
-    return {
-      decision: 'allow',
-      units: 1,
-      budgets: [
-        { key: `day:user:${request.principal.id}:2026-08-12`, limit: 20 },
-        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
-        { key: `month:tenant:${tenantId}:2026-08`, limit: 2_000 },
-      ],
-    };
-  },
-};
+```text
+(tenantId, principal.id, tool, operationId)
 ```
 
-これらはまとめて判定されます。
+同じlogical invocationのretryではstableな `operationId` を使います。`operationId` はidempotency inputであり、authentication / authorization proofではありません。
 
-**全部予約できる場合だけ成功し、1つでも上限に達していれば1つも予約しません。**
-
-## Core APIを直接使う場合
+## Core APIを直接使う
 
 ```ts
 const admission = await control.reserve({
@@ -196,31 +140,19 @@ try {
   await admission.lease.settle(1, 'success');
   return result;
 } catch (error) {
-  await admission.lease.settle(
-    admission.lease.reservedUnits,
-    'error',
-  );
+  // metered cost 0を証明できる場合だけ0 settleにする
+  await admission.lease.settle(admission.lease.reservedUnits, 'error');
   throw error;
 }
 ```
 
-### `markLiable()` の意味
+長時間workではauthoritative executionが続く間leaseをrenewします。
 
-「ここから先は外部APIやDBなどの実コストが発生した可能性がある」と記録する境界です。
+admission成功時にはauthoritative Storeが算出した `remainingByBudget` も返ります。別layerでconfigured limitからremainingを再計算しないでください。
 
-`markLiable()` 前にreservationが期限切れになった場合は、予約した利用枠を戻せます。
+## MCP TypeScript SDK v2
 
-一方、`markLiable()` 後にprocessが落ちた場合は、本当にコストが発生していないとは言えないため、予約量を安全側に保持します。
-
-### `settle()` の意味
-
-予約した量と、実際に使った量との差を確定します。
-
-最大5 unitを予約して実際には3 unitしか使わなかった場合は、`settle(3, 'success')` として残り2 unitを戻せます。
-
-## MCPサーバへ組み込む
-
-single-round toolなら `protectTool()` でhandlerを包みます。
+### Single-round tool
 
 ```ts
 import { protectTool } from 'mcp-usage-control-mcp';
@@ -240,84 +172,138 @@ server.registerTool(
 );
 ```
 
-`protectTool()` が利用枠の予約、`markLiable()`、実行中のheartbeat、結果判定、`settle()` まで担当します。
+`protectTool()` はreserve、handler entry直前のliability、default heartbeat、normal success / MCP `{ isError: true }` / throwの分類、conservative settlementを担当します。ambiguous settlementをblind retryしません。
 
-途中で `input_required` を返して別requestで再開するmulti-round toolには `protectMultiRoundTool()` を使います。
+### Multi-round `input_required`
 
-詳しくは [MCPサーバへの組み込み](docs/mcp-integration.ja.md) を参照してください。
+fresh MCP requestをまたぐlogical operationには `protectMultiRoundTool()` を使います。
 
-## 本番ではどのStoreを選ぶ？
+- first roundで1回だけreserve
+- resumable leaseはserver-side保持
+- request stateはintegrity verification必須
+- trusted principal / optional tenant / tool / original args hashへbinding
+- matching resume flowをatomic one-time consume
+- new reservationではなく元leaseへreattach
+- replay / mismatch / expiry / corruption / ambiguous consumeはfail closed
 
-| Store | 向いている構成 | 主な注意点 |
-| --- | --- | --- |
-| Memory | test / local development | 1process内だけ。複数instanceでは共有不可 |
-| Redis | 高頻度、tenant共有quota、低latency | HA / persistenceの設計が必要 |
-| Cloudflare Durable Objects | Cloudflare中心 | Durable Objectが更新の集約点になる |
-| Firestore | Firebase / GCP、ユーザー単位quota中心 | 大きな共有budgetでは同じdocumentへの更新競合に注意 |
+`MemoryMcpUsageFlowStore` はtest / single-process専用です。horizontal scaleでは `RedisMcpUsageFlowStore` などshared / durable Storeを使います。
 
-詳しくは次を参照してください。
+**accountingのためにsticky MCP sessionは不要です。** 必要な`UsageStore` / flow stateをsharedにすればfresh requestが別instanceへ着地できます。
 
-- [Redis](docs/redis.ja.md)
-- [Cloudflare](docs/cloudflare.ja.md)
-- [Firestore](docs/firestore.ja.md)
+business side effectのidempotency / result replayはapplication側の責務です。usage-flow tokenをconsumeできたことはdestructive operationをblind replayしてよい証明ではありません。
 
-## Retryと二重計上
+詳しくは [MCP integration](docs/mcp-integration.ja.md) / [MCP protocol conformance](docs/mcp-conformance.ja.md) を参照してください。
 
-同じlogical operationをretryするときは、同じ `operationId` を使います。
+## MCP Tasks accounting
 
-replay protectionの範囲は次です。
+long-running Tasksのaccounting ruleはすでに定義済みです。
 
-```text
-(tenantId, principal.id, tool, operationId)
+- task IDと独立してlogical operationごとにreservation 1回
+- `working` だけでcost-liableとは判断しない
+- metered work直前にliability
+- authoritative workが続く間、または意図的なinput待ち中はserver-side renew
+- `tasks/cancel` ACKだけではcost 0 / refundを証明しない
+- pre-liability cancellationを証明できれば0 settle可能
+- liable crash / unknown usageはconservative
+- business task creation / result replayを `UsageStore` に入れない
+
+upstream TasksのTypeScript integration surfaceがまだexperimentalなため、**stableなfirst-class Tasks adapterは現在宣言していません**。詳しくは [MCP Tasks の利用量 accounting](docs/mcp-tasks-accounting.ja.md) を参照してください。
+
+## 本番Store
+
+### Redis
+
+```ts
+import { createClient } from 'redis';
+import { RedisUsageStore } from 'mcp-usage-control-redis';
+
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+const store = new RedisUsageStore(redis);
 ```
 
-`operationId` は認証情報ではありません。
+RedisはLuaでatomic transition、Redis server `TIME` でlease / tombstone判定を行います。ただしRedis atomicityはfinancial-ledger durabilityではありません。persistence / HAはdeployment要件に合わせて設計してください。
 
-principal / tenantは、認証済みsessionなど信頼できるserver-side情報から決めてください。
+### Cloudflare Durable Objects
+
+Durable Object + SQLite transaction domainを使います。外部applicationからのremote pathは明示authentication付きHTTPS gatewayです。network / timeout ambiguityはsurfaceし、blind retryしません。
+
+real deployed dogfoodでは主要accounting pathを検証済みですが、Issue #24にはreal platform operationの追加観測が2件残っています。すべてのCloudflare platform-limit条件でproduction-provenと過剰claimはしません。
+
+### Firestore
+
+server-side Firestore transactionでadmission / settlement / expiry recoveryを行います。lease timeはhost clock + configurable expiry graceで、強く共有されるbudget documentはcontention hotspotになり得ます。
+
+本番利用前に [Redis](docs/redis.ja.md) / [Cloudflare](docs/cloudflare.ja.md) / [Firestore](docs/firestore.ja.md) を確認してください。
+
+## Third-party Storeを実装する場合
+
+`UsageStore` のmethod名を実装しただけではsafeとは言えません。
+
+**[Store実装contract](docs/store-contract.ja.md)** と再利用可能なrunnerを使います。
+
+```ts
+import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
+```
+
+portable conformanceはbehavioral state-machine compatibilityを証明します。persistence、failover、authoritative time、lost-ACK behaviorはbackend固有のevidenceが別途必要です。
 
 ## Observability
 
-`UsageControl` に `UsageObserver` を設定すると、reserve、denial、settlement、policy / Store errorなど、core lifecycleのeventを受け取れます。
+`UsageObserver` はenforcement transaction外のstructured lifecycle eventです。observer failureがdeny/errorをallowへ変えたりsettlement stateを変更したりすることはありません。
 
-期限切れreservationの回収などStore固有のeventは、対応するStore側のobserverを併用します。
+raw tool arguments / exception messageは自動収集しません。unique principal / operation / reservation / budget IDをmetric labelへ昇格しないでください。`projectUsageEvent()` はlow-cardinalityな運用log projectionを提供します。
 
-observerは利用量を確定するtransactionそのものではなく、telemetryや分析向けです。
+observabilityはdurable billing ledgerではありません。
 
-詳しくは [Observability](docs/observability.ja.md) を参照してください。
+## Safety invariant
 
-## 本番導入前のポイント
-
-- principal / tenantをclient入力からそのまま信用しない
-- retryではstableな `operationId` を使う
-- 必要な日次・月次・tenant上限を同じquoteへ含める
-- toolの実行時間に合うTTL / renew設定にする
-- 実コストが発生していないと判断できる場合だけ0 unitでsettleする
-- Store障害時に「判定できないからallow」へfallbackしない
-- Storeのatomicityを金融帳簿そのものと同一視しない
+1. admission compare + reservationはauthoritative Storeの1 operation
+2. participating budgetは全部atomic reserve、または全部失敗
+3. replay identityは `(tenantId, principal.id, tool, operationId)`
+4. metered execution前に `markLiable()`
+5. pending expiryはrelease可、liable expiryはconservative retention
+6. long-running active leaseはrenewable
+7. `actualUnits <= reservedUnits`
+8. identical settlement replayはretention中idempotent、conflictはfail
+9. storage failureをallowへ変えない
+10. ambiguous state-changing outcomeをblind retryしない
+11. MCP multi-round resumeはintegrity-verified / binding-aware / one-time
+12. resumeで2個目のusage reservationを作らない
+13. client liveness / cancel ACKだけでrefund safeとは判断しない
+14. observability failureはenforcement stateを変えない
+15. business-operation replayとusage accountingを分離する
 
 ## ドキュメント
 
-初めて読む場合は次の順がおすすめです。
+- [はじめに](docs/getting-started.ja.md)
+- [Source / local tarballから使う](docs/using-from-source.ja.md)
+- [MCP integration](docs/mcp-integration.ja.md)
+- [MCP protocol conformance](docs/mcp-conformance.ja.md)
+- [MCP Tasks の利用量 accounting](docs/mcp-tasks-accounting.ja.md)
+- [Architecture](docs/architecture.ja.md)
+- [Store実装contract](docs/store-contract.ja.md)
+- [Redis](docs/redis.ja.md)
+- [Cloudflare](docs/cloudflare.ja.md)
+- [Firestore](docs/firestore.ja.md)
+- [Observability](docs/observability.ja.md)
+- [API reference](docs/api-reference.ja.md)
+- [Project positioning](docs/positioning.ja.md)
+- [Roadmap](docs/roadmap.ja.md)
+- [v1.0 readiness review](docs/v1-readiness.ja.md)
+- [Release policy](docs/releasing.ja.md)
 
-1. [はじめに](docs/getting-started.ja.md)
-2. [MCPサーバへの組み込み](docs/mcp-integration.ja.md)
-3. [Store別ガイド](docs/README.ja.md#利用状況の保存先を選ぶ)
-4. [Architecture](docs/architecture.ja.md)
-5. [API reference](docs/api-reference.ja.md)
+Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md) · [Support](SUPPORT.ja.md) · [Code of Conduct](CODE_OF_CONDUCT.ja.md)
 
-日本語ドキュメント一覧は [docs/README.ja.md](docs/README.ja.md) を参照してください。
+## Release boundary
 
-## Versioning / Release
+v0.2.0は既存のhistorical GitHub/source release boundaryとして固定します。v0.2.0後の変更はfuture releaseがexplicitにauthorizeされるまで `Unreleased` にだけ記録します。
 
-Versioningは [Semantic Versioning (SemVer)](https://semver.org/) に従います。
+current source treeは **v1.0 release-candidate / final-release準備へ進める状態** と評価していますが、このrepo stateだけでv1 tag / GitHub Releaseを作ることはありません。
 
-1.0未満ではminor releaseにbreaking changeを含む場合があります。その場合はrelease notesで明示します。
+**npm publicationは別途explicit authorizationが必要で、まだ実施していません。**
 
-詳しくは [Release policy](docs/releasing.ja.md) と [Changelog](CHANGELOG.ja.md) を参照してください。
+## License
 
-## Security / Support
-
-- [Security policy](SECURITY.ja.md)
-- [Support](SUPPORT.ja.md)
-- [Contributing](CONTRIBUTING.ja.md)
-- [License](LICENSE)
+Apache-2.0

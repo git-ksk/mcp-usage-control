@@ -1,6 +1,10 @@
-# API reference — v0.1
+# API reference — current source
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
+
+This reference describes the public source-tree API after v0.2.0. Post-v0.2.0 additions remain `Unreleased` until a future release is explicitly authorized.
+
+For behavioral/failure guarantees, read [Architecture](architecture.md) and [Store implementation contract](store-contract.md). For the stable/deferred v1 boundary, read [v1.0 readiness review](v1-readiness.md).
 
 ## `mcp-usage-control`
 
@@ -14,7 +18,7 @@ interface Principal {
 }
 ```
 
-Trusted accounting identity supplied by the application. It is not an authentication primitive.
+Trusted accounting identity supplied by the application. It is not an authentication primitive. Derive it from authenticated/authorized server-side state.
 
 ### `UsageRequest<TArgs>`
 
@@ -27,7 +31,13 @@ interface UsageRequest<TArgs = unknown> {
 }
 ```
 
-Replay protection is scoped by `(tenantId, principal.id, tool, operationId)`. Use a stable `operationId` across retries of one logical invocation.
+Replay protection is scoped by:
+
+```text
+(tenantId, principal.id, tool, operationId)
+```
+
+Use one stable `operationId` for retries of one logical invocation. It is an idempotency input, not identity proof.
 
 ### `Budget`
 
@@ -38,7 +48,7 @@ interface Budget {
 }
 ```
 
-A policy-defined accounting bucket. Keys must be non-empty strings. Limits are non-negative safe integers. For daily/monthly windows, encode the window explicitly into the key.
+`key` must be non-empty and `limit` a non-negative safe integer. Window semantics are application policy; encode daily/monthly window identity into the key when needed.
 
 ### `UsageQuote` / `UsagePolicy`
 
@@ -63,7 +73,9 @@ interface UsagePolicy {
 }
 ```
 
-`budgets` is the v0.1 multi-budget form. Admission reserves the same quoted units against every listed budget atomically. The one-budget `budget` form is a convenience alias. Empty lists and duplicate budget keys are rejected.
+`budgets` is the multi-budget form. The same quoted units are reserved against every participating budget atomically. `budget` is a convenience form for one budget. Empty lists and duplicate budget keys are rejected.
+
+Policy denial reasons may reach observability; use bounded non-secret reason codes rather than unrestricted diagnostic text.
 
 ### `UsageStore`
 
@@ -82,31 +94,24 @@ interface UsageStore {
 }
 ```
 
-Production implementations must make multi-budget admission all-or-nothing and preserve the lifecycle/failure invariants in [Architecture](architecture.md).
+A production implementation must preserve atomic admission, replay, liability, renewal, expiry, settlement, and fail-closed semantics. Method-shape compatibility alone is not enough; see [Store implementation contract](store-contract.md).
 
-### `UsageObserver` / `UsageEvent`
+### Store-side reserve result
+
+An accepted store reservation includes:
 
 ```ts
-interface UsageObserverHandler {
-  onEvent(event: UsageEvent): void | Promise<void>;
+{
+  accepted: true;
+  reservation: ReservationRecord;
+  remainingByBudget: Array<{
+    key: string;
+    remaining: number;
+  }>;
 }
-
-type UsageObserver = UsageObserverHandler | undefined;
 ```
 
-The v0.1 event union contains:
-
-- `reserve.accepted`
-- `reserve.denied`
-- `settlement.completed`
-- `reservation.recovered`
-- `operation.error`
-
-Observer delivery is best-effort and outside the enforcement outcome. `onEvent()` is invoked inline, but a returned promise is not awaited. Keep synchronous callback work lightweight and offload network/durable I/O. Synchronous observer throws and asynchronous promise rejections are swallowed and never change admission/settlement state. Tool arguments and raw exception messages are not captured automatically.
-
-`UsageEventMetadata` is an explicit opt-in `Record<string, string | number | boolean | null>`.
-
-See [Observability](observability.md) for event fields, privacy/cardinality guidance, replay deduplication, Redis aggregate recovery behavior, and delivery guarantees.
+A denied result is one of the Store-defined denial reasons, currently `quota_exceeded` or `duplicate_operation`. `quota_exceeded` may include the limiting budget and remaining units.
 
 ### `UsageControl`
 
@@ -121,17 +126,31 @@ new UsageControl(store, policy, {
 });
 ```
 
-Default reservation TTL: `60_000` ms. The numeric third-argument form remains source-compatible.
+Default reservation TTL: `60_000` ms. The numeric third argument remains source-compatible.
 
-`reserve(request)` evaluates policy, validates/canonicalizes budgets, calls the store for atomic admission, and emits configured runtime lifecycle events. A metadata callback is explicit opt-in and its failure is ignored rather than affecting enforcement.
+Main methods:
 
-`resumeLease(state)` reattaches to an already-reserved lease without calling `policy.quote()` or `store.reserve()` again. It accepts only trusted server-side `UsageLeaseResumeState`; the next renew/settle still uses the underlying store as the authoritative state check.
+```ts
+await control.reserve(request)
+control.resumeLease(state)
+```
+
+`reserve()` evaluates policy, canonicalizes budgets, performs atomic Store admission, and returns `AdmissionResult`.
+
+`resumeLease()` reattaches to an already-created reservation from trusted server-side `UsageLeaseResumeState`. It does not call `policy.quote()` or `store.reserve()` again; subsequent Store operations remain authoritative.
 
 ### `AdmissionResult`
 
 ```ts
 type AdmissionResult =
-  | { allowed: true; lease: UsageLease }
+  | {
+      allowed: true;
+      lease: UsageLease;
+      remainingByBudget: Array<{
+        key: string;
+        remaining: number;
+      }>;
+    }
   | {
       allowed: false;
       reason: string;
@@ -140,7 +159,7 @@ type AdmissionResult =
     };
 ```
 
-Store denial reasons are `quota_exceeded` and `duplicate_operation`. `quota_exceeded` can identify the limiting budget and its remaining units. Policy denials use the policy-provided reason. Because policy denial reasons can be emitted to observers, applications should use bounded non-secret reason codes rather than free-form diagnostic text.
+`remainingByBudget` is copied from the authoritative Store result. Consumers should not recompute it from configured limits. Budget keys may be sensitive/high-cardinality; expose them only under explicit application policy.
 
 ### `ReservationRecord`
 
@@ -168,7 +187,7 @@ interface UsageLeaseResumeState {
 }
 ```
 
-Serializable state for a trusted server-side suspend/resume workflow. It is not a client credential. Do not expose the raw structure to an untrusted client; use an integrity-protected opaque reference and retain the actual lease state server-side.
+Trusted server-side resumable accounting state. It is not a client credential or bearer token. Do not expose the raw structure to an untrusted client.
 
 ### `UsageLease`
 
@@ -182,13 +201,12 @@ await lease.renew(ttlMs?)
 await lease.settle(actualUnits, outcome)
 ```
 
-`markLiable()` declares entry into the metered execution boundary. Pending expiry can release reservation capacity; cost-liable expiry conservatively retains the full charge.
+- `markLiable()` declares entry into the cost-bearing execution boundary.
+- `renew()` extends an active pending or liable lease.
+- `settle()` is terminal and requires `0 <= actualUnits <= reservedUnits`.
+- `toResumeState()` returns detached trusted server-side resume state.
 
-`renew()` extends an active lease. `settle()` finalizes the same actual unit count across all budgets participating in the reservation. v0.1 requires `actualUnits <= reservedUnits`.
-
-`toResumeState()` returns a detached snapshot suitable for trusted server-side flow storage. Reattach it with `UsageControl.resumeLease()`; doing so does not quote or reserve a second time.
-
-When configured through `UsageControl`, lease errors and successful settlement emit observer events. Observer failure never changes the lease result.
+Expired pending reservations may release capacity. Expired liable reservations conservatively retain the full reserved charge when actual usage is unknown.
 
 ### `SettlementResult`
 
@@ -202,7 +220,7 @@ interface SettlementResult {
 }
 ```
 
-Identical settlement replay is idempotent during tombstone retention. A conflicting actual-unit/outcome replay fails. Calling an identical idempotent settlement again can emit another identical `settlement.completed` event; downstream consumers that require de-duplication can key on `(reservationId, actualUnits, outcome)`. Observability is not a durable ledger.
+Identical replay is idempotent while the Store retains the tombstone. A conflicting replay with different units or outcome fails.
 
 ### `MemoryUsageStore`
 
@@ -213,14 +231,60 @@ new MemoryUsageStore({
 })
 ```
 
-Process-local reference store for tests and development. Default settled replay tombstone retention: `86_400_000` ms (24 hours).
+Process-local reference implementation for tests and local development. Default settled replay retention: 24 hours.
 
-Pending expired operations release all participating budgets and become reusable. Cost-liable expiry consumes the full reservation and leaves a bounded settled tombstone. With an observer, the memory store emits per-reservation `reservation.recovered` events.
+It is not a horizontally durable production Store.
+
+### `UsageObserver` / `UsageEvent`
+
+```ts
+interface UsageObserverHandler {
+  onEvent(event: UsageEvent): void | Promise<void>;
+}
+
+type UsageObserver = UsageObserverHandler | undefined;
+```
+
+Lifecycle event types currently include:
+
+- `reserve.accepted`
+- `reserve.denied`
+- `settlement.completed`
+- `reservation.recovered`
+- `operation.error`
+
+Observer delivery is best-effort and outside the enforcement transaction. Returned promises are not awaited; synchronous throws and asynchronous rejections do not change accounting outcomes.
+
+`UsageEventMetadata` is an explicit opt-in `Record<string, string | number | boolean | null>`.
+
+### `projectUsageEvent()`
+
+Projects raw lifecycle events into a low-cardinality operational shape. The default projection excludes identity IDs, operation/reservation IDs, tool/budget identifiers, unrestricted settlement outcomes, and application-defined denial text.
+
+This is observability, not the transactional ledger.
 
 ### Core errors
 
-- `UsageStateError` — invalid/expired/conflicting store or resume state.
-- `UsageDeniedError` — programmatic `.reason`; generic thrown message to avoid accidental disclosure through MCP SDK error conversion.
+- `UsageStateError` — invalid, expired, missing, or conflicting Store/resume state.
+- `UsageDeniedError` — programmatic denial reason with a deliberately generic thrown message.
+
+## `mcp-usage-control/conformance`
+
+Post-v0.2.0 source adds a public conformance subpath:
+
+```ts
+import {
+  runUsageStoreConformance,
+  assertUsageStoreConformance,
+  UsageStoreConformanceError,
+  type UsageStoreConformanceHarness,
+  type UsageStoreConformanceReport,
+} from 'mcp-usage-control/conformance';
+```
+
+The portable runner covers provider-neutral behavior including multi-budget atomicity, concurrent admission, replay scope, liability idempotency, renewal, settlement replay/conflict, invalid-settlement non-corruption, and pending/liable expiry.
+
+Passing it establishes **behavioral compatibility**, not persistence/HA, authoritative-time, failover, or lost-ACK safety. Those require backend-specific evidence.
 
 ## `mcp-usage-control-mcp`
 
@@ -242,25 +306,21 @@ interface ProtectToolOptions<TArgs, TResult> {
 }
 ```
 
-For tools with no input schema, `noInput: true` is required. For input-schema tools, omit it or use false. In no-input mode the wrapper normalizes both the SDK public `(ctx)` callback shape and the observed runtime `({}, ctx)` dispatch to `args === undefined` for policy/hooks/application handler.
+For tools with no input schema, use `noInput: true`.
 
 ### `protectTool(options, handler)`
 
-Wraps a **single-round** MCP TypeScript SDK v2 tool handler with admission and settlement.
+Single-round MCP TypeScript SDK v2 wrapper.
 
 Behavior:
 
-- reserve before the handler;
-- `markLiable()` immediately before application handler entry;
-- heartbeat enabled by default while the handler runs;
-- normal result -> `successUnits` or full reservation;
-- `{ isError: true }` -> `toolErrorUnits` or full reservation;
-- thrown exception -> `errorUnits` or full reservation;
-- invalid/throwing classifier -> full conservative settlement, then `UsageClassificationError`;
-- settlement failure -> `UsageSettlementError`, without blind retry;
-- `resultType: 'input_required'` -> conservative settlement, then `UnsupportedMcpUsageFlowError`.
-
-Use `protectMultiRoundTool()` rather than `protectTool()` for supported multi-round `input_required` accounting.
+- reserve before handler execution;
+- `markLiable()` immediately before handler entry;
+- heartbeat enabled by default;
+- normal success / MCP `{ isError: true }` / thrown exception classified separately;
+- invalid/throwing classifier -> conservative full settlement, then classification error;
+- settlement failure -> surfaced without blind retry;
+- `input_required` -> unsupported in this single-round wrapper; use `protectMultiRoundTool()`.
 
 ### `McpUsageRequestStatePayload`
 
@@ -271,7 +331,7 @@ interface McpUsageRequestStatePayload {
 }
 ```
 
-Decoded payload expected from the MCP server's configured `requestState.verify` hook. The wire value should be minted by an integrity-protected codec such as the official SDK `createRequestStateCodec()`. A raw client-controlled string is rejected by `protectMultiRoundTool()`.
+The wrapper accepts this only after the MCP server request-state verification hook has decoded/verified the wire value. Raw client-controlled state fails closed.
 
 ### `McpUsageFlowBinding`
 
@@ -284,7 +344,7 @@ interface McpUsageFlowBinding {
 }
 ```
 
-Trusted binding compared server-side before a suspended flow is claimed. `argsHash` is a SHA-256 hash of canonicalized validated tool arguments.
+`argsHash` binds resume to canonicalized validated original arguments.
 
 ### `McpUsageFlowRecord` / `McpUsageFlowStore`
 
@@ -308,11 +368,11 @@ interface McpUsageFlowStore {
 }
 ```
 
-`consume()` is security-critical. It must atomically compare the current trusted binding and consume a matching flow exactly once. A mismatched caller must get no record **without deleting the legitimate flow**.
+`consume()` must atomically compare principal/tenant/tool/args binding and consume a matching flow once. Mismatch must not consume the legitimate flow.
 
 ### `MemoryMcpUsageFlowStore`
 
-Process-local reference implementation of `McpUsageFlowStore`. Use it for tests or a single-process server and instantiate it outside any per-request `createMcpHandler` factory. Horizontally scaled servers need a shared/durable implementation with the same atomic compare-and-consume contract.
+Process-local reference flow store. Use only for tests/single-process servers. Instantiate it outside per-request handler factories.
 
 ### `McpUsageFlowContext`
 
@@ -324,7 +384,7 @@ interface McpUsageFlowContext {
 }
 ```
 
-Passed as the third application-handler argument by `protectMultiRoundTool()`. `round` starts at `0`; the first resumed request is `1`. `operationId` is the original first-round logical ID. If the application returned its own `requestState` in the preceding `input_required` result, the wrapper retains it server-side and exposes it here instead of trusting it from the client wire value.
+`round` begins at 0. A handler-authored application request state is retained server-side and exposed on the next resumed round through this context.
 
 ### `ProtectMultiRoundToolOptions<TArgs, TResult>`
 
@@ -346,33 +406,43 @@ interface ProtectMultiRoundToolOptions<TArgs, TResult>
 }
 ```
 
-`suspendTtlMs` is required. It bounds how long a cost-liable suspended lease is held before conservative expiry recovery. `flowId` is primarily a testing/customization hook; the default uses cryptographically random IDs.
-
 ### `protectMultiRoundTool(options, handler)`
 
-Opt-in MCP v2 multi-round wrapper.
+Opt-in `input_required` multi-round accounting wrapper.
 
-Behavior:
+- first round reserves once and enters liability before application execution;
+- suspension renews to `suspendTtlMs` and stores trusted flow state server-side;
+- resumed requests require verified request state and binding-aware one-time flow consumption;
+- resume uses `UsageControl.resumeLease()` rather than a second quote/reserve;
+- missing/replayed/expired/mismatched state fails closed;
+- `maxRounds` bounds repeated suspension;
+- final settlement uses the same conservative classification rules as `protectTool()`.
 
-- first round derives principal/operation ID, reserves once, and marks the lease liable;
-- `input_required` stops the active heartbeat, renews for `suspendTtlMs`, stores a trusted server-side flow record, and returns a wrapper-owned signed/opaque `requestState`;
-- resumed rounds require a verified decoded request-state payload and atomic binding-aware flow consumption;
-- resumed rounds call `UsageControl.resumeLease()` and renew the authoritative underlying reservation instead of quoting/reserving again;
-- a one-time resume token permits only one handler re-entry; replayed/expired/missing/mismatched state fails closed with `McpUsageResumeError`;
-- `maxRounds` bounds repeated suspension; exceeding it conservatively settles the full reservation and raises `McpUsageRoundsExceededError`;
-- final success/tool-error/throw classification and settlement use the same rules as `protectTool()`.
-
-The wrapper prevents double reservation and duplicate application re-entry for the same resume token. It does not provide a general exactly-once side-effect guarantee or completed-business-result cache/replay; applications should retain their existing business idempotency/reconciliation for destructive or externally metered work.
-
-See [MCP integration](mcp-integration.md) for the official SDK request-state setup and trust-boundary guidance.
+The wrapper is not a generic exactly-once side-effect/result-replay system.
 
 ### MCP adapter errors
 
-- `UsageSettlementError` — includes `settlementError` and optional `executionError`.
-- `UsageClassificationError` — includes `classificationError` and optional `executionError`.
-- `UnsupportedMcpUsageFlowError` — single-round `protectTool()` boundary error for `input_required`.
-- `McpUsageResumeError` — missing, expired, replayed, mismatched, or unverified multi-round resume state.
-- `McpUsageRoundsExceededError` — repeated `input_required` exceeded configured `maxRounds` after conservative full settlement.
+- `UsageSettlementError`
+- `UsageClassificationError`
+- `UnsupportedMcpUsageFlowError`
+- `McpUsageResumeError`
+- `McpUsageRoundsExceededError`
+
+## `mcp-usage-control-mcp/conformance`
+
+```ts
+import {
+  runMcpUsageFlowStoreConformance,
+  assertMcpUsageFlowStoreConformance,
+  McpUsageFlowStoreConformanceError,
+  type McpUsageFlowStoreConformanceHarness,
+  type McpUsageFlowStoreConformanceReport,
+} from 'mcp-usage-control-mcp/conformance';
+```
+
+The portable runner covers one-time consume, binding-mismatch preservation, concurrent one-winner consume, duplicate suspend rejection, and expiry rejection.
+
+Backend durability and lost-consume-ACK behavior remain implementation-specific evidence requirements.
 
 ## `mcp-usage-control-redis`
 
@@ -382,7 +452,7 @@ See [MCP integration](mcp-integration.md) for the official SDK request-state set
 new RedisUsageStore(client, options?)
 ```
 
-The client must provide an `eval(script, { keys, arguments })` method compatible with `RedisEvalClient`.
+`client` provides an `eval(script, { keys, arguments })` method compatible with `RedisEvalClient`.
 
 ### `RedisUsageStoreOptions`
 
@@ -401,35 +471,49 @@ Defaults:
 - `prefix`: `muc`
 - `hashTag`: `usage`
 - `cleanupBatchSize`: `256`
-- `idempotencyTtlMs`: `86_400_000` (24 hours)
+- `idempotencyTtlMs`: 24 hours
 
-The v0.1 Redis store uses one transaction domain containing a used-budget hash, a global lease expiry index, reservation records, operation mappings, and tombstones. Budget IDs and operation identities are hashed before storage identifiers are created.
+The Store uses one Redis Lua transaction domain for multi-budget admission/lifecycle state and Redis server `TIME` for lease/tombstone decisions.
 
-Lua obtains Redis server `TIME` for lease and tombstone decisions. Multi-budget reserve, release, expiry recovery, renew and settlement do not loop single-budget operations client-side.
+### `mcp-usage-control-redis/mcp-flow`
 
-When `observer` is configured, lazy cleanup emits aggregate `reservation.recovered` events for pending-release and liable-retention recovery. It does not persist raw principal, tenant, tool, or budget strings solely for telemetry. Directly touching an expired reservation can emit its opaque hashed reservation ID.
+```ts
+import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
+```
 
-See [Redis adapter](redis.md) and [Observability](observability.md) for durability, Redis Cluster, privacy, and telemetry constraints.
+Shared Redis flow store for horizontally scaled MCP multi-round accounting. It atomically compares a SHA-256 binding digest and deletes a matching flow in one Lua invocation. Per-flow keys share a Redis Cluster hash slot; unrelated flows may distribute across slots.
+
+Redis persistence/HA remains deployment-specific.
 
 ## `mcp-usage-control-cloudflare`
 
 ### `CloudflareUsageStore`
 
-Worker-local `UsageStore` backed by a Durable Object namespace. Options include `domainName`, `cleanupBatchSize`, `idempotencyTtlMs`, and `observer`. One `domainName` is one atomic transaction domain.
+Worker-local `UsageStore` backed by one Durable Object transaction domain.
 
 ### `RemoteCloudflareUsageStore`
 
-HTTP `UsageStore` for applications outside Cloudflare. `endpoint` is required; non-local endpoints must use HTTPS. Optional request headers can be supplied directly or by callback. `timeoutMs` is a full-call deadline covering async header resolution, fetch, and response decoding. Timeout/network failures surface as `CloudflareUsageTransportError` and are not automatically retried. Non-auth HTTP failures remain `code: 'remote'` and may expose only bounded numeric `status` metadata; response bodies are not propagated.
+HTTP Store for applications outside Cloudflare. Non-local endpoints require HTTPS. Optional request headers may be static or callback-based. `timeoutMs` bounds the full remote call.
+
+Timeout/network/ambiguous remote failures are surfaced as transport errors and are not automatically retried. Response bodies are not propagated through transport errors.
 
 ### `createCloudflareUsageStoreGateway()`
 
-Creates the Worker HTTP handler used by the remote store. An application-defined `authorize(request)` callback is mandatory. The gateway accepts only the hashed accounting protocol produced by the adapter and returns generic failures rather than raw Durable Object exceptions.
+Creates the authenticated Worker gateway for the remote Store. Application-defined `authorize(request)` is mandatory; there is no unauthenticated default.
 
-### `UsageControlDurableObject`
+### `mcp-usage-control-cloudflare/worker`
 
-Exported from `mcp-usage-control-cloudflare/worker`. Uses SQLite transactions for atomic multi-budget reserve, liability, renewal, settlement, replay protection, and expiry recovery.
+Exports the Durable Object implementation, including `UsageControlDurableObject` and versioned Worker entry points used by deployment code.
 
-See [Cloudflare adapter](cloudflare.md) for deployment and trust-boundary details.
+### `mcp-usage-control-cloudflare/reconciliation`
+
+Exports explicit read-only reserve-ACK reconciliation helpers for supported ambiguous remote reserve outcomes. Reconciliation must not create additional quota.
+
+### `mcp-usage-control-cloudflare/maintenance`
+
+Exports explicitly authorized historical-budget maintenance/pruning helpers. Maintenance authority is separate from routine usage authority.
+
+See [Cloudflare adapter](cloudflare.md) for exact deployment APIs and trust boundaries.
 
 ## `mcp-usage-control-firestore`
 
@@ -439,7 +523,7 @@ See [Cloudflare adapter](cloudflare.md) for deployment and trust-boundary detail
 new FirestoreUsageStore(firestore, options?)
 ```
 
-`firestore` is a server-side Firestore client satisfying the adapter's structural contract. `@google-cloud/firestore` `Firestore` is supported directly; Firebase Admin `getFirestore()` returns that same server `Firestore` type.
+`firestore` is a server-side Firestore client satisfying the adapter structural contract.
 
 ### `FirestoreUsageStoreOptions`
 
@@ -458,36 +542,40 @@ interface FirestoreUsageStoreOptions {
 Defaults:
 
 - `collectionPrefix`: `muc`
-- `idempotencyTtlMs`: `86_400_000` (24 hours)
+- `idempotencyTtlMs`: 24 hours
 - `cleanupBatchSize`: `16`
 - `cleanupIntervalMs`: `5_000`
 - `expiryGraceMs`: `5_000`
 
-`now` is a test hook; production normally uses `Date.now()`. Unlike the Redis adapter, Firestore lease/tombstone arithmetic therefore uses the application-host clock plus `expiryGraceMs`, so production hosts must be time-synchronized.
+`now` is a test hook. Production normally uses host time plus `expiryGraceMs`; production hosts must be time-synchronized.
 
-The adapter stores hashed operation/budget identifiers, performs all-or-nothing multi-budget admission in one Firestore transaction, keeps active `markLiable()` / `renew()` traffic on the reservation document, and recovers expired pending/liable/tombstone state conservatively.
+The adapter hashes operation/budget identifiers for document IDs, performs all-or-nothing admission in Firestore transactions, and recovers pending/liable state conservatively.
 
 ### `recoverExpired(limit?)`
 
-Runs bounded explicit expiry recovery and returns `FirestoreRecoverySummary` with pending/liable counts and units plus deleted tombstones. `reserve()` also performs throttled best-effort cleanup unless `cleanupBatchSize` is `0`.
+Runs bounded explicit recovery and returns a `FirestoreRecoverySummary`. `reserve()` may also run throttled best-effort cleanup depending on configuration.
 
-`FirestoreRecoveryObserver` receives adapter-local best-effort `reservation.recovered` events for pending release and liable retention. Observer failure never changes enforcement state.
+Shared tenant/global budget documents can become contention hotspots. See [Firestore adapter](firestore.md).
 
-Shared tenant/global budgets intentionally serialize on one budget document and can become contention hotspots. See [Firestore adapter](firestore.md) for document layout, contention, cleanup, clock, cost, and deployment guidance.
+## MCP Tasks support boundary
+
+The source tree does not currently export a stable first-class Tasks protocol adapter.
+
+The safe accounting state machine is defined in [MCP Tasks accounting](mcp-tasks-accounting.md) and proof-tested using existing core lease primitives. Stable protocol integration remains deferred while the upstream TypeScript Tasks surface is experimental.
+
 ## Numeric validation
 
-- units and limits: non-negative JavaScript safe integers;
-- TTL/retention durations: positive safe integers;
-- settlement/classifier result: non-negative safe integer and `<= reservedUnits`.
+- units / limits: non-negative JavaScript safe integers;
+- TTL / retention values: positive safe integers;
+- settlement/classifier units: non-negative safe integers and `<= reservedUnits`.
 
-## Compatibility for v0.1
+## Compatibility
 
 - Node.js 20+
-- ESM packages
-- `@modelcontextprotocol/server` v2; CI currently resolves `2.0.0`
-- Redis 7 integration tests
-- node-redis `redis` 6.2.x
-- `@google-cloud/firestore` server-client compatibility; Firestore Emulator integration currently validates 8.7.0
-- Firebase Admin `getFirestore()` uses the same server `Firestore` type
+- ESM
+- MCP TypeScript SDK v2; current conformance uses the `2026-07-28` protocol line and SDK 2.0.0 path
+- Redis 7 integration behavior; node-redis 6.2.x in CI
+- Cloudflare Workers / SQLite Durable Objects local workerd integration plus documented deployed dogfood evidence
+- Firestore Emulator integration and `@google-cloud/firestore` 8.7.0 type/runtime compatibility evidence
 
-Pre-1.0 minor releases may intentionally change APIs; breaking changes are called out in release notes.
+The project remains pre-v1 until a separately authorized v1 release. The current source API is assessed as ready for v1 release-candidate/final-release preparation; see [v1.0 readiness review](v1-readiness.md).

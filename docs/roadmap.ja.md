@@ -1,143 +1,147 @@
 # Roadmap
 
-このRoadmapは、projectのcore categoryである **MCP execution boundaryにおけるfailure-safeなtransactional usage enforcement** を守るためのものです。
-
-core lifecycleは、一般的なrequest rate limiting、実行後usage metering、general-purposeなagent budget platformとは意図的に異なります。
+このRoadmapは、projectのcore categoryである **MCP execution boundaryのfailure-safe transactional usage enforcement** を守るためのものです。
 
 ```text
 quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 ```
 
-広いintegrationより先に、このtransaction modelのcorrectnessを優先します。戦略上の境界は [Project positioning](positioning.ja.md) を参照してください。
+このprojectはgeneric agent-budget、gateway、billing、governance、workflow productへ広げるのではなく、この境界のcorrectnessを深くします。戦略上の境界は [Project positioning](positioning.ja.md) を参照してください。
 
-## Strategic direction
+## v1 readiness status
 
-generic agent-budget、gateway、billing、governance productへ広げるのではなく、correctness guaranteeを深くする方針です。
+v0.2後のcorrectness programは、v1.0 release-candidate / final-release準備へ進める状態まで完了しました。詳細な監査とblocker分類は [v1.0 readiness review](v1-readiness.ja.md) にまとめています。
 
-特に維持・強化する差別化は次です。
+v1判断前に完了したもの:
 
-- metered execution前のatomic admission;
-- 明示的な `pending -> cost-liable` boundary;
-- execution開始後のconservativeなcrash / expiry behavior;
-- lost / ambiguous acknowledgementの安全な扱い;
-- logical operationのidempotent replayとconflicting settlement rejection;
-- duplicate reservationを作らないMCP-native retry / multi-round continuity;
-- 独立して検証できるprovider-neutralなStore semantics。
+- current MCP `2026-07-28` / TypeScript SDK v2のfresh-request multi-round proof
+- principal / tenant / tool / args binding付きone-time resumeとambiguous consumeのfail closed
+- sticky MCP sessionなしでshared / durable compare-and-consumeを使うv1 MRTR方針の確定
+- long-running MCP Tasks accounting semantics + core proof test
+- usage accountingとbusiness task/result replayの明示分離
+- third-party `UsageStore` / `McpUsageFlowStore` のnormative safety contract
+- reusable portable conformance runner + package / clean-consumer検証
+- public API / export / version、built-in Store、security、horizontal scale、Node support、CI、release / npm workflow監査
+- README / API docs同期とstable / experimental / deferred境界の明示
 
-より広いplatformはdashboard、pricing catalog、組織横断governance、routing、payment flow、multi-language agent integrationなどを提供できます。それらは隣接領域ですが、このruntimeのroadmap templateにはしません。
+現時点で、v1前に新しいruntime機能や再設計を必須とするknown correctness blockerはありません。
 
 ## Current priorities
 
-1. **Production multi-round hardening** — `input_required` suspend / resume accountingは実装済みで、current-protocol proofによりsticky MCP sessionが不要なことも確認済みです。v1では現行のshared / durable compare-and-consume flow stateを採用し、新しいstateless MRTR modeはより強い安全性・運用上の利点をproofできるまでdeferredとします。Issue #41 / #63で追跡します。
-2. **MCP Tasks accounting** — long-running accounting state machineは定義・core proof testまで完了しました。upstream Tasks extension / TypeScript surfaceがexperimentalな間はfirst-class protocol adapterをdeferredとし、stable supportとは宣伝しません。Issue #63で追跡します。
-3. **Third-party Store invariant kit** — 外部Storeが同じmethod名を実装しただけでなくsemantic compatibilityを実証できるよう、projectのcorrectness contractを実行可能なtest kitにします。
-4. **Production-readiness audit** — public API / export / version、Store invariant、security、horizontal scale、tarball / clean-consumer、Node support、CI / release、TODO / Issue、breaking-change候補をv1判定前に最終監査します。
-5. **Real Cloudflare operational evidence** — deployed Durable Objects adapterについて、残っているcredential rotationと実platform-limit / failure観測を完了します。Issue #24で追跡し、残件が本当にv1 blockerかも明示的に分類します。
-6. **Public package contract review / npm publication** — first registry publicationは明示的にgateしたままにし、publish直前にregistry-facing contract / metadataを最終確認します。Issue #6で追跡します。現在のv1-readiness reviewにnpm publicationは不要で、manual / deferredを維持します。
-7. **Failure semantics documentation** — crash recovery、lost / ambiguous ACK、cost liability、multi-round claim / recovery、task lifetime、reconciliation expectationをarchitecture / adapter docsで明示し続けます。
+1. **Release-candidate / API-freeze mechanics** — explicit authorization後にexact release commitを選び、5 packageを同時versioning、intended `Unreleased` entryだけをv1 sectionへ移動、full package/integration matrix、long-lived public name / semanticsの最終確認を行います。通常のreadiness workではtag / releaseしません。
+2. **Cloudflare operational evidence (#24)** — documented real credential rotationを実行し、genuine platform-limit / overload / Free-plan exhaustion eventを安全に観測できた場合にcaptureします。post-v1 operational evidenceでありprovider-neutral core blockerではありません。Issueを閉じるためだけにshared Free-plan quotaを意図的に消費しません。
+3. **First npm publication (#6)** — manual / deferredを維持します。registry publicationはsource readinessと別操作で、別途explicit authorizationが必要です。
+4. **Failure semantics maintenance** — upstream protocol / provider変化に合わせ、crash recovery、ACK ambiguity、liability、cancellation、multi-round claim / recovery、Tasks lifetime、reconciliation、Store-specific durability assumptionを明示し続けます。
+5. **Observer / event compatibility** — current event / log typeをAPI-freeze review対象として扱います。standalone wire-schema/version fieldは、実際のexternal telemetry / billing adapter需要が出た場合だけSemVerに従って追加し、enforcement transaction外を維持します。
 
 ## MCP-native correctness
 
-protocol-specificな機能は、execution boundaryのaccounting safetyを変える場合にこのprojectへ入れます。
+protocol固有機能はexecution boundaryのaccounting safetyを変える場合だけcoreへ入れます。
 
 ### Multi-round request / response
 
-fresh MCP requestをまたぐ場合でも、1つのlogical operationに対してusage reservationは1つだけ維持します。client経由でround-tripするrequest stateはintegrity verificationを通し、trustedなserver-side principal / tool / argument identityへ再bindingしてからaccounting stateをresumeします。
+**v1方針**は現行shared / durable flow claim + atomic compare-and-consumeです。
 
-**v1方針**は、atomic compare-and-consumeを持つ現行のshared / durable flow claimです。この方式ですでに、fresh requestが別server instanceへ着地してもsticky MCP sessionなしでresumeできます。
+維持するinvariant:
 
-将来stateless-friendlyなresume designを採用する場合も、少なくとも次を維持・proofできることが条件です。
+- logical operationごとにreservation 1回
+- client round-trip request stateのintegrity verification
+- trusted principal / tenant / tool / args binding
+- one-time resume claim
+- mismatch時に正当なstateを保持
+- ambiguous consume ACKのfail closed
+- sticky MCP session不要
+- execution開始後のconservative liability behavior
 
-- logical operationあたり1 reservation;
-- 必要な箇所のone-time resume / claim behavior;
-- ambiguous state transitionのfail-closed handling;
-- trusted principal / tenant / tool / args binding;
-- execution開始後のconservative liability semantics。
+新しいstateless / client-carried claim designは、concurrency / ACK ambiguity下で同じinvariantをproofし、具体的なoperational advantageを示せるまでdeferredです。
 
-stateless transportだからaccountingまでstatelessである必要はありません。atomic quota enforcementにshared stateが必要なら利用します。一方で不要なMCP session affinityやgeneric workflow stateは持ち込みません。
+stateless transportはstateless accountingを意味しません。
 
 ### MCP Tasks
 
-long-running Tasksのaccounting state machineは [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) に定義し、`packages/core/src/task-accounting-proof.test.ts` で既存primitiveに対してproofします。
+[MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) で次を定義・proof済みです。
 
-明示したcontractは次です。
+- task IDと独立してlogical operationごとに1 admission / reservation
+- `working` から推測せずmetered work直前にliability
+- authoritative execution / intentional input wait中のrenewal
+- completion / failure / cancellation / abandonment / worker crash
+- ambiguous reserve / liability / renew / settlementのconservative handling
+- cooperative cancellation ACKだけではrefundしない
+- business operationをblind replayしないreconciliation
+- task / result / worker ownershipを `UsageStore` から分離
 
-- task IDと独立したlogical operationあたり1 admission / reservation;
-- task statusからliabilityを推測せず、metered work直前をcost-liable boundaryにする;
-- active execution / 意図した `input_required` wait中のlease renewal;
-- completion / failure / cancellation / abandonment / worker crash;
-- ambiguous reserve / liability / renew / settlement ACKの保守的な扱い;
-- cooperative cancellation ACKだけではoptimistic refundしない;
-- business operationをblind replayしないreconciliation;
-- task / result / worker stateをusage ledgerから分離する。
+新しいcore primitiveは不要です。upstream TypeScript Tasks extension surfaceがexperimentalな間、first-class Tasks protocol integrationは **deferred / experimental** です。boundaryが変わるまでstable Tasks adapter supportとは宣伝しません。
 
-新しいcore runtime primitiveは不要です。upstream extensionがexperimentalな間はfirst-class MCP Tasks adapterをdeferredとします。public API / docsでstableなprotocol-level Tasks supportを主張しない限り、これはv1 accounting blockerではありません。
+## Third-party Store contract
 
-## Third-party Store invariant kit
+予定していたinvariant kitは実装済みです。詳しくは [Store実装contract](store-contract.ja.md)。
 
-usage-store contractを実装するthird-party Store向けに、再利用可能なcompatibility test kitを提供します。少なくとも以下を実証できないStoreはcompatibleと主張しない前提にします。
+portable runner:
 
-- atomicなall-or-nothing multi-budget reservation;
-- idempotent replay behavior;
-- pending / cost-liableを区別したexpiry recovery;
-- 必要な場合のrenewable / resumable lease behavior;
-- conflicting settlement rejection;
-- fail-closed storage behavior;
-- 必要な場合のauthoritative store-time model;
-- ambiguous reserve / settlement outcomeの安全な扱い。
+```ts
+import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
+```
 
-このkitでは、concurrency、retry、crash、expiry、ACK ambiguity下でのcorrectnessというprojectの差別化を実際に検証できるようにします。
+compatibleと主張するStoreは、対象に応じて少なくとも次をproofする必要があります。
 
-## Stable enforcement event contract
+- atomic all-or-nothing multi-budget admission
+- concurrent admission correctness
+- logical-operation replay semantics
+- idempotent liability / settlement replay
+- pending / liableを区別したexpiry recovery
+- renewable / resumable state
+- conflicting settlement rejection
+- binding-aware one-time MCP flow consume
+- invalid / corrupt stateのfail closed
 
-observer / event schemaをversion化し、telemetry / billing adapterがtransaction resultへ影響せずenforcement outcomeを利用できるようにします。
+portable runner合格はproduction-safe claimの必要条件ですが十分条件ではありません。backend-specific durability、failover、authoritative time、lost-ACK evidenceが別途必要です。
 
-observer / exporter failureがadmission / settlement stateを変更できない境界は維持します。
+## External billing / metering
 
-## External billing / metering adapter
-
-次の境界を明示的に維持します。
+境界を次のまま維持します。
 
 ```text
 transactional enforcement core
-        -> stable observer/event contract
+        -> best-effort observer / stable package API
         -> optional billing/telemetry adapter
 ```
 
-外部billingやMCP metering specificationは、balance、entitlement、price、invoice、receipt、usage eventなど、coreとは異なるguaranteeを持つconceptを定義する可能性があります。adapterでstableなenforcement outcomeを外部schemaへ変換することはできますが、外部terminology / semanticsによって次を弱めたり置き換えたりしません。
+外部billing schemaがbalance、price、invoice、receipt、eventなど別guaranteeを持っても、次を弱めたり置き換えたりしません。
 
-- atomic admission;
-- reservation;
-- cost-liability state;
-- idempotency;
-- lease / expiry recovery;
-- ambiguous settlementの保守的な扱い。
+- atomic admission
+- reservation
+- cost-liability state
+- idempotency
+- lease / expiry recovery
+- ambiguous settlementのconservative handling
 
-semanticsが本当に同等でない限り、外部billing protocolに似せる目的だけでcore conceptをrenameしません。
+financial-grade ledgerが必要なら別system boundaryに置きます。
 
-## Policy example
+## Post-v1 candidates
 
-以下のようなatomic combinationについてproduction-oriented exampleを追加します。
+具体的なuser / integration需要があり、stable transaction modelを維持できる場合だけ追加します。
 
-- user daily + monthly budget;
-- user + tenant budget;
-- toolごとのweighted unit;
-- free / paid entitlement policy input;
-- 必要な場合に別のdurable financial ledgerへreconcileする構成。
+- standalone versioned telemetry / event wire schema
+- optional external billing / metering adapter
+- additional production policy example
+- upstream stabilizes後のfirst-class MCP Tasks adapter
+- equivalent one-time / ambiguity proofを持つalternative MRTR claim representation
+- 同じconformance / failure contractを満たすadditional provider Store
 
 ## Non-goals
 
 core runtimeは以下にはしません。
 
-- generic agent runtime / agent budget authority;
-- generic HTTP / API rate limiter;
-- payment processor / subscription checkout system;
-- OAuth / identity provider;
-- billing dashboard / pricing catalog;
-- financial-grade ledger;
-- gateway / router product;
-- vendor billing protocolそのもののimplementation;
-- arbitraryなbusiness side effectをreplayするworkflow engine;
-- ambiguousなstate-changing settlement callをblind retryするsystem。
+- generic agent runtime / budget authority
+- generic HTTP / API rate limiter
+- payment processor / subscription checkout system
+- OAuth / identity provider
+- billing dashboard / pricing catalog
+- financial-grade ledger
+- gateway / router product
+- vendor billing protocolそのもののimplementation
+- arbitrary business side effectをreplayするworkflow engine
+- ambiguous state-changing operationをblind retryするsystem
 
-これらとのintegrationは、明示的なadapter / policy boundaryで扱います。
+これらとのintegrationはexplicit adapter / policy boundaryで扱います。
