@@ -175,6 +175,12 @@ jobs:
             fi
           done
           version="$(node -p "require('./packages/core/package.json').version")"
+          core_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-${version}.tgz")"
+          grep -qx 'package/dist/store-conformance.js' <<<"$core_listing"
+          grep -qx 'package/dist/store-conformance.d.ts' <<<"$core_listing"
+          mcp_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-mcp-${version}.tgz")"
+          grep -qx 'package/dist/flow-store-conformance.js' <<<"$mcp_listing"
+          grep -qx 'package/dist/flow-store-conformance.d.ts' <<<"$mcp_listing"
           cloudflare_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-cloudflare-${version}.tgz")"
           grep -qx 'package/dist/worker.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/worker.d.ts' <<<"$cloudflare_listing"
@@ -210,8 +216,10 @@ jobs:
             --ignore-scripts
           node --input-type=module <<'NODE'
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
+          import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
           import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
           import { protectTool } from 'mcp-usage-control-mcp';
+          import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
           import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
           import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
@@ -226,8 +234,10 @@ jobs:
           if (![
             MemoryUsageStore,
             UsageControl,
+            assertUsageStoreConformance,
             FirestoreUsageStore,
             protectTool,
+            assertMcpUsageFlowStoreConformance,
             RedisUsageStore,
             RedisMcpUsageFlowStore,
             CloudflareUsageStore,
