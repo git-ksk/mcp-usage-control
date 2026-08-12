@@ -61,10 +61,11 @@ protectTool()
 
 ## 仕組みを詳しく知りたい
 
+- [Project positioning](positioning.ja.md) — failure-safeなtransactional enforcementへ集中する理由、競争上の境界、coreへ入れないもの
 - [Architecture](architecture.ja.md) — reserve、`markLiable()`、settle、retry、crash時の考え方
 - [API reference](api-reference.ja.md) — core / MCP / Redis / Cloudflare / Firestoreのpublic API
 - [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics
-- [Roadmap](roadmap.ja.md) — 今後の方向性と外部billing / telemetryとの境界
+- [Roadmap](roadmap.ja.md) — current priority、MCP-native correctness、外部billing / gateway等との境界
 
 ## 運用・リリース
 
