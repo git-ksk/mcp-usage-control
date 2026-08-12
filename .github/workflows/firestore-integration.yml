@@ -33,6 +33,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter mcp-usage-control build
       - run: pnpm --filter mcp-usage-control-firestore build
       - name: Run Firestore adapter against Local Emulator Suite
         shell: bash
