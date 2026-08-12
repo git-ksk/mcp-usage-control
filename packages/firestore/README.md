@@ -13,7 +13,7 @@ const store = new FirestoreUsageStore(getFirestore());
 const control = new UsageControl(store, policy);
 ```
 
-The adapter keeps the Firebase / Google Cloud SDK outside its runtime dependency graph by accepting the server Firestore client structurally. It provides transactional multi-budget admission, pending/cost-liable expiry recovery, idempotent settlement, hashed document identifiers, and provider-neutral recovery events.
+The adapter keeps the Firebase / Google Cloud SDK outside its runtime dependency graph by accepting the server Firestore client structurally. It provides transactional multi-budget admission, pending/cost-liable expiry recovery, idempotent settlement, hashed document identifiers, and adapter-local best-effort recovery observer events.
 
 Important production constraints:
 
