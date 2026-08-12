@@ -20,7 +20,7 @@ pnpm check
 - Redis adapterのtest / 利用ではRedis 7
 - Cloudflare専用integration pathを実行する場合のみWrangler / workerd
 
-## 2. 4 packageをローカルpack
+## 2. 5 packageをローカルpack
 
 repository rootで実行します。
 
@@ -31,6 +31,7 @@ pnpm --dir packages/core pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/mcp pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/redis pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/cloudflare pack --pack-destination "$PWD/.packs"
+pnpm --dir packages/firestore pack --pack-destination "$PWD/.packs"
 ```
 
 次のtarballが生成されます。
@@ -40,6 +41,7 @@ pnpm --dir packages/cloudflare pack --pack-destination "$PWD/.packs"
 .packs/mcp-usage-control-mcp-0.1.0.tgz
 .packs/mcp-usage-control-redis-0.1.0.tgz
 .packs/mcp-usage-control-cloudflare-0.1.0.tgz
+.packs/mcp-usage-control-firestore-0.1.0.tgz
 ```
 
 現時点では、このtarballが将来のnpm packageに最も近い利用形態です。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証します。
@@ -80,7 +82,18 @@ npm install \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz
 ```
 
-4 packageすべて:
+Core + Firestore adapter（実利用ではserver-side Firestore clientを1つ選択）:
+
+```console
+npm install \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.1.0.tgz \
+  firebase-admin
+```
+
+`firebase-admin` の代わりに `@google-cloud/firestore` も利用できます。adapterはどちらもruntime dependencyとしてbundleしません。
+
+5 packageすべて:
 
 ```console
 npm install \
@@ -88,6 +101,7 @@ npm install \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.1.0.tgz \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.1.0.tgz \
   /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.1.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.1.0.tgz \
   @modelcontextprotocol/server@2.0.0 \
   redis@6.2.0
 ```
@@ -100,8 +114,9 @@ import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
 import { protectTool } from 'mcp-usage-control-mcp';
 import { RedisUsageStore } from 'mcp-usage-control-redis';
 import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
+import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
 
-if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore].every(Boolean)) {
+if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, CloudflareUsageStore, RemoteCloudflareUsageStore, FirestoreUsageStore].every(Boolean)) {
   throw new Error('mcp-usage-control local package import failed');
 }
 
@@ -121,7 +136,7 @@ runtime自体を変更するときはrepository内で作業し、次を実行し
 pnpm check
 ```
 
-in-memory storeはtest / local development向けです。distributed enforcementの確認ではRedis adapterまたはCloudflare専用workerd integration workflowを使います。
+in-memory storeはtest / local development向けです。distributed enforcementの確認ではRedis adapter、Cloudflare専用workerd integration workflow、またはFirestore Emulator integration workflowを使います。
 
 ## npm公開後
 

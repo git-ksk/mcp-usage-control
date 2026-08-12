@@ -12,7 +12,7 @@ payment processor、MCP Gateway、OAuth provider、billing dashboard、一般的
 
 ## 現在の配布状況
 
-**packageはまだnpmへ公開していません。** 初回registry publishが完了するまでは、repository checkoutまたはローカルでpackしたtarballを使ってください。現時点では `mcp-usage-control` / `mcp-usage-control-mcp` / `mcp-usage-control-redis` / `mcp-usage-control-cloudflare` をregistryからinstallできる前提にはしていません。
+**packageはまだnpmへ公開していません。** 初回registry publishが完了するまでは、repository checkoutまたはローカルでpackしたtarballを使ってください。現時点では `mcp-usage-control` / `mcp-usage-control-mcp` / `mcp-usage-control-redis` / `mcp-usage-control-cloudflare` / `mcp-usage-control-firestore` をregistryからinstallできる前提にはしていません。
 
 sourceからの簡易確認:
 
@@ -62,8 +62,9 @@ reservationは最初 `pending` です。metered execution直前に `cost-liable`
 - **`mcp-usage-control-mcp`** — `@modelcontextprotocol/server` v2 single-round toolに加え、opt-inの `input_required` suspend/resume accountingへ対応するadapter。
 - **`mcp-usage-control-redis`** — LuaとRedis server timeを使うatomic Redis store。optionalなexpiry-recovery observabilityにも対応。
 - **`mcp-usage-control-cloudflare`** — Cloudflare Durable Objects + SQLite store。Worker-localとauthenticated remote-client pathを提供。
+- **`mcp-usage-control-firestore`** — server-side Firestore transactionを使うstore。multi-budget admission、expiry recovery、Firestore固有のcontention guidanceを提供。
 
-4 packageともESM / Node.js 20+です。
+5 packageともESM / Node.js 20+です。
 
 ## Atomic multi-budget admission
 
@@ -272,6 +273,7 @@ Worker設定、privacy、cleanup / cost behavior、GCP等からの利用は [Clo
 - [Architecture / invariant](docs/architecture.ja.md)
 - [Redis adapter](docs/redis.ja.md)
 - [Cloudflare adapter](docs/cloudflare.ja.md)
+- [Firestore adapter](docs/firestore.ja.md)
 - [Roadmap](docs/roadmap.ja.md)
 - [API reference](docs/api-reference.ja.md)
 - [Release policy](docs/releasing.ja.md)
