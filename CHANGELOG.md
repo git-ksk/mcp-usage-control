@@ -6,7 +6,9 @@ All notable project changes are recorded here.
 
 ## Unreleased
 
-No unreleased changes yet.
+### Changed
+
+- Added project positioning and roadmap guidance after v0.2.0 to sharpen the failure-safe transactional usage-enforcement boundary and track post-v0.2 MCP-native correctness work. These documentation changes are not part of the v0.2.0 source release.
 
 ## [0.2.0] - 2026-08-12
 
