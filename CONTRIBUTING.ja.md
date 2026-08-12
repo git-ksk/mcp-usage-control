@@ -21,6 +21,8 @@ pnpm check
 
 CIではNode.js 20 / 22、実Redis 7、MCP SDK v2 protocol integration behaviorをtestします。
 
+`docs/**` とMarkdown (`*.md`) だけを変更したPRでは、Required check名を維持したまま軽量pathを使い、Redis起動・Node/pnpm setup・dependency install・test・package pack・clean consumer installを省略します。Markdown以外の変更が1つでも含まれる場合はfull CIを実行します。
+
 ## Repository layout
 
 ```text
