@@ -159,7 +159,7 @@ export class FirestoreUsageStore implements UsageStore {
   private readonly cleanupBatchSize: number;
   private readonly cleanupIntervalMs: number;
   private readonly expiryGraceMs: number;
-  private readonly observer?: FirestoreRecoveryObserver;
+  private readonly observer: FirestoreRecoveryObserver | undefined;
   private readonly now: () => number;
   private lastCleanupStartedAt = Number.NEGATIVE_INFINITY;
 
