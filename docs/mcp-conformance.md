@@ -61,13 +61,13 @@ Stateless transport therefore does **not** mean stateless accounting. The goal i
 
 These guarantees are coupled. In particular, replacing the shared flow claim with client-carried state alone would not by itself prove one-time consume or safe handling of a lost consume acknowledgement.
 
-## Stateless-friendly MRTR decision
+## Stateless-friendly MRTR decision for v1
 
-No new stateless MRTR resume mode is introduced by this proof.
+**The v1 direction is the existing shared/durable compare-and-consume design. No new stateless MRTR resume mode is planned for the v1 boundary.**
 
 The current design already achieves the deployment property that matters here: fresh protocol requests may land on different server instances without sticky MCP session affinity. It does so by keeping the minimum authoritative flow claim in shared server-side state.
 
-A future stateless-friendly representation should only be adopted if it can demonstrate the same properties under concurrency and acknowledgement ambiguity:
+A client-carried or otherwise stateless-friendly representation would still need to prove, under concurrency and acknowledgement ambiguity:
 
 - one reservation per logical operation;
 - trusted principal / tenant / tool / args binding;
@@ -75,12 +75,24 @@ A future stateless-friendly representation should only be adopted if it can demo
 - no blind handler re-entry after an ambiguous claim acknowledgement;
 - unchanged cost-liable and crash-expiry behavior.
 
-Until such a mechanism has a stronger proof than the existing shared compare-and-consume design, adding it would increase surface area without improving the accounting contract.
+There is currently no demonstrated correctness or operational advantage that justifies replacing the shared claim with a more complex mechanism. Adding one before v1 would increase surface area without improving the accounting contract. It is therefore **deferred**, not a v1 blocker.
 
-## Tasks remain separate
+## Tasks accounting
 
-This work does not add first-class MCP Tasks support. Task lifetime, renewal, cancellation, abandonment, settlement, and worker-loss semantics must be defined as an accounting state machine before implementation claims are made.
+The long-running Tasks accounting state machine is now defined separately in [MCP Tasks accounting](mcp-tasks-accounting.md).
 
-Task/business-result replay also remains outside the usage ledger. Usage accounting may prove whether quota was reserved, became liable, and was settled; it must not become a generic workflow engine for replaying arbitrary business side effects.
+The accounting contract preserves the existing core invariants:
 
-See [Architecture](architecture.md) for the core failure semantics and [Roadmap](roadmap.md) for the remaining Tasks and MCP-native work.
+- one reservation per logical operation, independent of task ID;
+- `markLiable()` immediately before metered work may begin rather than inferring liability from `working`;
+- server-side renewal across long-running `working` / `input_required` periods;
+- no refund merely because `tasks/cancel` was acknowledged;
+- pending worker loss releases on expiry while liable worker loss conservatively retains the reservation;
+- identical terminal settlement replay may be idempotent while conflicting replay fails closed;
+- business task creation/result replay and worker ownership remain outside `UsageStore`.
+
+`packages/core/src/task-accounting-proof.test.ts` exercises these semantics using the existing lease/store primitives. No new core runtime API is required.
+
+As of 2026-08-13, the `io.modelcontextprotocol/tasks` extension and its TypeScript integration surface remain separate from the stable TypeScript SDK core and are explicitly experimental upstream. The project therefore does **not** claim a stable first-class MCP Tasks adapter yet. This is an integration boundary, not an accounting blocker for v1, provided the README/package docs continue to label protocol-level Tasks support as deferred/experimental.
+
+See [Architecture](architecture.md) for the core failure semantics and [Roadmap](roadmap.md) for the remaining v1-readiness work.
