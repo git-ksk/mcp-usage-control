@@ -2,11 +2,11 @@
 
 Core package for concurrency-safe MCP usage enforcement. MCP and storage vendor independent.
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-0.1.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-0.2.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
 
 ## English
 
-The v0.1 core provides policy quoting, **atomic multi-budget admission**, pending -> cost-liable transitions, renewable leases, explicit settlement, scoped idempotency, provider-neutral observability hooks, and `MemoryUsageStore` as the reference implementation.
+The v0.2 core provides policy quoting, **atomic multi-budget admission**, pending -> cost-liable transitions, renewable leases, explicit settlement, scoped idempotency, provider-neutral observability hooks, and `MemoryUsageStore` as the reference implementation.
 
 ```text
 reserve -> markLiable -> execute -> settle
@@ -42,7 +42,7 @@ Authentication, payments/billing, MCP SDK integration, and production storage be
 
 ## 日本語
 
-v0.1 coreはpolicy quote、**atomic multi-budget admission**、pending -> cost-liable transition、renewable lease、explicit settlement、scoped idempotency、provider-neutral observability hook、reference implementationの `MemoryUsageStore` を提供します。
+v0.2 coreはpolicy quote、**atomic multi-budget admission**、pending -> cost-liable transition、renewable lease、explicit settlement、scoped idempotency、provider-neutral observability hook、reference implementationの `MemoryUsageStore` を提供します。
 
 ```text
 reserve -> markLiable -> execute -> settle
