@@ -9,7 +9,69 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_full: ${{ steps.scope.outputs.run_full }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Detect docs-only changes
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$BEFORE_SHA"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo "run_full=true" >> "$GITHUB_OUTPUT"
+            echo "No usable base SHA; running full CI conservatively."
+            exit 0
+          fi
+
+          mapfile -t changed < <(git diff --name-only "$base" "$GITHUB_SHA")
+
+          if (( ${#changed[@]} == 0 )); then
+            echo "run_full=true" >> "$GITHUB_OUTPUT"
+            echo "No changed paths detected; running full CI conservatively."
+            exit 0
+          fi
+
+          run_full=false
+          for path in "${changed[@]}"; do
+            case "$path" in
+              docs/*|*.md)
+                ;;
+              *)
+                run_full=true
+                break
+                ;;
+            esac
+          done
+
+          echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
+          printf 'Changed paths:\n'
+          printf '  %s\n' "${changed[@]}"
+
+          if [[ "$run_full" == "true" ]]; then
+            echo "At least one non-documentation path changed; running full CI."
+          else
+            echo "Documentation-only change; skipping the Node/Redis/package matrix."
+          fi
+
   test:
+    needs: changes
+    if: needs.changes.outputs.run_full == 'true'
     strategy:
       matrix:
         node: [20, 22]
