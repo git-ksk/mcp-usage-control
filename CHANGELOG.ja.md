@@ -11,6 +11,8 @@
 - v0.2.0後の変更としてproject positioning / roadmap guidanceを追加し、failure-safeなtransactional usage-enforcementの境界とpost-v0.2 MCP-native correctness workを明確化しました。これらのdocumentation changeはv0.2.0 source releaseには含めません。
 - MCP `2026-07-28` / SDK `2.0.0` に対するexplicit conformance proofを追加し、fresh-request multi-round retryとcross-handler resumeでもreservationが1回であること、horizontal scaleではshared accounting / flow stateは必要でもsticky MCP sessionは不要であることを記録しました。Tasks supportと新しいstateless MRTR resume modeは、別途failure semanticsをproofするまで引き続き保留します。
 - long-running MCP Tasksのaccounting state machineを定義・proof test化し、liability、renewal、completion / failure / cancellation、abandonment、worker crash、ambiguous ACK、reconciliationまで明示しました。v1のMRTR方針は現行shared / durable compare-and-consumeを維持し、upstream extensionがexperimentalな間はfirst-class Tasks protocol integrationをdeferredとします。
+- third-party `UsageStore` / `McpUsageFlowStore` 向けnormative safety contractと、再利用可能な `mcp-usage-control/conformance` / `mcp-usage-control-mcp/conformance` runnerを追加しました。CIでpublic subpathのtarball / clean-consumer importを検証し、provider-specific durability / failover / ACK evidenceはportable behavioral conformanceと分離します。
+- v1-readiness auditを完了し、README / API / roadmapをcurrent source boundaryへ同期しました。source/APIはv1 release-candidate / final-release準備へ進める状態と評価し、#24のCloudflare real-platform観測残件と#6のfirst npm publicationをexplicit non-blocking / deferredに分類しました。この作業ではv1 tag / GitHub Release / npm publishを実施しません。
 
 ## [0.2.0] - 2026-08-12
 
