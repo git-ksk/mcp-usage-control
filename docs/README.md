@@ -25,10 +25,11 @@ If you are unsure, start with the [store comparison in Getting started](getting-
 
 ## Understand the design
 
+- [Project positioning](positioning.md) — the failure-safe transactional enforcement focus, competitive boundary, and what intentionally stays outside core.
 - [Architecture](architecture.md) — reserve/liability/settlement, multi-budget atomicity, and crash/retry safety.
 - [API reference](api-reference.md) — public API and defaults for core, MCP, Redis, Cloudflare, and Firestore.
 - [Observability](observability.md) — lifecycle events, privacy, cardinality, and best-effort delivery.
-- [Roadmap](roadmap.md) — future direction and the boundary with billing, telemetry, and other external systems.
+- [Roadmap](roadmap.md) — current priorities, MCP-native correctness work, and the boundary with billing, gateways, and other external systems.
 
 ## Operations and releases
 
