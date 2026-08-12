@@ -66,40 +66,59 @@ jobs:
           if [[ "$run_full" == "true" ]]; then
             echo "At least one non-documentation path changed; running full CI."
           else
-            echo "Documentation-only change; skipping the Node/Redis/package matrix."
+            echo "Documentation-only change; using the lightweight required-check path."
           fi
 
   test:
     needs: changes
-    if: needs.changes.outputs.run_full == 'true'
     strategy:
       matrix:
         node: [20, 22]
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 2s
-          --health-timeout 2s
-          --health-retries 10
     env:
       REDIS_URL: redis://127.0.0.1:6379
     steps:
+      - name: Documentation-only fast path
+        if: needs.changes.outputs.run_full != 'true'
+        run: echo "Documentation-only change; heavy Node/Redis/package checks are not required."
+
       - uses: actions/checkout@v6
+        if: needs.changes.outputs.run_full == 'true'
+
       - uses: pnpm/action-setup@v4
+        if: needs.changes.outputs.run_full == 'true'
         with:
           version: 10.15.0
+
       - uses: actions/setup-node@v6
+        if: needs.changes.outputs.run_full == 'true'
         with:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
+
       - run: pnpm install --frozen-lockfile
+        if: needs.changes.outputs.run_full == 'true'
+
+      - name: Start Redis
+        if: needs.changes.outputs.run_full == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name muc-redis -p 6379:6379 redis:7-alpine >/dev/null
+          for attempt in {1..30}; do
+            if docker exec muc-redis redis-cli ping 2>/dev/null | grep -qx PONG; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs muc-redis >&2 || true
+          exit 1
+
       - run: pnpm check
+        if: needs.changes.outputs.run_full == 'true'
+
       - name: Pack public packages with npm
+        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -116,7 +135,9 @@ jobs:
             packages/redis/package.json \
             packages/cloudflare/package.json \
             packages/firestore/package.json
+
       - name: Verify package contents
+        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -152,7 +173,9 @@ jobs:
           grep -qx 'package/dist/maintenance.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance.d.ts' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance-protocol.js' <<<"$cloudflare_listing"
+
       - name: Install tarballs in a clean consumer project
+        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -199,3 +222,7 @@ jobs:
             throw new Error('public package import smoke test failed');
           }
           NODE
+
+      - name: Stop Redis
+        if: always() && needs.changes.outputs.run_full == 'true'
+        run: docker rm --force muc-redis >/dev/null 2>&1 || true

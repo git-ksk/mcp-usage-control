@@ -81,6 +81,12 @@ protectTool()
 - [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md) — Durable Objects Store
 - [`mcp-usage-control-firestore`](../packages/firestore/README.md) — Firestore Store
 
+## CIについて
+
+`docs/**` とMarkdown (`*.md`) だけを変更したPull Requestでは、CIは変更範囲を判定したあと、Required check名を維持するため `test (20)` / `test (22)` を軽量pathで終了します。
+
+この場合はRedis起動、checkout、Node.js / pnpm setup、dependency install、test、package pack、clean consumer installを実行しません。source code、workflow、package manifest、lockfile、configなどMarkdown以外の変更が1つでも含まれる場合は、従来どおりfull CIを実行します。
+
 ## Project policies
 
 - [Contributing](../CONTRIBUTING.ja.md)
