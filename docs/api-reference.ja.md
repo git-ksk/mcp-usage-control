@@ -1,6 +1,10 @@
-# API reference — v0.1
+# API reference — current source
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
+
+このreferenceはv0.2.0後のcurrent source treeにあるpublic APIを説明します。v0.2.0後の追加は、future releaseがexplicitにauthorizeされるまで `Unreleased` のままです。
+
+behavior / failure guaranteeは [Architecture](architecture.ja.md) / [Store実装contract](store-contract.ja.md)、v1 stable / deferred境界は [v1.0 readiness review](v1-readiness.ja.md) を参照してください。
 
 ## `mcp-usage-control`
 
@@ -14,7 +18,7 @@ interface Principal {
 }
 ```
 
-applicationが渡すtrustedなaccounting identityです。authentication primitiveではありません。
+applicationが渡すtrusted accounting identityです。authentication primitiveではありません。認証・認可済みのserver-side stateからderiveしてください。
 
 ### `UsageRequest<TArgs>`
 
@@ -27,7 +31,13 @@ interface UsageRequest<TArgs = unknown> {
 }
 ```
 
-replay protectionは `(tenantId, principal.id, tool, operationId)` 単位です。同じlogical invocationのretryではstableな `operationId` を使います。
+replay protectionのscope:
+
+```text
+(tenantId, principal.id, tool, operationId)
+```
+
+同じlogical invocationのretryでは1つのstable `operationId` を使います。identity proofではなくidempotency inputです。
 
 ### `Budget`
 
@@ -38,7 +48,7 @@ interface Budget {
 }
 ```
 
-policy-defined accounting bucketです。keyはnon-empty string、limitはnon-negative safe integerです。daily/monthly windowは明示的にkeyへ含めます。
+`key` はnon-empty、`limit` はnon-negative safe integerです。daily / monthly windowはapplication policyの責務なので、必要ならwindow identityをkeyへ含めます。
 
 ### `UsageQuote` / `UsagePolicy`
 
@@ -63,7 +73,9 @@ interface UsagePolicy {
 }
 ```
 
-`budgets` がv0.1のmulti-budget形式です。quoted unitsを列挙したすべてのbudgetへatomicにreserveします。1 budgetだけの場合は `budget` を簡易aliasとして利用できます。empty list / duplicate budget keyはrejectします。
+`budgets` がmulti-budget形式です。全参加budgetへ同じquoted unitsをatomicにreserveします。`budget` は1 budget用convenience formです。empty list / duplicate keyはrejectします。
+
+policy denial reasonはobservabilityへ出る場合があるため、unrestricted diagnostic textではなくbounded non-secret reason codeを推奨します。
 
 ### `UsageStore`
 
@@ -82,31 +94,24 @@ interface UsageStore {
 }
 ```
 
-production implementationはmulti-budget admissionをall-or-nothingにし、[Architecture](architecture.ja.md) のlifecycle / failure invariantを維持する必要があります。
+production実装はatomic admission、replay、liability、renewal、expiry、settlement、fail-closed semanticsを守る必要があります。同じmethod shapeだけではsafe compatibleとは言えません。詳しくは [Store実装contract](store-contract.ja.md)。
 
-### `UsageObserver` / `UsageEvent`
+### Store側reserve result
+
+accepted resultには次が含まれます。
 
 ```ts
-interface UsageObserverHandler {
-  onEvent(event: UsageEvent): void | Promise<void>;
+{
+  accepted: true;
+  reservation: ReservationRecord;
+  remainingByBudget: Array<{
+    key: string;
+    remaining: number;
+  }>;
 }
-
-type UsageObserver = UsageObserverHandler | undefined;
 ```
 
-v0.1のevent union:
-
-- `reserve.accepted`
-- `reserve.denied`
-- `settlement.completed`
-- `reservation.recovered`
-- `operation.error`
-
-observer deliveryはbest-effortでenforcement outcomeの外側です。`onEvent()` 自体はinlineで呼びますが、返されたPromiseはawaitしません。同期callbackは軽量にし、network / durable I/Oはoffloadしてください。observerのsync throw / async promise rejectionは握りつぶし、admission / settlement stateを変更しません。tool argumentsやraw exception messageは自動収集しません。
-
-`UsageEventMetadata` は明示opt-inの `Record<string, string | number | boolean | null>` です。
-
-event field、privacy / cardinality指針、replay deduplication、Redis aggregate recovery、delivery guaranteeは [Observability](observability.ja.md) を参照してください。
+denial reasonは現在 `quota_exceeded` / `duplicate_operation`。`quota_exceeded` はlimiting budget / remaining unitsを持つ場合があります。
 
 ### `UsageControl`
 
@@ -121,17 +126,31 @@ new UsageControl(store, policy, {
 });
 ```
 
-default reservation TTLは `60_000` msです。従来のnumber形式の第3引数もsource-compatibleです。
+default reservation TTLは `60_000` ms。number形式の第3引数もsource-compatibleです。
 
-`reserve(request)` はpolicy評価、budget validation/canonicalization、storeのatomic admissionを行い、設定されていればruntime lifecycle eventを発火します。metadata callbackは明示opt-inで、callback failureはenforcementへ影響させず無視します。
+main method:
 
-`resumeLease(state)` は既存reservationへ再attachし、`policy.quote()` / `store.reserve()` を再実行しません。trusted server-sideの `UsageLeaseResumeState` 専用で、resume後のrenew / settleはunderlying storeをauthoritative stateとして引き続き検証します。
+```ts
+await control.reserve(request)
+control.resumeLease(state)
+```
+
+`reserve()` はpolicy評価、budget canonicalization、atomic Store admissionを行い `AdmissionResult` を返します。
+
+`resumeLease()` はtrusted server-side `UsageLeaseResumeState` から既存reservationへreattachします。`policy.quote()` / `store.reserve()` は再実行せず、resume後もunderlying Storeがauthoritativeです。
 
 ### `AdmissionResult`
 
 ```ts
 type AdmissionResult =
-  | { allowed: true; lease: UsageLease }
+  | {
+      allowed: true;
+      lease: UsageLease;
+      remainingByBudget: Array<{
+        key: string;
+        remaining: number;
+      }>;
+    }
   | {
       allowed: false;
       reason: string;
@@ -140,7 +159,7 @@ type AdmissionResult =
     };
 ```
 
-store denial reasonは `quota_exceeded` / `duplicate_operation` です。`quota_exceeded` はlimiting budgetとremaining unitsを含む場合があります。policy denialはpolicy側reasonを返します。policy denial reasonはobserverへ出る場合があるため、free-form diagnostic textではなくboundedかつnon-secretなreason codeを使ってください。
+`remainingByBudget` はauthoritative Store resultからcopyされます。consumer側でconfigured limitから再計算しないでください。budget keyはsensitive / high-cardinalityになり得るため、explicit application policyの下でだけ公開します。
 
 ### `ReservationRecord`
 
@@ -168,7 +187,7 @@ interface UsageLeaseResumeState {
 }
 ```
 
-trusted server-side suspend/resume用のserializable stateです。client credentialではありません。raw structureをuntrusted clientへ渡さず、clientにはintegrity-protectedなopaque referenceだけを渡し、実lease stateはserver-sideに保持してください。
+trusted server-sideのresumable accounting stateです。client credential / bearer tokenではありません。raw structureをuntrusted clientへ公開しないでください。
 
 ### `UsageLease`
 
@@ -182,13 +201,12 @@ await lease.renew(ttlMs?)
 await lease.settle(actualUnits, outcome)
 ```
 
-`markLiable()` はmetered execution boundaryへ入ったことを宣言します。pending expiryはcapacityを解放できますが、cost-liable expiryはfull chargeを保守的に維持します。
+- `markLiable()` — cost-bearing execution boundaryへ入るtransition
+- `renew()` — active pending / liable leaseを延長
+- `settle()` — terminal transition。`0 <= actualUnits <= reservedUnits`
+- `toResumeState()` — trusted server-side resume stateのsnapshot
 
-`renew()` はactive leaseを延長します。`settle()` はreservationに参加した全budgetへ同じactual unit countを確定します。v0.1では `actualUnits <= reservedUnits` が必要です。
-
-`toResumeState()` はtrusted server-side flow storage向けのdetached snapshotを返します。`UsageControl.resumeLease()` でreattachでき、quote / reserveを二重実行しません。
-
-`UsageControl` 経由でobserverを設定した場合、lease errorとsuccessful settlementもeventを発火します。observer failureはlease結果を変更しません。
+expired pendingはcapacityをreleaseできます。expired liableでactual usage不明ならfull reserved chargeをconservativeに保持します。
 
 ### `SettlementResult`
 
@@ -202,7 +220,7 @@ interface SettlementResult {
 }
 ```
 
-同一settlement replayはtombstone retention中idempotentです。actual units / outcomeが異なるreplayはfailします。同一内容のidempotent settlementを再度呼ぶと、同じ `settlement.completed` eventが再発火する場合があります。dedupeが必要なdownstream consumerは `(reservationId, actualUnits, outcome)` 等をkeyにしてください。observabilityはdurable ledgerではありません。
+tombstone retention中のidentical replayはidempotentです。units / outcomeが異なるconflicting replayはfailします。
 
 ### `MemoryUsageStore`
 
@@ -213,14 +231,58 @@ new MemoryUsageStore({
 })
 ```
 
-test / development向けprocess-local reference storeです。settled replay tombstoneのdefault retentionは `86_400_000` ms（24時間）です。
+test / local development向けprocess-local reference implementation。default settled replay retentionは24時間です。horizontal durable production Storeではありません。
 
-pending expiryは参加する全budgetを解放しoperation IDを再利用可能にします。cost-liable expiryはfull reservationを消費済みとして確定し、boundedなsettled tombstoneを残します。observer設定時はper-reservationの `reservation.recovered` eventを発火します。
+### `UsageObserver` / `UsageEvent`
+
+```ts
+interface UsageObserverHandler {
+  onEvent(event: UsageEvent): void | Promise<void>;
+}
+
+type UsageObserver = UsageObserverHandler | undefined;
+```
+
+current lifecycle event:
+
+- `reserve.accepted`
+- `reserve.denied`
+- `settlement.completed`
+- `reservation.recovered`
+- `operation.error`
+
+observer deliveryはbest-effortでenforcement transactionの外側です。返されたPromiseはawaitせず、sync throw / async rejectionもaccounting outcomeを変えません。
+
+`UsageEventMetadata` はexplicit opt-in `Record<string, string | number | boolean | null>` です。
+
+### `projectUsageEvent()`
+
+raw lifecycle eventをlow-cardinalityなoperational shapeへprojectします。defaultではidentity ID、operation / reservation ID、tool / budget identifier、unrestricted settlement outcome、application-defined denial textを除外します。
+
+observabilityでありtransactional ledgerではありません。
 
 ### Core errors
 
-- `UsageStateError` — invalid / expired / conflictingなstore / resume state。
-- `UsageDeniedError` — programmaticな `.reason` を保持しつつ、MCP SDK error変換による情報漏洩を避けるためthrow messageはgenericです。
+- `UsageStateError` — invalid / expired / missing / conflicting Store・resume state
+- `UsageDeniedError` —programmatic denial reasonを保持しつつ、thrown messageはgeneric
+
+## `mcp-usage-control/conformance`
+
+v0.2.0後のsourceではpublic conformance subpathを追加しています。
+
+```ts
+import {
+  runUsageStoreConformance,
+  assertUsageStoreConformance,
+  UsageStoreConformanceError,
+  type UsageStoreConformanceHarness,
+  type UsageStoreConformanceReport,
+} from 'mcp-usage-control/conformance';
+```
+
+portable runnerはmulti-budget atomicity、concurrent admission、replay scope、liability idempotency、renewal、settlement replay / conflict、invalid-settlement non-corruption、pending / liable expiryなどprovider-neutral behaviorを確認します。
+
+合格は **behavioral compatibility** の証明であり、persistence / HA、authoritative time、failover、lost-ACK safetyはbackend固有evidenceが別途必要です。
 
 ## `mcp-usage-control-mcp`
 
@@ -242,25 +304,19 @@ interface ProtectToolOptions<TArgs, TResult> {
 }
 ```
 
-input schemaがないtoolでは `noInput: true` が必要です。input schemaありでは省略またはfalseにします。no-input modeではSDK public `(ctx)` callback shapeと実runtimeで観測される `({}, ctx)` dispatchの両方を内部normalizeし、policy / hook / application handlerには `args === undefined` を渡します。
+input schemaなしtoolは `noInput: true` を指定します。
 
 ### `protectTool(options, handler)`
 
-**single-round** MCP TypeScript SDK v2 tool handlerへadmission / settlementを追加します。
+single-round MCP TypeScript SDK v2 wrapperです。
 
-behavior:
-
-- handler前にreserve。
-- application handler entry直前に `markLiable()`。
-- handler実行中のheartbeatはdefault enabled。
-- normal result -> `successUnits` またはfull reservation。
-- `{ isError: true }` -> `toolErrorUnits` またはfull reservation。
-- thrown exception -> `errorUnits` またはfull reservation。
-- invalid / throwing classifier -> full conservative settlement後に `UsageClassificationError`。
-- settlement failure -> `UsageSettlementError`。blind retryしません。
-- `resultType: 'input_required'` -> conservative settlement後に `UnsupportedMcpUsageFlowError`。
-
-supportedなmulti-round `input_required` accountingには `protectTool()` ではなく `protectMultiRoundTool()` を使います。
+- handler前にreserve
+- handler entry直前に `markLiable()`
+- default heartbeat
+- normal success / MCP `{ isError: true }` / throwを別分類
+- invalid / throwing classifier -> conservative full settlement後にclassification error
+- settlement failure -> blind retryせずsurface
+- `input_required` -> このsingle-round wrapperではunsupported。`protectMultiRoundTool()` を利用
 
 ### `McpUsageRequestStatePayload`
 
@@ -271,7 +327,7 @@ interface McpUsageRequestStatePayload {
 }
 ```
 
-MCP server側の `requestState.verify` hookでdecode済みのpayloadを想定します。wire valueは公式SDK `createRequestStateCodec()` 等のintegrity-protected codecでmintしてください。raw client-controlled stringは `protectMultiRoundTool()` がrejectします。
+MCP server request-state verification hookがwire valueをverify / decodeした後だけ受け入れます。raw client-controlled stateはfail closedです。
 
 ### `McpUsageFlowBinding`
 
@@ -284,7 +340,7 @@ interface McpUsageFlowBinding {
 }
 ```
 
-suspended flow claim前にserver-sideで比較するtrusted bindingです。`argsHash` はvalidated tool argumentsをcanonicalizeしたSHA-256 hashです。
+`argsHash` でcanonicalized validated original argsへresumeをbindingします。
 
 ### `McpUsageFlowRecord` / `McpUsageFlowStore`
 
@@ -308,11 +364,11 @@ interface McpUsageFlowStore {
 }
 ```
 
-`consume()` はsecurity-criticalです。現在のtrusted bindingとatomicに比較し、matchしたflowだけをexactly one callerへconsumeする必要があります。mismatch callerにはno recordを返し、**正規flowを削除してはいけません**。
+`consume()` はprincipal / tenant / tool / args bindingをatomic compareし、matching flowを1回だけconsumeする必要があります。mismatchで正当なflowを削除してはいけません。
 
 ### `MemoryMcpUsageFlowStore`
 
-`McpUsageFlowStore` のprocess-local reference implementationです。test / single-process server向けで、per-request `createMcpHandler` factoryの外側で生成します。horizontal scaleするserverは同じatomic compare-and-consume contractを持つshared/durable implementationが必要です。
+process-local reference flow store。test / single-process server用です。per-request handler factoryの外で生成してください。
 
 ### `McpUsageFlowContext`
 
@@ -324,11 +380,9 @@ interface McpUsageFlowContext {
 }
 ```
 
-`protectMultiRoundTool()` がapplication handlerの第3引数へ渡します。`round` は0開始、最初のresume requestは1です。`operationId` は初回roundのlogical IDです。前roundでapplicationが独自 `requestState` を返した場合、wrapperはwire値として信用せずserver-sideに保持し、ここへ `applicationRequestState` として渡します。
+`round` は0開始です。handler-authored application request stateはserver-sideに保持し、次のresume roundでこのcontextから渡します。
 
 ### `ProtectMultiRoundToolOptions<TArgs, TResult>`
-
-`ProtectToolOptions` に以下を追加します。
 
 ```ts
 interface ProtectMultiRoundToolOptions<TArgs, TResult>
@@ -346,33 +400,43 @@ interface ProtectMultiRoundToolOptions<TArgs, TResult>
 }
 ```
 
-`suspendTtlMs` は必須です。cost-liable suspended leaseを保守的expiry recoveryまで保持する時間をboundします。`flowId` は主にtest/customization用hookで、defaultはcryptographically randomなIDです。
-
 ### `protectMultiRoundTool(options, handler)`
 
-MCP v2 multi-round向けopt-in wrapperです。
+opt-in `input_required` multi-round accounting wrapperです。
 
-behavior:
+- first roundで1回reserveし、application execution前にliable化
+- suspension時に `suspendTtlMs` までrenewしtrusted flow stateをserver-side保存
+- resumeはverified request state + binding-aware one-time consume必須
+- `UsageControl.resumeLease()` で元leaseへ戻り、2回目のquote / reserveをしない
+- missing / replay / expired / mismatchはfail closed
+- `maxRounds` でrepeated suspensionをbounded化
+- final settlementは `protectTool()` と同じconservative classification rule
 
-- first roundでprincipal / operation IDを導出し、1回だけreserveしてleaseをliable化。
-- `input_required` 時はactive heartbeatを止め、`suspendTtlMs` でrenew、trusted server-side flow recordを保存し、wrapper-owned signed/opaque `requestState` を返す。
-- resume roundはverified decoded request-state payloadとatomic binding-aware flow consumeを必須にする。
-- resume roundはquote / reserveせず `UsageControl.resumeLease()` で同じleaseへreattachし、authoritative underlying reservationをrenewする。
-- one-time resume tokenでhandler再入場は1 callerだけ。replay / expired / missing / mismatched stateは `McpUsageResumeError` でfail-close。
-- `maxRounds` 超過はfull reservationを保守的にsettleして `McpUsageRoundsExceededError`。
-- final success / tool-error / throwのclassification / settlementは `protectTool()` と同じrule。
-
-同じresume tokenでのdouble reservation / duplicate application re-entryを防ぎますが、任意のside effectに対するgeneral exactly-once guaranteeやcompleted business result cache/replayは提供しません。destructive / externally metered workでは既存のbusiness idempotency / reconciliationを維持してください。
-
-公式SDK request-state設定とtrust boundaryは [MCP integration](mcp-integration.ja.md) を参照してください。
+exactly-once business side effect / completed result replayを提供するgeneric workflow systemではありません。
 
 ### MCP adapter errors
 
-- `UsageSettlementError` — `settlementError` とoptional `executionError`。
-- `UsageClassificationError` — `classificationError` とoptional `executionError`。
-- `UnsupportedMcpUsageFlowError` — single-round `protectTool()` の `input_required` boundary error。
-- `McpUsageResumeError` — missing / expired / replayed / mismatched / unverifiedなmulti-round resume state。
-- `McpUsageRoundsExceededError` — configured `maxRounds` を超え、full conservative settlement後に返るerror。
+- `UsageSettlementError`
+- `UsageClassificationError`
+- `UnsupportedMcpUsageFlowError`
+- `McpUsageResumeError`
+- `McpUsageRoundsExceededError`
+
+## `mcp-usage-control-mcp/conformance`
+
+```ts
+import {
+  runMcpUsageFlowStoreConformance,
+  assertMcpUsageFlowStoreConformance,
+  McpUsageFlowStoreConformanceError,
+  type McpUsageFlowStoreConformanceHarness,
+  type McpUsageFlowStoreConformanceReport,
+} from 'mcp-usage-control-mcp/conformance';
+```
+
+one-time consume、binding mismatch preservation、concurrent one-winner consume、duplicate suspend rejection、expiry rejectionを確認します。
+
+backend durability / lost-consume-ACK behaviorはimplementation-specific evidenceが必要です。
 
 ## `mcp-usage-control-redis`
 
@@ -382,7 +446,7 @@ behavior:
 new RedisUsageStore(client, options?)
 ```
 
-clientは `RedisEvalClient` compatibleな `eval(script, { keys, arguments })` methodを必要とします。
+`client` は `RedisEvalClient` compatibleな `eval(script, { keys, arguments })` を提供します。
 
 ### `RedisUsageStoreOptions`
 
@@ -396,40 +460,54 @@ interface RedisUsageStoreOptions {
 }
 ```
 
-default:
+Defaults:
 
 - `prefix`: `muc`
 - `hashTag`: `usage`
 - `cleanupBatchSize`: `256`
-- `idempotencyTtlMs`: `86_400_000`（24時間）
+- `idempotencyTtlMs`: 24時間
 
-v0.1 Redis storeは1 transaction domain内にused-budget hash、global lease expiry index、reservation records、operation mappings、tombstonesを保持します。budget ID / operation identityはstorage identifier化前にhashします。
+multi-budget admission / lifecycle stateを1 Redis Lua transaction domainで処理し、lease / tombstone timeにはRedis server `TIME` を使います。
 
-Luaはlease / tombstone判定にRedis server `TIME` を使います。multi-budget reserve / release / expiry recovery / renew / settlementをclient側single-budget loopへ分解しません。
+### `mcp-usage-control-redis/mcp-flow`
 
-`observer` 設定時、lazy cleanupはpending-release / liable-retentionについてaggregate `reservation.recovered` eventを発火します。telemetryのためだけにraw principal、tenant、tool、budget stringを永続化しません。expired reservationを直接操作した場合はopaqueなhashed reservation IDをeventへ含む場合があります。
+```ts
+import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
+```
 
-詳細は [Redis adapter](redis.ja.md) と [Observability](observability.ja.md) を参照してください。
+horizontal scaleするMCP multi-round accounting向けshared Redis flow storeです。SHA-256 binding digest compare + matching flow deleteを1 Lua invocationでatomicに行います。1 flowのkeysは同じRedis Cluster hash slotに置き、unrelated flowは別slotへ分散できます。
+
+Redis persistence / HAはdeployment-specificです。
 
 ## `mcp-usage-control-cloudflare`
 
 ### `CloudflareUsageStore`
 
-Durable Object namespaceを使うWorker-local `UsageStore`。optionは `domainName`、`cleanupBatchSize`、`idempotencyTtlMs`、`observer`。1 `domainName` が1 atomic transaction domainです。
+1 Durable Object transaction domainを使うWorker-local `UsageStore`。
 
 ### `RemoteCloudflareUsageStore`
 
-Cloudflare外のapplication向けHTTP `UsageStore`。`endpoint` は必須で、local以外はHTTPSのみ許可します。request headerは直接またはcallbackで指定できます。`timeoutMs` はasync header resolution、fetch、response decodeを含むfull-call deadlineです。timeout / network failureは `CloudflareUsageTransportError` として表面化し、自動retryしません。non-auth HTTP failureは `code: 'remote'` のまま、boundedな数値 `status` metadataだけをoptionalに保持し、response bodyは公開しません。
+Cloudflare外application向けHTTP Storeです。local以外はHTTPS必須。optional request headerはstatic / callbackで指定でき、`timeoutMs` はfull remote callをboundedします。
+
+network / timeout / ambiguous remote failureはsurfaceしautomatic retryしません。transport errorへresponse bodyを伝播しません。
 
 ### `createCloudflareUsageStoreGateway()`
 
-remote store向けWorker HTTP handlerを作成します。application-defined `authorize(request)` callbackが必須です。gatewayはadapterが生成するhashed accounting protocolだけを受け取り、raw Durable Object exceptionを返しません。
+authenticated Worker gatewayを作ります。application-defined `authorize(request)` がmandatoryで、unauthenticated defaultはありません。
 
-### `UsageControlDurableObject`
+### `mcp-usage-control-cloudflare/worker`
 
-`mcp-usage-control-cloudflare/worker` からexportします。SQLite transactionでatomic multi-budget reserve、liability、renewal、settlement、replay protection、expiry recoveryを処理します。
+Durable Object implementationをexportし、`UsageControlDurableObject` とdeployment用versioned Worker entry pointを含みます。
 
-詳細は [Cloudflare adapter](cloudflare.ja.md) を参照してください。
+### `mcp-usage-control-cloudflare/reconciliation`
+
+supported ambiguous remote reserve outcome向けexplicit read-only reserve-ACK reconciliation helper。reconciliationで追加quotaを作りません。
+
+### `mcp-usage-control-cloudflare/maintenance`
+
+explicitly authorized historical-budget maintenance / pruning helper。routine usage authorityとmaintenance authorityを分離します。
+
+exact deployment API / trust boundaryは [Cloudflare adapter](cloudflare.ja.md) を参照してください。
 
 ## `mcp-usage-control-firestore`
 
@@ -439,7 +517,7 @@ remote store向けWorker HTTP handlerを作成します。application-defined `a
 new FirestoreUsageStore(firestore, options?)
 ```
 
-`firestore` にはadapterのstructural contractを満たすserver-side Firestore clientを渡します。`@google-cloud/firestore` の `Firestore` を直接利用でき、Firebase Admin `getFirestore()` も同じserver `Firestore` typeを返します。
+`firestore` はadapter structural contractを満たすserver-side Firestore clientです。
 
 ### `FirestoreUsageStoreOptions`
 
@@ -455,39 +533,43 @@ interface FirestoreUsageStoreOptions {
 }
 ```
 
-default:
+Defaults:
 
 - `collectionPrefix`: `muc`
-- `idempotencyTtlMs`: `86_400_000`（24時間）
+- `idempotencyTtlMs`: 24時間
 - `cleanupBatchSize`: `16`
 - `cleanupIntervalMs`: `5_000`
 - `expiryGraceMs`: `5_000`
 
-`now` はtest hookで、productionでは通常 `Date.now()` を使います。Redis adapterと異なり、Firestoreのlease / tombstone計算はapplication host clock + `expiryGraceMs` を使うため、production hostは時刻同期が必要です。
+`now` はtest hookです。productionは通常host time + `expiryGraceMs` を使うため、host time synchronizationが必要です。
 
-adapterはoperation / budget identifierをhash化して保存し、1 Firestore transactionでall-or-nothing multi-budget admissionを行います。activeな `markLiable()` / `renew()` はreservation documentだけを触り、expired pending / liable / tombstoneは保守的にrecoveryします。
+operation / budget identifierをdocument ID用にhashし、all-or-nothing admissionをFirestore transactionで実行し、pending / liable stateをconservativeにrecoverします。
 
 ### `recoverExpired(limit?)`
 
-boundedなexplicit expiry recoveryを実行し、pending / liableのcount・unitsと削除tombstone数を `FirestoreRecoverySummary` で返します。`cleanupBatchSize: 0` で無効化しない限り、`reserve()` もthrottled best-effort cleanupを行います。
+bounded explicit recoveryを行い `FirestoreRecoverySummary` を返します。設定により `reserve()` もthrottled best-effort cleanupを実行します。
 
-`FirestoreRecoveryObserver` はpending release / liable retentionのadapter-local best-effort `reservation.recovered` eventを受け取ります。observer failureがenforcement stateを変更することはありません。
+shared tenant / global budget documentはcontention hotspotになり得ます。詳しくは [Firestore adapter](firestore.ja.md)。
 
-shared tenant / global budgetは意図的に1 budget documentへserializeされ、contention hotspotになり得ます。document layout、contention、cleanup、clock、cost、deployment guidanceは [Firestore adapter](firestore.ja.md) を参照してください。
+## MCP Tasks support boundary
+
+current source treeはstableなfirst-class Tasks protocol adapterをexportしていません。
+
+safe accounting state machineは [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) に定義し、existing core lease primitiveでproof済みです。upstream TypeScript Tasks surfaceがexperimentalな間、stable protocol integrationはdeferredです。
+
 ## Numeric validation
 
-- units / limits: non-negative JavaScript safe integer。
-- TTL / retention duration: positive safe integer。
-- settlement / classifier result: non-negative safe integerかつ `<= reservedUnits`。
+- units / limits: non-negative JavaScript safe integer
+- TTL / retention: positive safe integer
+- settlement / classifier units: non-negative safe integerかつ `<= reservedUnits`
 
-## v0.1 compatibility
+## Compatibility
 
 - Node.js 20+
-- ESM package
-- `@modelcontextprotocol/server` v2。CIでは現在 `2.0.0` をresolve。
-- Redis 7 integration test
-- node-redis `redis` 6.2.x
-- `@google-cloud/firestore` server-client compatibility。Firestore Emulator integrationでは現在8.7.0を検証
-- Firebase Admin `getFirestore()` は同じserver `Firestore` typeを利用
+- ESM
+- MCP TypeScript SDK v2。current conformanceは `2026-07-28` protocol line + SDK 2.0.0 path
+- Redis 7 integration behavior、CIのnode-redisは6.2.x
+- Cloudflare Workers / SQLite Durable Objects local workerd integration + documented real deployed dogfood evidence
+- Firestore Emulator integration + `@google-cloud/firestore` 8.7.0 compatibility evidence
 
-pre-1.0 minor releaseではintentional breaking changeを含む場合があります。その場合はrelease notesへ明記します。
+projectは別途v1 releaseがexplicitにauthorizeされるまでpre-v1です。current source APIはv1 release-candidate / final-release準備へ進める状態と評価しています。詳しくは [v1.0 readiness review](v1-readiness.ja.md)。
