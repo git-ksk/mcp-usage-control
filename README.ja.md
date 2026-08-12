@@ -277,7 +277,9 @@ principal / tenantは、認証済みsessionなど信頼できるserver-side情�
 
 ## Observability
 
-`UsageObserver` を設定すると、reserve、denial、settlement、error、Store recoveryなどのeventを受け取れます。
+`UsageControl` に `UsageObserver` を設定すると、reserve、denial、settlement、policy / Store errorなど、core lifecycleのeventを受け取れます。
+
+期限切れreservationの回収などStore固有のeventは、対応するStore側のobserverを併用します。
 
 observerは利用量を確定するtransactionそのものではなく、telemetryや分析向けです。
 
