@@ -431,6 +431,49 @@ remote store向けWorker HTTP handlerを作成します。application-defined `a
 
 詳細は [Cloudflare adapter](cloudflare.ja.md) を参照してください。
 
+## `mcp-usage-control-firestore`
+
+### `FirestoreUsageStore`
+
+```ts
+new FirestoreUsageStore(firestore, options?)
+```
+
+`firestore` にはadapterのstructural contractを満たすserver-side Firestore clientを渡します。`@google-cloud/firestore` の `Firestore` を直接利用でき、Firebase Admin `getFirestore()` も同じserver `Firestore` typeを返します。
+
+### `FirestoreUsageStoreOptions`
+
+```ts
+interface FirestoreUsageStoreOptions {
+  collectionPrefix?: string;
+  idempotencyTtlMs?: number;
+  cleanupBatchSize?: number;
+  cleanupIntervalMs?: number;
+  expiryGraceMs?: number;
+  observer?: FirestoreRecoveryObserver;
+  now?: () => number;
+}
+```
+
+default:
+
+- `collectionPrefix`: `muc`
+- `idempotencyTtlMs`: `86_400_000`（24時間）
+- `cleanupBatchSize`: `16`
+- `cleanupIntervalMs`: `5_000`
+- `expiryGraceMs`: `5_000`
+
+`now` はtest hookで、productionでは通常 `Date.now()` を使います。Redis adapterと異なり、Firestoreのlease / tombstone計算はapplication host clock + `expiryGraceMs` を使うため、production hostは時刻同期が必要です。
+
+adapterはoperation / budget identifierをhash化して保存し、1 Firestore transactionでall-or-nothing multi-budget admissionを行います。activeな `markLiable()` / `renew()` はreservation documentだけを触り、expired pending / liable / tombstoneは保守的にrecoveryします。
+
+### `recoverExpired(limit?)`
+
+boundedなexplicit expiry recoveryを実行し、pending / liableのcount・unitsと削除tombstone数を `FirestoreRecoverySummary` で返します。`cleanupBatchSize: 0` で無効化しない限り、`reserve()` もthrottled best-effort cleanupを行います。
+
+`FirestoreRecoveryObserver` はpending release / liable retentionのadapter-local best-effort `reservation.recovered` eventを受け取ります。observer failureがenforcement stateを変更することはありません。
+
+shared tenant / global budgetは意図的に1 budget documentへserializeされ、contention hotspotになり得ます。document layout、contention、cleanup、clock、cost、deployment guidanceは [Firestore adapter](firestore.ja.md) を参照してください。
 ## Numeric validation
 
 - units / limits: non-negative JavaScript safe integer。
@@ -444,5 +487,7 @@ remote store向けWorker HTTP handlerを作成します。application-defined `a
 - `@modelcontextprotocol/server` v2。CIでは現在 `2.0.0` をresolve。
 - Redis 7 integration test
 - node-redis `redis` 6.2.x
+- `@google-cloud/firestore` server-client compatibility。Firestore Emulator integrationでは現在8.7.0を検証
+- Firebase Admin `getFirestore()` は同じserver `Firestore` typeを利用
 
 pre-1.0 minor releaseではintentional breaking changeを含む場合があります。その場合はrelease notesへ明記します。
