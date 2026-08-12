@@ -21,7 +21,55 @@ pnpm check
 
 CIではNode.js 20 / 22、実Redis 7、MCP SDK v2 protocol integration behaviorをtestします。
 
-`docs/**` とMarkdown (`*.md`) だけを変更したPRでは、Required check名を維持したまま軽量pathを使い、Redis起動・Node/pnpm setup・dependency install・test・package pack・clean consumer installを省略します。Markdown以外の変更が1つでも含まれる場合はfull CIを実行します。
+## CI運用ルール
+
+CIは、**安全性を落とさず、ドキュメント変更では重い処理をしない**ことを基本方針にします。
+
+### Required check
+
+mainのbranch protectionでは `test (20)` と `test (22)` をRequired checkとして扱います。
+
+この2つのcheck名は運用上の契約です。workflow内のjob名やmatrix構成を変更してcheck名が変わる場合は、branch protection側も同じ運用変更として見直してください。check名だけを先に変更しないでください。
+
+Required checkをworkflow全体の `paths-ignore` で止める構成は使いません。workflow自体が起動しないとRequired checkが生成されず、docs-only PRでもmergeできなくなる可能性があるためです。
+
+### docs-only PR
+
+次のどちらかだけを変更したPRはdocs-onlyとして扱います。
+
+- `docs/**`
+- 任意の階層にあるMarkdown (`*.md`)
+
+すべての変更pathがこの条件に入る場合、`changes` jobでdocs-onlyと判定し、`test (20)` / `test (22)` 自体は実行します。ただし各jobでは軽量pathだけを成功させ、次の重い処理は省略します。
+
+- repository checkout
+- Node / pnpm setup
+- dependency install
+- Redis起動
+- `pnpm check`
+- public packageのpackと内容検査
+- clean consumerへのtarball install
+
+Required check名を残したまま中身だけ軽量化するのが、このrepoのdocs-only運用です。
+
+### full CIへ切り替える条件
+
+Markdown以外の変更が1つでも含まれる場合はfull CIを実行します。source、workflow、`package.json`、lockfile、configなどはすべてfull CI対象です。
+
+変更差分の基準SHAを取得できない場合や、差分pathを正常に判定できない場合も、安全側に倒してfull CIを実行します。判定不能を理由にtestを省略しません。
+
+`.github/workflows/ci.yml` 自体の変更もMarkdownではないため、必ずfull CIになります。
+
+### Store固有のintegration workflow
+
+CloudflareとFirestoreのintegration testは通常CIとは分離し、関係するpathだけで起動します。
+
+- Cloudflare Integration: `packages/cloudflare/**`、`packages/core/**`、`.github/workflows/cloudflare-integration.yml`
+- Firestore Integration: `packages/firestore/**`、`packages/core/**`、`.github/workflows/firestore-integration.yml`
+
+Firestoreだけの変更でCloudflare Integrationを動かしたり、その逆をしたりしないのが原則です。一方、`packages/core/**` は両adapterの前提contractなので、core変更時は両integration workflowを意図的に実行します。
+
+新しいStore adapterやintegration workflowを追加する場合も、adapter自身・依存する共有package・そのworkflow自身だけをtrigger対象にするのを基本とします。triggerを広げる場合は、依存関係上必要な理由をPRで説明してください。
 
 ## Repository layout
 
