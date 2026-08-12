@@ -4,11 +4,13 @@ on:
   pull_request:
     paths:
       - 'packages/firestore/**'
+      - 'packages/core/**'
       - '.github/workflows/firestore-integration.yml'
   push:
     branches: [main]
     paths:
       - 'packages/firestore/**'
+      - 'packages/core/**'
       - '.github/workflows/firestore-integration.yml'
 
 permissions:
