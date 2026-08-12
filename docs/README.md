@@ -47,9 +47,9 @@ If you are unsure, start with the [store comparison in Getting started](getting-
 
 ## CI behavior
 
-For pull requests that change only `docs/**` and Markdown (`*.md`) files, CI runs only the lightweight change-classification job. The Node.js 20/22, Redis, package-pack, and clean-consumer test matrix is skipped.
+For pull requests that change only `docs/**` and Markdown (`*.md`) files, CI first classifies the change and then completes the required `test (20)` / `test (22)` checks through a lightweight path.
 
-If the pull request includes any non-documentation path such as source code, workflows, package manifests, lockfiles, or configuration, the full CI matrix runs as before. The workflow itself still starts for documentation-only changes so required-check behavior remains stable.
+That path does not start Redis, check out the repository in the matrix jobs, set up Node.js/pnpm, install dependencies, run tests, pack packages, or install the clean consumer project. If any non-documentation path such as source code, workflows, package manifests, lockfiles, or configuration changes, the full CI matrix runs as before.
 
 ## Project policies
 
