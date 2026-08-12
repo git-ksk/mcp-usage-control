@@ -78,6 +78,9 @@ jobs:
               exit 1
             fi
           done
+          core_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-0.1.0.tgz)"
+          grep -qx 'package/dist/firestore.js' <<<"$core_listing"
+          grep -qx 'package/dist/firestore.d.ts' <<<"$core_listing"
           cloudflare_listing="$(tar -tzf /tmp/muc-packs/mcp-usage-control-cloudflare-0.1.0.tgz)"
           grep -qx 'package/dist/worker.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/worker.d.ts' <<<"$cloudflare_listing"
@@ -106,6 +109,7 @@ jobs:
             --ignore-scripts
           node --input-type=module <<'NODE'
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
+          import { FirestoreUsageStore } from 'mcp-usage-control/firestore';
           import { protectTool } from 'mcp-usage-control-mcp';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
           import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
@@ -120,6 +124,7 @@ jobs:
           if (![
             MemoryUsageStore,
             UsageControl,
+            FirestoreUsageStore,
             protectTool,
             RedisUsageStore,
             CloudflareUsageStore,
