@@ -26,6 +26,12 @@ importers:
 
   packages/core: {}
 
+  packages/firestore:
+    dependencies:
+      mcp-usage-control:
+        specifier: workspace:^
+        version: link:../core
+
   packages/mcp:
     dependencies:
       mcp-usage-control:
