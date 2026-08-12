@@ -6,18 +6,12 @@ on:
       - 'packages/cloudflare/**'
       - 'packages/core/**'
       - '.github/workflows/cloudflare-integration.yml'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'tsconfig.json'
   push:
     branches: [main]
     paths:
       - 'packages/cloudflare/**'
       - 'packages/core/**'
       - '.github/workflows/cloudflare-integration.yml'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - 'tsconfig.json'
 
 permissions:
   contents: read
