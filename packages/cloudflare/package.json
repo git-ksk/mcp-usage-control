@@ -13,6 +13,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./auth": {
+      "types": "./dist/auth.d.ts",
+      "import": "./dist/auth.js",
+      "default": "./dist/auth.js"
+    },
     "./worker": {
       "types": "./dist/versioned-worker.d.ts",
       "import": "./dist/versioned-worker.js",
@@ -34,6 +39,10 @@
     "dist/index.js.map",
     "dist/index.d.ts",
     "dist/index.d.ts.map",
+    "dist/auth.js",
+    "dist/auth.js.map",
+    "dist/auth.d.ts",
+    "dist/auth.d.ts.map",
     "dist/worker.js",
     "dist/worker.js.map",
     "dist/worker.d.ts",
