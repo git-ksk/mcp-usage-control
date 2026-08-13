@@ -66,7 +66,7 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは `0.3.0` に揃っています。`v0.3.0` はGitHub/source releaseとして公開済みで、npm registry publicationは引き続き意図的にdeferredしています。
+5 packageのmanifestは `0.4.0` に揃っています。`v0.4.0` はこのbranchで準備するGitHub/source releaseで、npm registry publicationは引き続き意図的にdeferredしています。
 
 ## v1検討時のstable / deferred境界
 
@@ -307,7 +307,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.3.0` が現在公開済みのGitHub/source release boundaryです。current `main` にはv0.3.0後のhardeningが含まれる場合があり、後続のv1.0 API-freeze / release reviewの基準になりますが、これはv1.0 stableの宣言ではありません。
+`v0.4.0` がこのbranchで準備するGitHub/source release boundaryです。公開後の `main` にはv0.4.0後のhardeningが含まれる場合があり、後続のv1.0 API-freeze / release reviewの基準になりますが、これはv1.0 stableの宣言ではありません。
 
 **npm publicationは別途explicit authorizationが必要で、まだ実施していません。**
 
