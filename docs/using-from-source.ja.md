@@ -37,11 +37,11 @@ pnpm --dir packages/firestore pack --pack-destination "$PWD/.packs"
 次のtarballが生成されます。
 
 ```text
-.packs/mcp-usage-control-0.2.0.tgz
-.packs/mcp-usage-control-mcp-0.2.0.tgz
-.packs/mcp-usage-control-redis-0.2.0.tgz
-.packs/mcp-usage-control-cloudflare-0.2.0.tgz
-.packs/mcp-usage-control-firestore-0.2.0.tgz
+.packs/mcp-usage-control-0.3.0.tgz
+.packs/mcp-usage-control-mcp-0.3.0.tgz
+.packs/mcp-usage-control-redis-0.3.0.tgz
+.packs/mcp-usage-control-cloudflare-0.3.0.tgz
+.packs/mcp-usage-control-firestore-0.3.0.tgz
 ```
 
 現時点では、このtarballが将来のnpm packageに最も近い利用形態です。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証します。
@@ -53,15 +53,15 @@ consumer projectからabsolute pathまたは正しく解決できるpathを指�
 Coreのみ:
 
 ```console
-npm install /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz
+npm install /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz
 ```
 
 Core + MCP adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.3.0.tgz \
   @modelcontextprotocol/server@2.0.0
 ```
 
@@ -69,8 +69,8 @@ Core + Redis adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.3.0.tgz \
   redis@6.2.0
 ```
 
@@ -78,16 +78,16 @@ Core + Cloudflare adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.2.0.tgz
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.3.0.tgz
 ```
 
 Core + Firestore adapter（実利用ではserver-side Firestore clientを1つ選択）:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.3.0.tgz \
   firebase-admin
 ```
 
@@ -97,11 +97,11 @@ npm install \
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.2.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.2.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.3.0.tgz \
+  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.3.0.tgz \
   @modelcontextprotocol/server@2.0.0 \
   redis@6.2.0
 ```

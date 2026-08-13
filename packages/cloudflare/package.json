@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control-cloudflare",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Cloudflare Durable Objects usage store for mcp-usage-control.",
   "type": "module",
   "license": "Apache-2.0",

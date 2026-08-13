@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Concurrency-safe usage enforcement primitives for MCP tool execution.",
   "type": "module",
   "license": "Apache-2.0",

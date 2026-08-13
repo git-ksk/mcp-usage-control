@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-This reference describes the public source-tree API after v0.2.0. Post-v0.2.0 additions remain `Unreleased` until a future release is explicitly authorized.
+This reference describes the public API in the current source tree. All five package manifests are aligned at `0.3.0` for release preparation; no v0.3.0 tag, GitHub Release, or npm publication has been created or performed yet.
 
 For behavioral/failure guarantees, read [Architecture](architecture.md) and [Store implementation contract](store-contract.md). For the stable/deferred v1 boundary, read [v1.0 readiness review](v1-readiness.md).
 
@@ -270,7 +270,7 @@ This is observability, not the transactional ledger.
 
 ## `mcp-usage-control/conformance`
 
-Post-v0.2.0 source adds a public conformance subpath:
+The v0.3.0 release candidate adds a public conformance subpath:
 
 ```ts
 import {

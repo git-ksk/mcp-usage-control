@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-このreferenceはv0.2.0後のcurrent source treeにあるpublic APIを説明します。v0.2.0後の追加は、future releaseがexplicitにauthorizeされるまで `Unreleased` のままです。
+このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestはrelease preparationとして `0.3.0` に揃えていますが、v0.3.0 tag / GitHub Release / npm publicationはまだ作成・実施していません。
 
 behavior / failure guaranteeは [Architecture](architecture.ja.md) / [Store実装contract](store-contract.ja.md)、v1 stable / deferred境界は [v1.0 readiness review](v1-readiness.ja.md) を参照してください。
 
@@ -268,7 +268,7 @@ observabilityでありtransactional ledgerではありません。
 
 ## `mcp-usage-control/conformance`
 
-v0.2.0後のsourceではpublic conformance subpathを追加しています。
+v0.3.0 release candidateではpublic conformance subpathを追加しています。
 
 ```ts
 import {
