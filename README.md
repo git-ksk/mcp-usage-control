@@ -66,7 +66,7 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five packages currently remain on the source-release version line until a separately authorized release-version change.
+All five package manifests are aligned at `0.3.0` for this release-preparation candidate. No v0.3.0 tag, GitHub Release, or npm publication has been created or performed yet.
 
 ## Stability boundary for v1 consideration
 
@@ -304,9 +304,9 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-v0.2.0 remains the existing historical GitHub/source release boundary. Post-v0.2.0 work is recorded only under `Unreleased` until a future explicitly authorized release.
+v0.2.0 remains an unchanged historical GitHub/source release boundary.
 
-The current source tree is assessed as ready for **v1.0 release-candidate/final-release preparation**, but this repository state does not itself create a v1 tag or GitHub Release.
+The current source tree is prepared as the **v0.3.0 release candidate** and is also the current basis for later v1.0 release-candidate/final-release review. This does not declare v1.0 stable. No v0.3.0 tag or GitHub Release has been created yet.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 
