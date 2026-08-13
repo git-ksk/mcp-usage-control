@@ -6,6 +6,14 @@ All notable project changes are recorded here.
 
 ## [Unreleased]
 
+### Added
+
+- Added the optional `mcp-usage-control-cloudflare/auth` subpath with `createCloudflareBearerTokenAuthorizer()`, supporting one current and one previous Bearer token so remote Cloudflare gateways can rotate credentials without an authentication gap while preserving the mandatory application-defined `authorize(request)` contract.
+
+### Validation / compatibility
+
+- Added local workerd credential-rotation coverage and English/Japanese deployed-dogfood guidance for the zero-downtime sequence: copy current -> previous, replace current, move callers, then retire previous. Quota/accounting semantics, Durable Object schema, retry/fail-closed behavior, and existing custom authorizers are unchanged.
+
 ## [0.4.0] - 2026-08-13
 
 Fourth GitHub/source release. npm registry publication remains intentionally deferred and is not part of this release.
@@ -54,7 +62,7 @@ Second GitHub/source release. npm registry publication remains intentionally def
 - Safe MCP v2 multi-round `input_required` accounting via `protectMultiRoundTool()`, including trusted server-side suspend/resume state, integrity-protected wire `requestState`, principal/tenant/tool/argument binding, one-time resume consumption, explicit suspension TTLs, and bounded rounds.
 - `UsageLease.toResumeState()` / `UsageControl.resumeLease()` for trusted server-side lease reattachment without a second quota reservation.
 - `RedisMcpUsageFlowStore` as the durable shared Redis flow store for horizontally scaled MCP multi-round servers, using atomic binding-aware consume and Redis server-time expiry.
-- `mcp-usage-control-firestore`, a standalone server-side Firestore `UsageStore` with transactional multi-budget admission, replay protection, conservative expiry recovery, hashed storage identifiers, and adapter-local recovery observability.
+- `mcp-usage-control-firestore`, a standalone server-side Firestore `UsageStore` with transactional multi-budget admission, replay protection, conservative expiry recovery, hashed storage identifiers, and adapter-local best-effort recovery observer events.
 - Successful admission `remainingByBudget` propagation plus a low-cardinality `projectUsageEvent()` structured-log projection that excludes identities, tool/budget keys, settlement outcomes, and raw application reasons by default.
 - Bounded full-call Cloudflare remote timeouts and HTTP status metadata on transport errors without exposing response bodies.
 - Real Firestore Emulator integration covering multi-budget atomicity, shared-budget concurrency, pending/liable expiry semantics, idempotent settlement, and server-client TypeScript compatibility.
