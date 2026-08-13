@@ -6,10 +6,23 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-13
+
+4回目のGitHub/source releaseです。npm registryへの公開は引き続き意図的にdeferredし、このreleaseには含めません。
+
 ### Changed
 
 - quota / replay semanticsを弱めず、`MemoryUsageStore` のlong-running single-process運用をhardeningしました。retained operation / tombstoneとnon-zero budget keyをbounded化し、capacity exhaustion時はaccounting stateをevictせず `MemoryUsageStoreCapacityError` でfail closed、`stats()` でretentionを監視、application-ownedな終了済みwindowを `retireBudgetKey()` で明示退役、zero-unit keyを保持せず、store callごとの全reservation scanを避けるdeadline-aware lazy recoveryへ変更しました。
 - retention sizing、安全なbudget-window retirement、monitoring、controlled single-process利用とprovider-backed durable/shared Storeの境界を説明するMemory Store運用ガイドを英日で追加しました。
+
+### Compatibility / release boundary
+
+- 後方互換なpre-1.0 minor releaseとしてMemory Store運用APIを追加します。意図的なbreaking public API / configuration changeは含みません。
+- Redis / Cloudflare / Firestoreのstorage schemaは変更せず、v0.4.0向けprovider migration / resetは不要です。
+- core accounting invariantは不変です。admissionはatomicのまま、authoritative accounting / replay stateをsilent evictionせず、capacity exhaustion時はfail closedします。
+- Issue #24はCloudflare実環境の追加operational evidence向けにopenのままで、source release readinessにはnon-blockingです。
+- Issue #6は意図的にdeferredしたままで、packageは引き続きnpm未公開です。
+- このsource releaseはv1.0 stableを宣言せず、experimentalなTasks protocol adapterやstateless MRTR modeも追加しません。
 
 ## [0.3.0] - 2026-08-13
 
@@ -113,7 +126,7 @@
 - 公式MCP SDK v2 `Client + createMcpHandler` protocol integration test。
 - Node.js 20 / 22のfrozen `pnpm-lock.yaml` CI。
 - npm-pack tarball smoke test、clean consumer import、`workspace:` dependency漏れのregression protection。
-- 英日user / architecture / Redis / Cloudflare / MCP integration / observability / API / release / security / support / contribution docs。
+- 英日user / architecture、Redis、Cloudflare、MCP integration、observability、API、release、security、support、contribution docs。
 
 ### Safety behavior
 

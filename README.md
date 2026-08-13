@@ -66,7 +66,7 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.3.0`. `v0.3.0` is published as a GitHub/source release; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.4.0`. `v0.4.0` is the GitHub/source release prepared by this branch; npm registry publication remains intentionally deferred.
 
 ## Stability boundary for v1 consideration
 
@@ -311,7 +311,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.3.0` is the current published GitHub/source release boundary. The current `main` may contain post-v0.3.0 hardening and remains the basis for later v1.0 API-freeze/release review; this does not declare v1.0 stable.
+`v0.4.0` is the GitHub/source release boundary prepared by this branch. After publication, `main` may contain post-v0.4.0 hardening and remains the basis for later v1.0 API-freeze/release review; this does not declare v1.0 stable.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 
