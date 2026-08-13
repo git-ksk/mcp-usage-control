@@ -131,6 +131,10 @@ await assert.rejects(
   /different result/,
 );
 
+// Expiry fixtures need enough headroom for remote HTTP/workerd round trips on slow CI runners.
+const expiryFixtureTtlMs = 500;
+const expiryFixtureWaitMs = 650;
+
 // Pending expiry releases capacity on the next admission cleanup.
 const recoveryEvents = [];
 const observedStore = new RemoteCloudflareUsageStore({
@@ -138,9 +142,15 @@ const observedStore = new RemoteCloudflareUsageStore({
   headers: authHeaders,
   observer: { onEvent(event) { recoveryEvents.push(event); } },
 });
-const pending = await reserve(observedStore, 'pending-expiry', 'pending-expiry-budget', 1, 60);
+const pending = await reserve(
+  observedStore,
+  'pending-expiry',
+  'pending-expiry-budget',
+  1,
+  expiryFixtureTtlMs,
+);
 assert.equal(pending.accepted, true);
-await sleep(110);
+await sleep(expiryFixtureWaitMs);
 const afterPending = await reserve(observedStore, 'pending-after-expiry', 'pending-expiry-budget', 1, 1_000);
 assert.equal(afterPending.accepted, true, 'expired pending reservation must release capacity');
 assert.ok(
@@ -154,11 +164,17 @@ assert.ok(
 );
 
 // Cost-liable expiry retains the full reservation and emits recovery telemetry.
-const liable = await reserve(observedStore, 'liable-expiry', 'liable-expiry-budget', 1, 60);
+const liable = await reserve(
+  observedStore,
+  'liable-expiry',
+  'liable-expiry-budget',
+  1,
+  expiryFixtureTtlMs,
+);
 assert.equal(liable.accepted, true);
 if (!liable.accepted) throw new Error('expected liable fixture admission');
 await observedStore.markLiable({ reservationId: liable.reservation.id });
-await sleep(110);
+await sleep(expiryFixtureWaitMs);
 const afterLiable = await reserve(observedStore, 'liable-after-expiry', 'liable-expiry-budget', 1, 1_000);
 assert.deepEqual(
   afterLiable,
