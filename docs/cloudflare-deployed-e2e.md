@@ -21,7 +21,7 @@ The suite covers:
 - simulated lost reserve acknowledgement without blind retry;
 - simulated lost settlement acknowledgement with identical settlement reconciliation;
 - observer failure isolation;
-- optional rejection of a rotated-out credential;
+- optional dual-token credential-rotation overlap and post-retirement rejection;
 - on local workerd only, synthetic HTTP `429` and `503` platform-style failures through the real remote HTTP transport path.
 
 The test payload intentionally contains a sentinel tool argument so transport/log review can verify that raw tool arguments do not cross the Cloudflare usage-control boundary.
@@ -68,7 +68,7 @@ Copy the deployed `workers.dev` URL from Wrangler output and set:
 export MCP_USAGE_CLOUDFLARE_URL='https://<worker>.<subdomain>.workers.dev/v1/usage-store'
 ```
 
-The Worker config declares `MCP_USAGE_TEST_TOKEN` as a required secret. Do not move that value into Wrangler `vars` or commit it.
+The Worker config declares `MCP_USAGE_TEST_TOKEN` as a required secret. The optional `MCP_USAGE_TEST_PREVIOUS_TOKEN` secret is used only during a credential-rotation overlap window. Do not move either value into Wrangler `vars` or commit it.
 
 ## 4. Wait for deployed health
 
@@ -113,25 +113,62 @@ For the deployed test, inspect Worker/Durable Object logs and metrics and confir
 
 Avoid adding unique IDs as metric labels.
 
-## 7. Credential rotation validation
+## 7. Zero-downtime credential rotation validation
 
-Save the current token, rotate the Worker secret, then rerun the suite with both values available:
+The dogfood Worker accepts one required current token and one optional previous token. Rotate in this order so at least one credential remains valid throughout the change.
+
+### 7.1 Copy the current token into the previous-token slot
 
 ```bash
-export MCP_USAGE_CLOUDFLARE_OLD_TOKEN="$MCP_USAGE_CLOUDFLARE_TOKEN"
+export MCP_USAGE_CLOUDFLARE_PREVIOUS_TOKEN="$MCP_USAGE_CLOUDFLARE_TOKEN"
+printf '%s' "$MCP_USAGE_CLOUDFLARE_PREVIOUS_TOKEN" | \
+  pnpm dlx wrangler@4.114.0 secret put MCP_USAGE_TEST_PREVIOUS_TOKEN \
+    --config packages/cloudflare/wrangler.dogfood.jsonc
+```
+
+At this point both slots intentionally contain the old credential.
+
+### 7.2 Replace the current-token slot with a new token
+
+```bash
 export MCP_USAGE_CLOUDFLARE_TOKEN="$(openssl rand -hex 32)"
 printf '%s' "$MCP_USAGE_CLOUDFLARE_TOKEN" | \
   pnpm dlx wrangler@4.114.0 secret put MCP_USAGE_TEST_TOKEN \
     --config packages/cloudflare/wrangler.dogfood.jsonc
 ```
 
-Wait for `/health` again, then:
+Wait for `/health` again, then verify that both the new current credential and the old previous credential work:
 
 ```bash
-node packages/cloudflare/test/integration.mjs
+node packages/cloudflare/test/rotation.mjs
 ```
 
-When `MCP_USAGE_CLOUDFLARE_OLD_TOKEN` is set, the suite additionally verifies that the old credential is rejected while the new credential succeeds. Public local-workerd CI also sets a known stale token so this rejection behavior is exercised continuously, but the actual secret-rotation procedure still requires a deployed Cloudflare run.
+A successful overlap check ends with a `Cloudflare credential rotation: PASS` message.
+
+### 7.3 Move the application caller to the new token
+
+Update the GCP-hosted MCP server or other caller to use the new `MCP_USAGE_CLOUDFLARE_TOKEN`, then perform a normal usage-store smoke call. Do not remove the previous-token slot until the new caller configuration is confirmed.
+
+### 7.4 Retire the old token
+
+Preserve the old value locally for the rejection assertion, then remove the Worker-side previous secret:
+
+```bash
+export MCP_USAGE_CLOUDFLARE_RETIRED_TOKEN="$MCP_USAGE_CLOUDFLARE_PREVIOUS_TOKEN"
+unset MCP_USAGE_CLOUDFLARE_PREVIOUS_TOKEN
+pnpm dlx wrangler@4.114.0 secret delete MCP_USAGE_TEST_PREVIOUS_TOKEN \
+  --config packages/cloudflare/wrangler.dogfood.jsonc
+```
+
+Wait for `/health` once more and rerun:
+
+```bash
+node packages/cloudflare/test/rotation.mjs
+```
+
+The second run verifies that the new token still succeeds and the retired token is now rejected. Keep the dual-token overlap short and delete the previous token after all callers have moved.
+
+Public local-workerd CI continuously checks current-token acceptance, previous-token overlap acceptance, and a known retired-token rejection. The real secret update/delete sequence still requires a deployed Cloudflare run.
 
 ## 8. Platform-limit / overload validation
 
@@ -149,7 +186,9 @@ Remove the temporary secret file first:
 
 ```bash
 rm -f /tmp/muc-dogfood.env
-unset MCP_USAGE_CLOUDFLARE_TOKEN MCP_USAGE_CLOUDFLARE_OLD_TOKEN MCP_USAGE_CLOUDFLARE_URL
+unset MCP_USAGE_CLOUDFLARE_TOKEN MCP_USAGE_CLOUDFLARE_PREVIOUS_TOKEN \
+  MCP_USAGE_CLOUDFLARE_RETIRED_TOKEN MCP_USAGE_CLOUDFLARE_OLD_TOKEN \
+  MCP_USAGE_CLOUDFLARE_URL
 ```
 
 Then delete the dedicated Worker and its associated developer-platform resources:
@@ -163,4 +202,4 @@ Confirm the destructive prompt only for the dedicated dogfood Worker. If a Durab
 
 ## CI policy
 
-Public CI runs the integration suite against local workerd without Cloudflare credentials. It continuously checks the normal Durable Object accounting path, stale-credential rejection, and synthetic `429`/`503` fail-closed handling. A real deployed run is manual/opt-in and must not become a required secret-bearing public CI check.
+Public CI runs the integration suite against local workerd without Cloudflare credentials. It continuously checks the normal Durable Object accounting path, dual-token rotation overlap, retired-credential rejection, and synthetic `429`/`503` fail-closed handling. A real deployed run is manual/opt-in and must not become a required secret-bearing public CI check.
