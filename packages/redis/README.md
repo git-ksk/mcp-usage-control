@@ -6,7 +6,7 @@ Atomic Redis store for `mcp-usage-control`.
 
 ## English
 
-v0.1 implements all-or-nothing multi-budget reserve, pending -> cost-liable activation, renewal, settlement, state-dependent expiry recovery, bounded replay tombstones, and optional recovery observability with Redis-side Lua.
+The current adapter implements all-or-nothing multi-budget reserve, pending -> cost-liable activation, renewal, settlement, state-dependent expiry recovery, bounded replay tombstones, and optional recovery observability with Redis-side Lua.
 
 Lease/tombstone timestamps come from Redis server `TIME`, not application `Date.now()`. One global lease index ensures an expired reservation affecting several budgets is recovered once. Transactional state intentionally shares one configurable Redis Cluster hash slot.
 
@@ -25,7 +25,7 @@ Lua atomicity is not persistence/failover durability. Review HA, persistence, cl
 
 ## 日本語
 
-v0.1はRedis-side Luaでall-or-nothing multi-budget reserve、pending -> cost-liable activation、renewal、settlement、state-dependent expiry recovery、bounded replay tombstone、optionalなrecovery observabilityを実装します。
+current adapterはRedis-side Luaでall-or-nothing multi-budget reserve、pending -> cost-liable activation、renewal、settlement、state-dependent expiry recovery、bounded replay tombstone、optionalなrecovery observabilityを実装します。
 
 lease / tombstone時刻はapplication `Date.now()` ではなくRedis server `TIME` を使います。global lease indexを1つ使うため、複数budgetに影響するexpired reservationを1回だけrecoveryします。transactional stateは意図的に1つのconfigurable Redis Cluster hash slotを共有します。
 

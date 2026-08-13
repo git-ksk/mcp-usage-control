@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestはrelease preparationとして `0.3.0` に揃えていますが、v0.3.0 tag / GitHub Release / npm publicationはまだ作成・実施していません。
+このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.3.0` に揃っています。`v0.3.0` はGitHub/source releaseとして公開済みで、npm registry publicationは引き続き意図的にdeferredしています。current sourceにはここで説明するpost-v0.3.0 hardeningが含まれる場合があります。
 
 behavior / failure guaranteeは [Architecture](architecture.ja.md) / [Store実装contract](store-contract.ja.md)、v1 stable / deferred境界は [v1.0 readiness review](v1-readiness.ja.md) を参照してください。
 
@@ -227,11 +227,30 @@ tombstone retention中のidentical replayはidempotentです。units / outcome�
 ```ts
 new MemoryUsageStore({
   idempotencyTtlMs?,
+  maxRetainedOperations?,
+  maxRetainedBudgetKeys?,
   observer?,
 })
 ```
 
-test / local development向けprocess-local reference implementation。default settled replay retentionは24時間です。horizontal durable production Storeではありません。
+test / local development / 管理されたsingle-process deployment向けprocess-local reference implementationです。default:
+
+- settled replay retention (`idempotencyTtlMs`): 24時間
+- `maxRetainedOperations`: `100_000` active reservation + settled replay tombstone
+- `maxRetainedBudgetKeys`: `100_000` distinct non-zero budget key
+
+上限到達時にauthoritative accounting / replay stateをsilent evictionしません。代わりに `MemoryUsageStoreCapacityError` でfail closedします。
+
+運用helper:
+
+```ts
+store.stats()
+store.retireBudgetKey(budgetKey)
+```
+
+`stats()` は現在のretained operation / budget-key数とconfigured limitを返します。`retireBudgetKey()` は終了済みaccounting windowのkeyを明示的に忘れるためのAPIで、active reservationが参照中のkeyはrejectします。application側は、retireしたkeyを同じaccounting windowとして再利用しないことを保証する必要があります。non-zero usageのgeneric automatic TTL / LRU evictionはquota semanticsをresetし得るため意図的に行いません。
+
+expiry / tombstone cleanupはlazyで、store callごとの全件scanではなく最も早い既知deadlineを基準に実行します。ただしprocess-localのままで、horizontal / restart durableなproduction Storeではありません。詳しくは [Memory Storeの長期運用](memory-store.ja.md)。
 
 ### `UsageObserver` / `UsageEvent`
 
@@ -264,11 +283,12 @@ observabilityでありtransactional ledgerではありません。
 ### Core errors
 
 - `UsageStateError` — invalid / expired / missing / conflicting Store・resume state
-- `UsageDeniedError` —programmatic denial reasonを保持しつつ、thrown messageはgeneric
+- `UsageDeniedError` — programmatic denial reasonを保持しつつ、thrown messageはgeneric
+- `MemoryUsageStoreCapacityError` — boundedなin-memory operation / budget-key retentionが上限に達した状態。accounting stateをevictせず保持し、fail closedする
 
 ## `mcp-usage-control/conformance`
 
-v0.3.0 release candidateではpublic conformance subpathを追加しています。
+`v0.3.0` でpublic conformance subpathを追加しました。
 
 ```ts
 import {

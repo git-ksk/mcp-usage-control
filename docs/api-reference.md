@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-This reference describes the public API in the current source tree. All five package manifests are aligned at `0.3.0` for release preparation; no v0.3.0 tag, GitHub Release, or npm publication has been created or performed yet.
+This reference describes the public API in the current source tree. All five package manifests are aligned at `0.3.0`. `v0.3.0` is published as a GitHub/source release; npm registry publication remains intentionally deferred. The current source may contain post-v0.3.0 hardening documented here.
 
 For behavioral/failure guarantees, read [Architecture](architecture.md) and [Store implementation contract](store-contract.md). For the stable/deferred v1 boundary, read [v1.0 readiness review](v1-readiness.md).
 
@@ -227,13 +227,30 @@ Identical replay is idempotent while the Store retains the tombstone. A conflict
 ```ts
 new MemoryUsageStore({
   idempotencyTtlMs?,
+  maxRetainedOperations?,
+  maxRetainedBudgetKeys?,
   observer?,
 })
 ```
 
-Process-local reference implementation for tests and local development. Default settled replay retention: 24 hours.
+Process-local reference implementation for tests, local development, and controlled single-process deployments. Defaults:
 
-It is not a horizontally durable production Store.
+- settled replay retention (`idempotencyTtlMs`): 24 hours;
+- `maxRetainedOperations`: `100_000` active reservations plus settled replay tombstones;
+- `maxRetainedBudgetKeys`: `100_000` distinct non-zero budget keys.
+
+The store does not silently evict authoritative accounting or replay state when those bounds are reached. Admission fails closed with `MemoryUsageStoreCapacityError` instead.
+
+Operational helpers:
+
+```ts
+store.stats()
+store.retireBudgetKey(budgetKey)
+```
+
+`stats()` returns current retained-operation/budget-key counts and configured limits. `retireBudgetKey()` explicitly forgets one completed accounting-window key; it rejects keys still referenced by active reservations. The application must guarantee that a retired key will not be reused for the same accounting window. Generic automatic TTL/LRU eviction of non-zero usage is intentionally not performed because it could reset quota semantics.
+
+Expiry/tombstone cleanup is lazy and scheduled around the earliest known deadline rather than scanning all reservations on every store call. The store remains process-local and is not a horizontally or restart-durable production Store. See [Memory store operations](memory-store.md).
 
 ### `UsageObserver` / `UsageEvent`
 
@@ -267,10 +284,11 @@ This is observability, not the transactional ledger.
 
 - `UsageStateError` — invalid, expired, missing, or conflicting Store/resume state.
 - `UsageDeniedError` — programmatic denial reason with a deliberately generic thrown message.
+- `MemoryUsageStoreCapacityError` — bounded in-memory operation or budget-key retention is exhausted; accounting state is retained and the store fails closed rather than evicting it.
 
 ## `mcp-usage-control/conformance`
 
-The v0.3.0 release candidate adds a public conformance subpath:
+`v0.3.0` added a public conformance subpath:
 
 ```ts
 import {

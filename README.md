@@ -66,7 +66,7 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.3.0` for this release-preparation candidate. No v0.3.0 tag, GitHub Release, or npm publication has been created or performed yet.
+All five package manifests are aligned at `0.3.0`. `v0.3.0` is published as a GitHub/source release; npm registry publication remains intentionally deferred.
 
 ## Stability boundary for v1 consideration
 
@@ -151,6 +151,12 @@ try {
 Long-running direct-core work must renew the lease while authoritative execution remains active.
 
 Successful admission also exposes authoritative `remainingByBudget`; do not recompute remaining capacity from configured limits in another layer.
+
+### Long-running Memory store use
+
+`MemoryUsageStore` is process-local, but controlled single-process deployments can bound retained operation/tombstone and non-zero budget-key state. Capacity exhaustion fails closed rather than evicting authoritative accounting state. `stats()` exposes retention counters, and completed time-window budget keys can be removed explicitly with `retireBudgetKey()` once the application knows that accounting window is permanently over.
+
+See [Memory store operations](docs/memory-store.md) before keeping the in-memory store alive for long periods. Horizontal or restart-durable deployments should use a shared provider-backed Store.
 
 ## MCP TypeScript SDK v2
 
@@ -289,6 +295,7 @@ See [Observability](docs/observability.md).
 - [MCP protocol conformance](docs/mcp-conformance.md)
 - [MCP Tasks accounting](docs/mcp-tasks-accounting.md)
 - [Architecture](docs/architecture.md)
+- [Memory store operations](docs/memory-store.md)
 - [Store implementation contract](docs/store-contract.md)
 - [Redis](docs/redis.md)
 - [Cloudflare](docs/cloudflare.md)
@@ -304,9 +311,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-v0.2.0 remains an unchanged historical GitHub/source release boundary.
-
-The current source tree is prepared as the **v0.3.0 release candidate** and is also the current basis for later v1.0 release-candidate/final-release review. This does not declare v1.0 stable. No v0.3.0 tag or GitHub Release has been created yet.
+`v0.3.0` is the current published GitHub/source release boundary. The current `main` may contain post-v0.3.0 hardening and remains the basis for later v1.0 API-freeze/release review; this does not declare v1.0 stable.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 
