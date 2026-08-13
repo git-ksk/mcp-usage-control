@@ -41,7 +41,7 @@ protectTool()
 
 | Store | 向いている構成 | 詳細 |
 | --- | --- | --- |
-| Memory | test / local development | [はじめに](getting-started.ja.md) |
+| Memory | test / local development / controlled single-process | [Memory storeの長期運用](memory-store.ja.md) |
 | Redis | 高頻度、tenant共有quota、低latency | [Redis adapter](redis.ja.md) |
 | Cloudflare Durable Objects | Cloudflare中心の構成 | [Cloudflare adapter](cloudflare.ja.md) |
 | Firestore | Firebase / GCP、ユーザー単位quota中心 | [Firestore](firestore.ja.md) |
@@ -75,6 +75,7 @@ protectTool()
 
 ## 運用・リリース
 
+- [Memory storeの長期運用](memory-store.ja.md) — bounded retention、fail-closed capacity、stats、完了済みbudget windowの明示retire
 - [Release policy](releasing.ja.md) — versioning、release、npm publish手順
 - [Changelog](../CHANGELOG.ja.md) — 変更履歴、互換性、既知の制約
 - [Security policy](../SECURITY.ja.md) — vulnerability reportとsecurity policy

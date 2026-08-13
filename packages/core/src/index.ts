@@ -398,11 +398,45 @@ export class UsageControl {
   }
 }
 
+const DEFAULT_MEMORY_MAX_RETAINED_OPERATIONS = 100_000;
+const DEFAULT_MEMORY_MAX_RETAINED_BUDGET_KEYS = 100_000;
+
 export interface MemoryUsageStoreOptions {
   /** How long a settled operation remains replay-protected. Defaults to 24 hours. */
   idempotencyTtlMs?: number;
+  /**
+   * Maximum active reservations plus settled replay tombstones retained in-process.
+   * Defaults to 100,000. Capacity exhaustion fails closed instead of evicting state.
+   */
+  maxRetainedOperations?: number;
+  /**
+   * Maximum distinct budget keys with non-zero retained usage. Defaults to 100,000.
+   * Capacity exhaustion fails closed instead of silently resetting a budget.
+   */
+  maxRetainedBudgetKeys?: number;
   /** Optional best-effort observer for expiry/recovery events. */
   observer?: UsageObserver;
+}
+
+export interface MemoryUsageStoreStats {
+  retainedOperations: number;
+  retainedBudgetKeys: number;
+  maxRetainedOperations: number;
+  maxRetainedBudgetKeys: number;
+}
+
+export class MemoryUsageStoreCapacityError extends UsageStateError {
+  constructor(
+    public readonly resource: 'operations' | 'budget_keys',
+    public readonly limit: number,
+  ) {
+    super(
+      resource === 'operations'
+        ? `MemoryUsageStore operation retention limit reached (${limit}); refusing to evict replay/accounting state`
+        : `MemoryUsageStore budget-key retention limit reached (${limit}); refusing to evict authoritative usage state`,
+    );
+    this.name = 'MemoryUsageStoreCapacityError';
+  }
 }
 
 interface InternalReservation extends ReservationRecord {
@@ -418,12 +452,52 @@ export class MemoryUsageStore implements UsageStore {
   private readonly reservations = new Map<string, InternalReservation>();
   private readonly operations = new Map<string, string>();
   private readonly idempotencyTtlMs: number;
+  private readonly maxRetainedOperations: number;
+  private readonly maxRetainedBudgetKeys: number;
   private readonly observer?: UsageObserver;
+  private nextRecoveryAt = Number.POSITIVE_INFINITY;
 
   constructor(options: MemoryUsageStoreOptions = {}) {
     this.idempotencyTtlMs = options.idempotencyTtlMs ?? 86_400_000;
+    this.maxRetainedOperations =
+      options.maxRetainedOperations ?? DEFAULT_MEMORY_MAX_RETAINED_OPERATIONS;
+    this.maxRetainedBudgetKeys =
+      options.maxRetainedBudgetKeys ?? DEFAULT_MEMORY_MAX_RETAINED_BUDGET_KEYS;
     this.observer = options.observer;
     assertPositiveInteger(this.idempotencyTtlMs, 'idempotencyTtlMs');
+    assertPositiveInteger(this.maxRetainedOperations, 'maxRetainedOperations');
+    assertPositiveInteger(this.maxRetainedBudgetKeys, 'maxRetainedBudgetKeys');
+  }
+
+  /** Current bounded-retention counters for health checks and operational monitoring. */
+  stats(): MemoryUsageStoreStats {
+    this.recoverExpired(Date.now());
+    return {
+      retainedOperations: this.reservations.size,
+      retainedBudgetKeys: this.used.size,
+      maxRetainedOperations: this.maxRetainedOperations,
+      maxRetainedBudgetKeys: this.maxRetainedBudgetKeys,
+    };
+  }
+
+  /**
+   * Explicitly retire one budget key after its accounting window is permanently over.
+   *
+   * This is never automatic because forgetting non-zero usage can reset quota semantics.
+   * Active reservations block retirement. Callers must ensure the same key will not later
+   * be reused for the same accounting window.
+   */
+  retireBudgetKey(budgetKey: string): boolean {
+    if (typeof budgetKey !== 'string' || budgetKey.length === 0) {
+      throw new RangeError('budgetKey must be a non-empty string');
+    }
+    this.recoverExpired(Date.now());
+    for (const reservation of this.reservations.values()) {
+      if (reservation.state !== 'settled' && reservation.budgetKeys.includes(budgetKey)) {
+        throw new UsageStateError('Cannot retire a budget key referenced by an active reservation');
+      }
+    }
+    return this.used.delete(budgetKey);
   }
 
   async reserve(input: {
@@ -459,6 +533,9 @@ export class MemoryUsageStore implements UsageStore {
       };
     }
 
+    this.assertOperationCapacity();
+    if (input.units > 0) this.assertBudgetCapacity(budgets);
+
     const reservation: InternalReservation = {
       id: operationKey,
       operationId: input.request.operationId,
@@ -475,11 +552,14 @@ export class MemoryUsageStore implements UsageStore {
       state: 'pending',
     };
 
-    for (const budget of budgets) {
-      this.used.set(budget.key, (this.used.get(budget.key) ?? 0) + input.units);
+    if (input.units > 0) {
+      for (const budget of budgets) {
+        this.used.set(budget.key, (this.used.get(budget.key) ?? 0) + input.units);
+      }
     }
     this.reservations.set(reservation.id, reservation);
     this.operations.set(operationKey, reservation.id);
+    this.trackRecoveryAt(reservation.expiresAt);
 
     return {
       accepted: true,
@@ -513,6 +593,7 @@ export class MemoryUsageStore implements UsageStore {
     }
 
     reservation.expiresAt = now + input.ttlMs;
+    this.trackRecoveryAt(reservation.expiresAt);
     return { reservationId: reservation.id, expiresAt: reservation.expiresAt };
   }
 
@@ -540,19 +621,29 @@ export class MemoryUsageStore implements UsageStore {
     reservation.actualUnits = input.actualUnits;
     reservation.outcome = input.outcome;
     reservation.tombstoneExpiresAt = now + this.idempotencyTtlMs;
+    this.trackRecoveryAt(reservation.tombstoneExpiresAt);
     return toSettlement(reservation);
   }
 
   private recoverExpired(now: number): void {
+    if (now < this.nextRecoveryAt) return;
+
+    let nextRecoveryAt = Number.POSITIVE_INFINITY;
     for (const [id, reservation] of this.reservations) {
       if (reservation.state === 'settled') {
-        if ((reservation.tombstoneExpiresAt ?? Number.POSITIVE_INFINITY) <= now) {
+        const tombstoneExpiresAt = reservation.tombstoneExpiresAt ?? Number.POSITIVE_INFINITY;
+        if (tombstoneExpiresAt <= now) {
           this.operations.delete(reservation.operationKey);
           this.reservations.delete(id);
+        } else {
+          nextRecoveryAt = Math.min(nextRecoveryAt, tombstoneExpiresAt);
         }
         continue;
       }
-      if (reservation.expiresAt > now) continue;
+      if (reservation.expiresAt > now) {
+        nextRecoveryAt = Math.min(nextRecoveryAt, reservation.expiresAt);
+        continue;
+      }
 
       if (reservation.state === 'pending') {
         this.releaseAcrossBudgets(reservation.budgetKeys, reservation.reservedUnits);
@@ -580,6 +671,7 @@ export class MemoryUsageStore implements UsageStore {
       reservation.actualUnits = reservation.reservedUnits;
       reservation.outcome = 'lease_expired_after_execution_started';
       reservation.tombstoneExpiresAt = now + this.idempotencyTtlMs;
+      nextRecoveryAt = Math.min(nextRecoveryAt, reservation.tombstoneExpiresAt);
       emitUsageEvent(this.observer, {
         type: 'reservation.recovered',
         timestamp: now,
@@ -594,6 +686,27 @@ export class MemoryUsageStore implements UsageStore {
         count: 1,
       });
     }
+    this.nextRecoveryAt = nextRecoveryAt;
+  }
+
+  private assertOperationCapacity(): void {
+    if (this.reservations.size >= this.maxRetainedOperations) {
+      throw new MemoryUsageStoreCapacityError('operations', this.maxRetainedOperations);
+    }
+  }
+
+  private assertBudgetCapacity(budgets: readonly Budget[]): void {
+    const newBudgetKeys = new Set<string>();
+    for (const budget of budgets) {
+      if (!this.used.has(budget.key)) newBudgetKeys.add(budget.key);
+    }
+    if (this.used.size + newBudgetKeys.size > this.maxRetainedBudgetKeys) {
+      throw new MemoryUsageStoreCapacityError('budget_keys', this.maxRetainedBudgetKeys);
+    }
+  }
+
+  private trackRecoveryAt(expiresAt: number): void {
+    this.nextRecoveryAt = Math.min(this.nextRecoveryAt, expiresAt);
   }
 
   private releaseAcrossBudgets(budgetKeys: readonly string[], units: number): void {
