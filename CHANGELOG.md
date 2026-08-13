@@ -4,9 +4,16 @@
 
 All notable project changes are recorded here.
 
+## [Unreleased]
+
+### Changed
+
+- Hardened `MemoryUsageStore` for long-running single-process use without weakening quota or replay semantics: bounded retained operations/tombstones and non-zero budget keys, fail-closed `MemoryUsageStoreCapacityError` on capacity exhaustion, `stats()` retention counters, explicit `retireBudgetKey()` for application-owned completed-window retirement, zero-unit key avoidance, and deadline-aware lazy recovery instead of scanning all reservations on every store call.
+- Added English/Japanese Memory store operational guidance covering retention sizing, safe budget-window retirement, monitoring, and the boundary between controlled single-process use and provider-backed durable/shared Stores.
+
 ## [0.3.0] - 2026-08-13
 
-Release candidate for the next GitHub/source release. npm registry publication remains intentionally deferred and is not part of this release preparation. No v0.3.0 tag or GitHub Release is created by this PR.
+Third GitHub/source release. npm registry publication remains intentionally deferred and is not part of this release.
 
 ### Added
 
@@ -16,14 +23,14 @@ Release candidate for the next GitHub/source release. npm registry publication r
 ### Changed
 
 - Added explicit MCP `2026-07-28` / SDK `2.0.0` conformance proof for fresh-request multi-round retries and cross-handler resume. The v1 MRTR direction is the existing shared/durable compare-and-consume model without sticky MCP sessions; a new stateless MRTR claim mode remains deferred.
-- Completed the v1-readiness audit and synchronized README/API/roadmap guidance with the current source boundary. No known design or implementation blocker requires a pre-v1 redesign or new runtime feature.
+- Completed the v1-readiness audit and synchronized README/API/roadmap guidance with the source-release boundary. No known design or implementation blocker requires a pre-v1 redesign or new runtime feature.
 - Sharpened project positioning and roadmap guidance around the failure-safe transactional usage-enforcement boundary and post-v0.2 MCP-native correctness work.
 
 ### Release boundary
 
 - Issue #24 remains open for additional real Cloudflare operational evidence and is non-blocking for source release readiness.
 - Issue #6 remains intentionally deferred; the packages are still unpublished to npm.
-- This release candidate does not declare v1.0 stable, does not add the experimental Tasks protocol adapter, and does not add a stateless MRTR mode.
+- This source release does not declare v1.0 stable, does not add the experimental Tasks protocol adapter, and does not add a stateless MRTR mode.
 
 ## [0.2.0] - 2026-08-12
 
