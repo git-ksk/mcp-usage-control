@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { createCloudflareBearerTokenAuthorizer } from './auth.js';
 
 function request(token?: string): Request {
-  return new Request('https://usage.example.test/v1/usage-store', {
-    method: 'POST',
-    headers: token === undefined ? undefined : { authorization: `Bearer ${token}` },
-  });
+  const init: RequestInit = { method: 'POST' };
+  if (token !== undefined) init.headers = { authorization: `Bearer ${token}` };
+  return new Request('https://usage.example.test/v1/usage-store', init);
 }
 
 describe('createCloudflareBearerTokenAuthorizer', () => {
