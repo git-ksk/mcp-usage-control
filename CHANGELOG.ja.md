@@ -4,9 +4,16 @@
 
 主なproject changeを記録します。
 
+## [Unreleased]
+
+### Changed
+
+- quota / replay semanticsを弱めず、`MemoryUsageStore` のlong-running single-process運用をhardeningしました。retained operation / tombstoneとnon-zero budget keyをbounded化し、capacity exhaustion時はaccounting stateをevictせず `MemoryUsageStoreCapacityError` でfail closed、`stats()` でretentionを監視、application-ownedな終了済みwindowを `retireBudgetKey()` で明示退役、zero-unit keyを保持せず、store callごとの全reservation scanを避けるdeadline-aware lazy recoveryへ変更しました。
+- retention sizing、安全なbudget-window retirement、monitoring、controlled single-process利用とprovider-backed durable/shared Storeの境界を説明するMemory Store運用ガイドを英日で追加しました。
+
 ## [0.3.0] - 2026-08-13
 
-次のGitHub/source release候補です。npm registryへの公開は引き続き意図的にdeferredし、このrelease preparationには含めません。このPRではv0.3.0 tag / GitHub Releaseを作成しません。
+3回目のGitHub/source releaseです。npm registryへの公開は引き続き意図的にdeferredし、このreleaseには含めません。
 
 ### Added
 
@@ -16,14 +23,14 @@
 ### Changed
 
 - MCP `2026-07-28` / SDK `2.0.0` に対するexplicit conformance proofを追加し、fresh-request multi-round retryとcross-handler resumeを検証しました。v1のMRTR方針はsticky MCP sessionを要求しない現行shared / durable compare-and-consumeとし、新しいstateless MRTR claim modeはdeferredのままです。
-- v1-readiness auditを完了し、README / API / roadmap guidanceをcurrent source boundaryへ同期しました。v1前に再設計または新runtime機能を必須とする既知のdesign / implementation blockerはありません。
+- v1-readiness auditを完了し、README / API / roadmap guidanceをsource-release boundaryへ同期しました。v1前に再設計または新runtime機能を必須とする既知のdesign / implementation blockerはありません。
 - failure-safeなtransactional usage-enforcement境界とpost-v0.2 MCP-native correctness workが明確になるよう、project positioning / roadmap guidanceを整理しました。
 
 ### Release boundary
 
 - Issue #24はCloudflare実環境の追加operational evidence向けにopenのままで、source release readinessにはnon-blockingです。
 - Issue #6は意図的にdeferredしたままで、packageは引き続きnpm未公開です。
-- このrelease candidateはv1.0 stableを宣言せず、experimentalなTasks protocol adapterやstateless MRTR modeも追加しません。
+- このsource releaseはv1.0 stableを宣言せず、experimentalなTasks protocol adapterやstateless MRTR modeも追加しません。
 
 ## [0.2.0] - 2026-08-12
 
