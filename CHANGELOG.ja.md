@@ -6,6 +6,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- optionalな `mcp-usage-control-cloudflare/auth` subpathと `createCloudflareBearerTokenAuthorizer()` を追加しました。current token 1本とprevious token 1本を一時的に受け付けることで、mandatoryなapplication-defined `authorize(request)` contractを維持したまま、remote Cloudflare gatewayのcredentialを認証断なしでrotationできます。
+
+### Validation / compatibility
+
+- local workerdのcredential-rotation coverageと、英日deployed-dogfood runbookへ zero-downtime sequence（currentをpreviousへコピー -> currentを置換 -> callerを切替 -> previousをretire）を追加しました。quota / accounting semantics、Durable Object schema、retry / fail-closed behavior、既存custom authorizerは変更していません。
+
 ## [0.4.0] - 2026-08-13
 
 4回目のGitHub/source releaseです。npm registryへの公開は引き続き意図的にdeferredし、このreleaseには含めません。
@@ -111,7 +119,7 @@
 - `@modelcontextprotocol/server` v2 single-round tool向け `mcp-usage-control-mcp` adapter。
 - normal success、`{ isError: true }`、thrown error、classifier failure、settlement ambiguityを扱うMCP result classification。
 - v0.1 `input_required` support boundary向け `UnsupportedMcpUsageFlowError`。
-- Redis-side Luaでmulti-budget reserve、liability、renew、settlement、expiry recovery、tombstoneをatomicに処理する `mcp-usage-control-redis`。
+- Redis-side Luaでmulti-budget reserve、liability、renewal、settlement、expiry recovery、tombstoneをatomicに処理する `mcp-usage-control-redis`。
 - Redis server timeによるlease / tombstone判定とRedis Cluster compatible single-hash-slot transaction domain。
 - SQLite-backed Durable Objects、Worker-local / authenticated remote UsageStore、hashed transport identifier、lazy expiry recovery、fail-close remote behaviorを持つ `mcp-usage-control-cloudflare`。
 - Cloudflare SQLite schema versioning、既存v1 schemaのsafe adoption、incompatible schemaのfail-close、migration / rollback guidance。
