@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.3.0` に揃っています。`v0.3.0` はGitHub/source releaseとして公開済みで、npm registry publicationは引き続き意図的にdeferredしています。current sourceにはここで説明するpost-v0.3.0 hardeningが含まれる場合があります。
+このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.4.0` に揃っています。`v0.4.0` はこのbranchで準備するGitHub/source releaseで、npm registry publicationは引き続き意図的にdeferredしています。
 
 behavior / failure guaranteeは [Architecture](architecture.ja.md) / [Store実装contract](store-contract.ja.md)、v1 stable / deferred境界は [v1.0 readiness review](v1-readiness.ja.md) を参照してください。
 
