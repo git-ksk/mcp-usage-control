@@ -16,7 +16,7 @@ If this is your first visit, read these in order:
 
 | Store | Read this | Good fit |
 | --- | --- | --- |
-| Memory | [Getting started](getting-started.md) | Tests and local development |
+| Memory | [Memory store operations](memory-store.md) | Tests, local development, controlled single-process deployments |
 | Redis | [Redis adapter](redis.md) | High frequency, shared quotas, low latency |
 | Cloudflare Durable Objects | [Cloudflare adapter](cloudflare.md) | Cloudflare-centric deployments |
 | Firestore | [Firestore adapter](firestore.md) | Firebase/GCP, mostly user-scoped quotas |
@@ -39,6 +39,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 
 ## Operations and releases
 
+- [Memory store operations](memory-store.md) — bounded retention, fail-closed capacity, stats, and explicit retirement of completed budget windows.
 - [Release policy](releasing.md) — versioning, package release, and npm publication procedure.
 - [Changelog](../CHANGELOG.md) — released features, compatibility changes, and known limitations.
 - [Security policy](../SECURITY.md) — vulnerability reporting and security policy.
