@@ -1,4 +1,5 @@
 import type { CloudflareDurableObjectNamespace } from '../src/index.js';
+import { createCloudflareBearerTokenAuthorizer } from '../src/auth.js';
 import { createCloudflareBudgetMaintenanceGateway } from '../src/maintenance.js';
 import { createReconciliableCloudflareUsageStoreGateway } from '../src/reconciliation.js';
 export { UsageControlDurableObject } from '../src/versioned-worker.js';
@@ -6,6 +7,7 @@ export { UsageControlDurableObject } from '../src/versioned-worker.js';
 interface Env {
   USAGE_CONTROL: CloudflareDurableObjectNamespace;
   MCP_USAGE_TEST_TOKEN: string;
+  MCP_USAGE_TEST_PREVIOUS_TOKEN?: string;
   MCP_USAGE_ENABLE_FAULT_INJECTION?: string;
 }
 
@@ -35,12 +37,16 @@ export default {
       }
     }
 
+    const authorize = createCloudflareBearerTokenAuthorizer({
+      currentToken: env.MCP_USAGE_TEST_TOKEN,
+      previousToken: env.MCP_USAGE_TEST_PREVIOUS_TOKEN,
+    });
+
     if (pathname === '/v1/usage-store-maintenance') {
       const maintenanceHandler = createCloudflareBudgetMaintenanceGateway({
         namespace: env.USAGE_CONTROL,
         domainName: 'integration-test',
-        authorizeMaintenance: candidate =>
-          candidate.headers.get('authorization') === `Bearer ${env.MCP_USAGE_TEST_TOKEN}`,
+        authorizeMaintenance: authorize,
       });
       return maintenanceHandler(request);
     }
@@ -50,8 +56,7 @@ export default {
       domainName: 'integration-test',
       cleanupBatchSize: 256,
       idempotencyTtlMs: 2_000,
-      authorize: candidate =>
-        candidate.headers.get('authorization') === `Bearer ${env.MCP_USAGE_TEST_TOKEN}`,
+      authorize,
     });
     return usageHandler(request);
   },
