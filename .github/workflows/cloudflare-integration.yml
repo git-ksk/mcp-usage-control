@@ -57,5 +57,6 @@ jobs:
           fi
 
           node packages/cloudflare/test/integration.mjs
+          node packages/cloudflare/test/rotation.mjs
           node packages/cloudflare/test/reconciliation.mjs
           node packages/cloudflare/test/maintenance.mjs
