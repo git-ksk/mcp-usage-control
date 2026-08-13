@@ -4,15 +4,26 @@
 
 All notable project changes are recorded here.
 
-## Unreleased
+## [0.3.0] - 2026-08-13
+
+Release candidate for the next GitHub/source release. npm registry publication remains intentionally deferred and is not part of this release preparation. No v0.3.0 tag or GitHub Release is created by this PR.
+
+### Added
+
+- Defined and proof-tested the long-running MCP Tasks accounting contract, covering one reservation per logical operation, liability, lease renewal, completion/failure/cancellation, abandonment, worker crash, ambiguous acknowledgements, and reconciliation. A stable first-class Tasks wire/runtime adapter remains deferred while the upstream integration surface is experimental.
+- Added normative third-party `UsageStore` / `McpUsageFlowStore` safety contracts plus reusable `mcp-usage-control/conformance` and `mcp-usage-control-mcp/conformance` public runners. CI verifies the conformance subpaths in package tarballs and a clean consumer; backend durability/failover/ACK evidence remains provider-specific.
 
 ### Changed
 
-- Added project positioning and roadmap guidance after v0.2.0 to sharpen the failure-safe transactional usage-enforcement boundary and track post-v0.2 MCP-native correctness work. These documentation changes are not part of the v0.2.0 source release.
-- Added explicit MCP `2026-07-28` / SDK `2.0.0` conformance proof for fresh-request multi-round retries and cross-handler resume, documenting that horizontal scale requires shared accounting/flow state but not sticky MCP sessions. Tasks support and any new stateless MRTR resume mode remain deferred pending separate failure-semantics proof.
-- Defined and proof-tested the long-running MCP Tasks accounting state machine, including liability, renewal, completion/failure/cancellation, abandonment, worker crash, ambiguous acknowledgements, and reconciliation. The v1 MRTR direction remains the existing shared/durable compare-and-consume design; first-class Tasks protocol integration remains deferred while the upstream extension is experimental.
-- Added normative third-party `UsageStore` / `McpUsageFlowStore` safety contracts plus reusable `mcp-usage-control/conformance` and `mcp-usage-control-mcp/conformance` runners. CI now verifies those public subpaths in package tarballs and a clean consumer, while provider-specific durability/failover/ACK evidence remains separate from portable behavioral conformance.
-- Completed the v1-readiness audit and synchronized README/API/roadmap documentation with the current source boundary. The source/API is assessed as ready for v1 release-candidate/final-release preparation; remaining Cloudflare real-platform observations in #24 and first npm publication in #6 are explicitly non-blocking/deferred. No v1 tag, GitHub Release, or npm publication is performed by this work.
+- Added explicit MCP `2026-07-28` / SDK `2.0.0` conformance proof for fresh-request multi-round retries and cross-handler resume. The v1 MRTR direction is the existing shared/durable compare-and-consume model without sticky MCP sessions; a new stateless MRTR claim mode remains deferred.
+- Completed the v1-readiness audit and synchronized README/API/roadmap guidance with the current source boundary. No known design or implementation blocker requires a pre-v1 redesign or new runtime feature.
+- Sharpened project positioning and roadmap guidance around the failure-safe transactional usage-enforcement boundary and post-v0.2 MCP-native correctness work.
+
+### Release boundary
+
+- Issue #24 remains open for additional real Cloudflare operational evidence and is non-blocking for source release readiness.
+- Issue #6 remains intentionally deferred; the packages are still unpublished to npm.
+- This release candidate does not declare v1.0 stable, does not add the experimental Tasks protocol adapter, and does not add a stateless MRTR mode.
 
 ## [0.2.0] - 2026-08-12
 
