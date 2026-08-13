@@ -2,7 +2,7 @@
 
 Cloudflare Durable Objects + SQLite adapter for `mcp-usage-control`.
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-cloudflare-0.3.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-cloudflare-0.4.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
 
 ## English
 
@@ -25,6 +25,19 @@ Hashing is not encryption. Do not put secrets in identifiers.
 
 The HTTP gateway has no allow-all authentication mode: callers must provide an application-defined `authorize(request)` callback. The remote client does not blindly retry timeouts or lost acknowledgements.
 
+For simple Bearer-token deployments, `mcp-usage-control-cloudflare/auth` exports `createCloudflareBearerTokenAuthorizer()`. It accepts a required current token plus one optional previous token so callers can rotate credentials without an authentication gap:
+
+```ts
+import { createCloudflareBearerTokenAuthorizer } from 'mcp-usage-control-cloudflare/auth';
+
+const authorize = createCloudflareBearerTokenAuthorizer({
+  currentToken: env.MCP_USAGE_TOKEN,
+  previousToken: env.MCP_USAGE_PREVIOUS_TOKEN,
+});
+```
+
+For zero-downtime rotation, first copy the current token into the previous-token slot, then replace the current token, move callers to the new token, and finally remove the previous token. Keep the overlap short. Applications with stronger identity requirements can continue supplying their own `authorize(request)` implementation; the helper is optional and does not change the gateway contract.
+
 For applications that need to recover an ambiguous `reserve()` after a timeout/network failure, the optional `mcp-usage-control-cloudflare/reconciliation` subpath provides an authenticated read-only lookup. Use `createReconciliableCloudflareUsageStoreGateway()` and `reconcileRemoteCloudflareReserve()` explicitly; do not hide ambiguous reserve results behind generic retry middleware.
 
 Historical window cleanup is also explicit. The optional `mcp-usage-control-cloudflare/maintenance` subpath exposes a separate authenticated endpoint that prunes only application-selected historical budget keys in bounded batches. Protected/current keys and budgets referenced by active reservations are not deleted.
@@ -34,6 +47,7 @@ Historical window cleanup is also explicit. The optional `mcp-usage-control-clou
 The adapter does not schedule alarms or intentionally keep a Durable Object active. Expiry/tombstone cleanup is lazy and bounded on subsequent operations. This minimizes background activity but means a large stale-state backlog can conservatively delay capacity recovery.
 
 - [Cloudflare adapter guide](../../docs/cloudflare.md)
+- [Deployed E2E / credential rotation](../../docs/cloudflare-deployed-e2e.md)
 - [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.md)
 - [Historical budget pruning](../../docs/cloudflare-budget-pruning.md)
 - [SQLite schema migrations](../../docs/cloudflare-schema-migrations.md)
@@ -62,6 +76,19 @@ hashingはencryptionではありません。identifierへsecretを入れない�
 
 HTTP gatewayにallow-all authentication defaultはありません。application側で `authorize(request)` callbackを必ず指定します。remote clientはtimeout / lost ACKをblind retryしません。
 
+単純なBearer token構成向けに、`mcp-usage-control-cloudflare/auth` は `createCloudflareBearerTokenAuthorizer()` を提供します。必須のcurrent tokenとoptionalなprevious tokenを同時に受け付けられるため、認証断を作らずcredential rotationできます。
+
+```ts
+import { createCloudflareBearerTokenAuthorizer } from 'mcp-usage-control-cloudflare/auth';
+
+const authorize = createCloudflareBearerTokenAuthorizer({
+  currentToken: env.MCP_USAGE_TOKEN,
+  previousToken: env.MCP_USAGE_PREVIOUS_TOKEN,
+});
+```
+
+無停止rotationでは、まず現在tokenをprevious slotへコピーし、その後current tokenを新tokenへ置換し、callerを新tokenへ切り替え、最後にprevious tokenを削除します。overlap期間は短く保ってください。より強いidentity要件があるapplicationは従来どおり独自の `authorize(request)` を利用でき、このhelperはoptionalでgateway contractを変更しません。
+
 `reserve()` のtimeout / network failure後にambiguous resultを復元する必要があるapplication向けに、optionalな `mcp-usage-control-cloudflare/reconciliation` subpathがauthenticated read-only lookupを提供します。`createReconciliableCloudflareUsageStoreGateway()` と `reconcileRemoteCloudflareReserve()` を明示的に利用し、ambiguous reserveをgeneric retry middlewareで隠さないでください。
 
 historical window cleanupも明示操作です。optionalな `mcp-usage-control-cloudflare/maintenance` subpathは、applicationがhistoricalとして選択したbudget keyだけをbounded batchでpruneする別authenticated endpointを提供します。protected/current keyとactive reservationが参照中のbudgetは削除しません。
@@ -71,6 +98,7 @@ historical window cleanupも明示操作です。optionalな `mcp-usage-control-
 adapterはalarmをscheduleせず、Durable Objectを意図的に常駐させません。expiry / tombstone cleanupは後続operation時のlazy / bounded cleanupです。background activityを抑える代わりに、大量のstale stateがある場合はcapacity recoveryが保守的に遅れる可能性があります。
 
 - [Cloudflare adapter guide](../../docs/cloudflare.ja.md)
+- [実環境E2E / credential rotation](../../docs/cloudflare-deployed-e2e.ja.md)
 - [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.ja.md)
 - [Historical budget pruning](../../docs/cloudflare-budget-pruning.ja.md)
 - [SQLite schema migration](../../docs/cloudflare-schema-migrations.ja.md)
