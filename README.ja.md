@@ -66,7 +66,7 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは今回のrelease-preparation candidateとして `0.3.0` に揃えています。v0.3.0 tag / GitHub Release / npm publicationはまだ作成・実施していません。
+5 packageのmanifestは `0.3.0` に揃っています。`v0.3.0` はGitHub/source releaseとして公開済みで、npm registry publicationは引き続き意図的にdeferredしています。
 
 ## v1検討時のstable / deferred境界
 
@@ -151,6 +151,12 @@ try {
 長時間workではauthoritative executionが続く間leaseをrenewします。
 
 admission成功時にはauthoritative Storeが算出した `remainingByBudget` も返ります。別layerでconfigured limitからremainingを再計算しないでください。
+
+### Memory Storeを長時間使う場合
+
+`MemoryUsageStore` はprocess-localですが、管理されたsingle-process deploymentではoperation / tombstoneとnon-zero budget keyの保持数をbounded化できます。上限到達時はauthoritative accounting stateを勝手にevictせずfail closedします。`stats()` で保持量を監視でき、終了済みtime-window budgetはapplication側でwindow終了を保証できる場合だけ `retireBudgetKey()` で明示的に退役できます。
+
+長時間常駐させる場合は [Memory Storeの長期運用](docs/memory-store.ja.md) を確認してください。horizontal scaleやprocess restartをまたぐdurabilityが必要ならprovider-backed shared Storeを利用します。
 
 ## MCP TypeScript SDK v2
 
@@ -285,6 +291,7 @@ observabilityはdurable billing ledgerではありません。
 - [MCP protocol conformance](docs/mcp-conformance.ja.md)
 - [MCP Tasks の利用量 accounting](docs/mcp-tasks-accounting.ja.md)
 - [Architecture](docs/architecture.ja.md)
+- [Memory Storeの長期運用](docs/memory-store.ja.md)
 - [Store実装contract](docs/store-contract.ja.md)
 - [Redis](docs/redis.ja.md)
 - [Cloudflare](docs/cloudflare.ja.md)
@@ -300,9 +307,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-v0.2.0は変更しないhistorical GitHub/source release boundaryとして維持します。
-
-current source treeは **v0.3.0 release candidate** として準備し、後続のv1.0 release-candidate / final-release reviewの基準にもなります。ただし、これはv1.0 stableの宣言ではありません。v0.3.0 tag / GitHub Releaseはまだ作成していません。
+`v0.3.0` が現在公開済みのGitHub/source release boundaryです。current `main` にはv0.3.0後のhardeningが含まれる場合があり、後続のv1.0 API-freeze / release reviewの基準になりますが、これはv1.0 stableの宣言ではありません。
 
 **npm publicationは別途explicit authorizationが必要で、まだ実施していません。**
 
