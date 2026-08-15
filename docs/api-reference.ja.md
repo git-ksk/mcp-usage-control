@@ -248,7 +248,7 @@ store.stats()
 store.retireBudgetKey(budgetKey)
 ```
 
-`stats()` は現在のretained operation / budget-key数とconfigured limitを返します。`retireBudgetKey()` は終了済みaccounting windowのkeyを明示的に忘れるためのAPIで、active reservationが参照中のkeyはrejectします。application側は、retireしたkeyを同じaccounting windowとして再利用しないことを保証する必要があります。non-zero usageのgeneric automatic TTL / LRU evictionはquota semanticsをresetし得るため意図的に行いません。
+`stats()` は現在のretained operation / budget-key数とconfigured limitを返します。これはconsumed usageではなくretention pressureのcounterで、`retainedOperations` にはactive reservationとreplay tombstoneが含まれます。`retireBudgetKey()` は終了済みaccounting windowのkeyを明示的に忘れるためのAPIで、active reservationが参照中のkeyはrejectします。application側は、retireしたkeyを同じaccounting windowとして再利用しないことを保証する必要があります。non-zero usageのgeneric automatic TTL / LRU evictionはquota semanticsをresetし得るため意図的に行いません。
 
 expiry / tombstone cleanupはlazyで、store callごとの全件scanではなく最も早い既知deadlineを基準に実行します。ただしprocess-localのままで、horizontal / restart durableなproduction Storeではありません。詳しくは [Memory Storeの長期運用](memory-store.ja.md)。
 

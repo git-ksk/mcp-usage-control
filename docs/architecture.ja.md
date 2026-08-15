@@ -46,6 +46,10 @@ v0.1ではinvocationに1つのunit quoteを決め、そのamountを**参加す�
 
 budget keyはadmission前にcanonicalizeします。empty list / duplicate budget keyはrejectします。1 budget用の `budget` quote formは内部で1要素listとして扱います。
 
+### Application-owned budget semantics
+
+budget namingはStore behaviorではなくapplication policyです。同じ `budget.key` は同じaccounting bucketを表し、異なるkeyは別bucketを表します。そのためCore / built-in Storeはdaily / monthly / lifetime分類、reset date、安全なhistorical retention horizonを推測しません。time-window policyはwindowをkeyへ含め、historical non-zero budget stateの削除はstill-valid bucketをresetしないことをapplicationが保証するlifecycle decisionとして扱います。
+
 burst rate limit / concurrency capはv0.1では別concernです。applicationがusage budgetとして明示的にmodelする場合を除きcoreは混同しません。
 
 ## Pendingとcost-liable lease
@@ -65,7 +69,7 @@ expiry behaviorはstate-dependentです。
 
 固定TTLだけではlong-running workに危険です。実行中reservationをreclaimすると別operationが同じbudget capacityを再利用できてしまいます。
 
-`UsageStore.renew()` はactive leaseをatomicに延長します。`mcp-usage-control-mcp` はwrapped handler実行中defaultでheartbeatを行い、settlementまたはmulti-round suspension前にheartbeatを止め、in-flight renewalの完了を待ちます。
+`UsageStore.renew()` はactive leaseをatomicに延長します。`mcp-usage-control-mcp` はwrapped handler実行中defaultでheartbeatを行い、settlementまたはmulti-round suspension前にheartbeatを止め、in-flight renewalの完了を待ちます。このwrapperを使わずreservation TTLを超える可能性があるintegrationは、authoritativeなrenewal loopを自前で実装しなければなりません。固定TTLを大きくするだけではrenewable-lease lifecycleの代替にはならず、deployment trade-offに留まります。
 
 `UsageLease.toResumeState()` / `UsageControl.resumeLease()` はpolicy quote / reserveを再実行せず、trusted server-side stateから既存leaseへreattachする仕組みです。raw resume stateはclient credentialではなく、そのように扱ってはいけません。
 

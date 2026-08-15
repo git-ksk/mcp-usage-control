@@ -33,9 +33,9 @@ const store = new MemoryUsageStore({
 });
 ```
 
-Choose `maxRetainedOperations` from the expected logical-operation rate multiplied by the replay-protection retention horizon, with headroom for active work. Lower `idempotencyTtlMs` only when the application can prove that its retry/replay horizon is shorter.
+Choose `maxRetainedOperations` from the expected logical-operation rate multiplied by the replay-protection retention horizon, with headroom for active work. It is an operational retention cap, not a per-principal usage quota, and should not be sized from `Budget.limit`. Lower `idempotencyTtlMs` only when the application can prove that its retry/replay horizon is shorter.
 
-`stats()` exposes current retained operation and budget-key counts together with their configured limits for health checks and operational monitoring.
+`stats()` exposes current retained operation and budget-key counts together with their configured limits for health checks and operational monitoring. These are retention-pressure counters, not usage totals: `retainedOperations` includes active reservations and settled replay tombstones, including operations that may ultimately settle at zero units.
 
 ## Retiring time-window budget keys
 

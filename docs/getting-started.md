@@ -39,7 +39,7 @@ It is not a payment processor, subscription manager, or invoicing system. Its jo
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects |
 | `mcp-usage-control-firestore` | Firebase/GCP deployments using Firestore as the authoritative store |
 
-The Memory store is for tests and local development. Use a distributed store when multiple production instances must share the same quota.
+The Memory store is the process-local reference implementation. It is suitable for tests, local development, and controlled single-process deployments that explicitly accept restart loss. Use a shared provider-backed store when enforcement state must survive restarts or be shared across instances.
 
 ## Current installation path
 
@@ -87,7 +87,7 @@ const control = new UsageControl(new MemoryUsageStore(), policy);
 
 This policy means one tool call costs one unit and each user gets 20 units for that day.
 
-Budget keys are application-defined. The runtime does not infer reset dates, so a daily limit should include its window in the key.
+Budget keys are application-defined. The runtime does not infer reset dates, so a daily limit should include its window in the key. The same key remains the same accounting bucket until application policy deliberately stops using or safely retires it.
 
 ## Several budgets can be enforced together
 
@@ -157,13 +157,13 @@ It finalizes the difference between reserved units and actual units.
 
 Settle to `0` only when the application can determine that no metered resource was consumed.
 
-Long-running tools may also need `renew()` to keep the lease alive. The MCP adapter handles heartbeat renewal while a protected handler is running.
+Long-running tools may also need `renew()` to keep the lease alive. The MCP adapter handles heartbeat renewal while a protected handler is running; custom integrations that can outlive the reservation TTL must provide an equivalent authoritative renewal loop.
 
 ## Choosing a production store
 
 | Store | Good fit | Main trade-off |
 | --- | --- | --- |
-| Memory | Tests and local development | Not shared across processes |
+| Memory | Tests, local development, controlled single-process use | Restart loss; not shared across processes |
 | Redis | High frequency, shared quotas, low latency | Requires Redis HA/persistence planning |
 | Cloudflare Durable Objects | Cloudflare-centric deployments | A Durable Object is the serialization point |
 | Firestore | Firebase/GCP, mostly user-scoped quotas | Large shared budgets can create document contention |

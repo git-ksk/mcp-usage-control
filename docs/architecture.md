@@ -46,6 +46,10 @@ v0.1 uses one unit quote for the invocation and reserves that amount against **e
 
 Budget keys are canonicalized before admission. Empty budget lists and duplicate budget keys are rejected. The one-budget `budget` quote form is normalized to a one-element budget list.
 
+### Application-owned budget semantics
+
+Budget naming is part of application policy, not Store behavior. The same `budget.key` means the same accounting bucket; a different key means a different bucket. Core and built-in Stores therefore do not infer daily/monthly/lifetime categories, reset dates, or safe historical-retention horizons. A time-window policy must encode the window in the key, and removal of historical non-zero budget state is an application lifecycle decision that must not reset a still-valid bucket.
+
 Burst rate limits and concurrency caps are separate concerns in v0.1 unless an application models them explicitly as usage budgets.
 
 ## Pending vs cost-liable leases
@@ -65,7 +69,7 @@ This closes the crash-after-cost refund gap. The generic MCP wrapper uses handle
 
 A fixed reservation TTL is unsafe for legitimate long-running work. If an active reservation is reclaimed while its operation is still running, another operation can reuse the same budget capacity.
 
-`UsageStore.renew()` atomically extends an active lease. `mcp-usage-control-mcp` enables a heartbeat by default while a wrapped handler runs and stops/waits for any in-flight renewal before settlement or multi-round suspension.
+`UsageStore.renew()` atomically extends an active lease. `mcp-usage-control-mcp` enables a heartbeat by default while a wrapped handler runs and stops/waits for any in-flight renewal before settlement or multi-round suspension. Any integration that bypasses that wrapper and can run beyond the reservation TTL must provide its own authoritative renewal loop. Merely choosing a larger fixed TTL is a deployment trade-off, not a substitute for the renewable-lease lifecycle.
 
 `UsageLease.toResumeState()` and `UsageControl.resumeLease()` provide a trusted server-side reattachment mechanism without running policy quote or reserve again. The raw resume state is not a client credential and must not be treated as one.
 

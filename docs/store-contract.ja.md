@@ -32,6 +32,8 @@ happy-pathだけ動くStoreをproduction-safeとは扱いません。
 
 ## `UsageStore` transaction contract
 
+budget-window semanticsは全implementationでapplication-ownedです。Storeは同一の `budget.key` を同じauthoritative accounting bucketとして扱い、wall-clock timeが進んだだけでdaily / monthly resetを作ったりnon-zero budget stateを破棄したりしてはいけません。historical windowを安全にretireできるかは、application-specific Store contractで明示しない限りapplication lifecycle decisionです。
+
 ```ts
 interface UsageStore {
   reserve(input: {
@@ -281,7 +283,7 @@ UsageStoreと同様、backend durabilityとlost-consume-ACK behaviorはportable 
 
 | Store | Atomic primitive | Time model | Production固有のboundary/evidence |
 | --- | --- | --- | --- |
-| `MemoryUsageStore` | process-local synchronous state | host `Date.now()` | reference/test専用。horizontal durabilityなし |
+| `MemoryUsageStore` | process-local synchronous state | host `Date.now()` | reference implementation。restart lossを許容するcontrolled single-process用途は可。restart-durable / horizontal sharedではない |
 | `RedisUsageStore` | 1 Redis Lua transaction domain | Redis `TIME` | concurrency / ACK-loss / expiry / renew / replay test。persistence / HAはdeployment-specific |
 | `CloudflareUsageStore` | 1 Durable Object + SQLite transaction domain | Durable Object runtime/store | local workerd + deployed dogfood。remote ambiguityはsurfaceしblind retryしない |
 | `FirestoreUsageStore` | Firestore transaction | host clock + documented grace | emulator concurrency / atomicity / expiry test。clock skewとshared-document contentionはdeployment limitとして明記 |

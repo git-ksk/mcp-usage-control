@@ -34,6 +34,8 @@ A store that merely “works” in happy-path tests must not be presented as pro
 
 ## `UsageStore` transaction contract
 
+Budget-window semantics remain application-owned across all implementations. A Store must treat an identical `budget.key` as the same authoritative accounting bucket and must not invent daily/monthly reset behavior or discard non-zero budget state merely because wall-clock time advanced. Safe retirement of historical windows is an application lifecycle decision unless an application-specific Store contract explicitly defines it.
+
 The core interface is:
 
 ```ts
@@ -300,7 +302,7 @@ The built-in stores combine the portable semantics with provider-specific tests/
 
 | Store | Atomic primitive | Time model | Production-specific evidence/boundary |
 | --- | --- | --- | --- |
-| `MemoryUsageStore` | process-local synchronous state | host `Date.now()` | reference/test implementation only; not horizontally durable |
+| `MemoryUsageStore` | process-local synchronous state | host `Date.now()` | reference implementation; controlled single-process use may accept restart loss, but it is not restart-durable or horizontally shared |
 | `RedisUsageStore` | one Redis Lua transaction domain | Redis `TIME` | concurrency, ACK-loss, expiry, renew, replay tests; persistence/HA remains deployment-specific |
 | `CloudflareUsageStore` | one Durable Object + SQLite transaction domain | Durable Object runtime/store | local workerd + deployed dogfood; remote ambiguity is surfaced, not blindly retried |
 | `FirestoreUsageStore` | Firestore transactions | host clock + documented grace | emulator concurrency/atomicity/expiry tests; clock skew and shared-document contention are documented deployment limits |
