@@ -33,9 +33,9 @@ const store = new MemoryUsageStore({
 });
 ```
 
-`maxRetainedOperations`は、想定logical-operation rate × replay protectionの保持時間を基準にし、active work分のheadroomを含めて設定してください。`idempotencyTtlMs`を短くするのは、application側のretry / replay horizonがそれより短いと保証できる場合だけにします。
+`maxRetainedOperations`は、想定logical-operation rate × replay protectionの保持時間を基準にし、active work分のheadroomを含めて設定してください。これはper-principal usage quotaではなくoperational retention capなので、`Budget.limit` を基準にサイズしません。`idempotencyTtlMs`を短くするのは、application側のretry / replay horizonがそれより短いと保証できる場合だけにします。
 
-`stats()`で現在のretained operation数・budget key数と設定上限を取得できるため、health checkや運用監視に使えます。
+`stats()`で現在のretained operation数・budget key数と設定上限を取得できるため、health checkや運用監視に使えます。これらはusage totalではなくretention pressureのcounterです。`retainedOperations` にはactive reservationとsettled replay tombstoneが含まれ、最終的に0 unitsでsettleするoperationも保持中は数えられます。
 
 ## time-window budget keyのretire
 

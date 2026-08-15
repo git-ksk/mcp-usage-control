@@ -78,7 +78,7 @@ Out of scopeです。usage accounting自身のstateはreconcileできますが�
 
 built-in Storeは同じpublic lifecycleを守りつつ、providerごとの実装境界を明示しています。
 
-- **Memory** — reference/test用。process-local state / host time
+- **Memory** — process-local reference implementation。restart lossを明示的に許容するtest / development / controlled single-process deploymentには利用可能だが、restart-durableまたはhorizontal shared enforcementには使わない
 - **Redis** — 1 Lua transaction domain、Redis server time、concurrency / expiry / replay / ACK-loss evidence。persistence / HAはdeployment-specific
 - **Cloudflare Durable Objects** — Durable Object + SQLite transaction domain、local workerd test + real deployed dogfood。remote state-changing ambiguityはblind retryせずsurface
 - **Firestore** — Firestore transaction + hashed storage identifier。host clock + documented expiry grace / contention limit

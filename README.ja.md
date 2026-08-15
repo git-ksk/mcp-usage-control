@@ -152,6 +152,10 @@ try {
 
 admission成功時にはauthoritative Storeが算出した `remainingByBudget` も返ります。別layerでconfigured limitからremainingを再計算しないでください。
 
+budget window / lifetime semanticsはapplication-ownedです。同じ `budget.key` は同じaccounting bucketを表し、keyを変えると別bucketになります。Core / Storeはdaily / monthly reset boundaryを推測せず、non-zero budgetを自動resetしません。
+
+`MemoryUsageStore.stats()` はaccounting / replay stateのretention量を返すもので、consumed quotaではありません。特に `retainedOperations` はactive reservationとsettled replay tombstoneを含むため、`consumedUnits` と解釈してはいけません。
+
 ### Memory Storeを長時間使う場合
 
 `MemoryUsageStore` はprocess-localですが、管理されたsingle-process deploymentではoperation / tombstoneとnon-zero budget keyの保持数をbounded化できます。上限到達時はauthoritative accounting stateを勝手にevictせずfail closedします。`stats()` で保持量を監視でき、終了済みtime-window budgetはapplication側でwindow終了を保証できる場合だけ `retireBudgetKey()` で明示的に退役できます。

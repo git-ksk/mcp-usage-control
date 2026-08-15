@@ -248,7 +248,7 @@ store.stats()
 store.retireBudgetKey(budgetKey)
 ```
 
-`stats()` returns current retained-operation/budget-key counts and configured limits. `retireBudgetKey()` explicitly forgets one completed accounting-window key; it rejects keys still referenced by active reservations. The application must guarantee that a retired key will not be reused for the same accounting window. Generic automatic TTL/LRU eviction of non-zero usage is intentionally not performed because it could reset quota semantics.
+`stats()` returns current retained-operation/budget-key counts and configured limits. These are retention-pressure counters, not consumed-usage totals; `retainedOperations` includes active reservations and replay tombstones. `retireBudgetKey()` explicitly forgets one completed accounting-window key; it rejects keys still referenced by active reservations. The application must guarantee that a retired key will not be reused for the same accounting window. Generic automatic TTL/LRU eviction of non-zero usage is intentionally not performed because it could reset quota semantics.
 
 Expiry/tombstone cleanup is lazy and scheduled around the earliest known deadline rather than scanning all reservations on every store call. The store remains process-local and is not a horizontally or restart-durable production Store. See [Memory store operations](memory-store.md).
 

@@ -147,7 +147,7 @@ const control = new UsageControl(new MemoryUsageStore(), policy);
 
 この例では「1回のtool callで1 unit消費」「1ユーザーにつき1日20 unitまで」です。
 
-日付の切り替えはruntimeが自動判定しません。日次上限なら、上の例のように日付をbudget keyへ含めます。
+日付の切り替えはruntimeが自動判定しません。日次上限なら、上の例のように日付をbudget keyへ含めます。同じkeyはapplication policyが利用を終了するか安全にretireするまで同じaccounting bucketです。
 
 ## 複数の上限を同時に守る
 
@@ -233,7 +233,7 @@ process crashが自動的な無料refundになるのを防ぐための仕組み�
 
 | Store | 向いている構成 | 注意点 |
 | --- | --- | --- |
-| Memory | test、ローカル開発 | 1process内だけ。複数instanceでは共有できない |
+| Memory | test、ローカル開発、restart lossを許容するcontrolled single-process用途 | restartでstate消失。複数instanceでは共有できない |
 | Redis | 高頻度、共有quota、低latency | HA / persistenceの設計が必要 |
 | Cloudflare Durable Objects | Cloudflare中心 | Durable Objectが更新の集約点になる |
 | Firestore | Firebase / GCP、ユーザー単位quota中心 | 大きな共有budgetでは同じdocumentへの更新競合に注意 |

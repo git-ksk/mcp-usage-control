@@ -79,6 +79,8 @@ Firestore adapterは、「これはuser budget」「これはtenant budget」と
 
 applicationが渡す `budget.key` が同じなら、同じbudgetとして扱います。
 
+adapterはreset dateやwindow expiryを推測しません。daily / monthly policyではwindowを `budget.key` に含め、still-valid quotaをresetし得るgeneric retention ruleでhistorical non-zero budget stateを削除してはいけません。
+
 ### ユーザーごとに分ける場合
 
 ```text

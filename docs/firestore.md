@@ -61,6 +61,8 @@ The Firestore adapter does not infer whether a budget is a user budget or tenant
 
 **If the application supplies the same `budget.key`, callers share the same budget document.**
 
+The adapter does not infer reset dates or window expiry. A daily/monthly policy must encode the window in `budget.key`, and historical non-zero budget state must not be deleted by a generic retention rule that could reset a still-valid quota.
+
 ### Per-user example
 
 ```text

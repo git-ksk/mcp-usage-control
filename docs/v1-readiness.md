@@ -78,7 +78,7 @@ No v1 version bump is performed as part of this readiness review.
 
 The built-in stores preserve the same public lifecycle but have different provider-specific implementation boundaries:
 
-- **Memory** — reference/test implementation only; process-local host time/state.
+- **Memory** — process-local reference implementation; suitable for tests, development, and controlled single-process deployments that explicitly accept restart loss, but not restart-durable or horizontally shared enforcement.
 - **Redis** — one Lua transaction domain, Redis server time, concurrency/expiry/replay/ACK-loss evidence; persistence and HA remain deployment-specific.
 - **Cloudflare Durable Objects** — Durable Object + SQLite transaction domain, local workerd tests and real deployed dogfood; remote state-changing ambiguity is surfaced rather than blindly retried.
 - **Firestore** — Firestore transactions with hashed storage identifiers; host clock plus documented expiry grace and contention limits.

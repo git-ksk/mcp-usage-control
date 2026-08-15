@@ -152,6 +152,10 @@ Long-running direct-core work must renew the lease while authoritative execution
 
 Successful admission also exposes authoritative `remainingByBudget`; do not recompute remaining capacity from configured limits in another layer.
 
+Budget window and lifetime semantics are application-owned. The same `budget.key` names the same accounting bucket; changing the key creates a different bucket. Core and Store implementations do not infer daily/monthly reset boundaries or automatically reset a non-zero budget.
+
+`MemoryUsageStore.stats()` reports retained accounting/replay state, not consumed quota. In particular, `retainedOperations` includes active reservations and settled replay tombstones and must not be interpreted as `consumedUnits`.
+
 ### Long-running Memory store use
 
 `MemoryUsageStore` is process-local, but controlled single-process deployments can bound retained operation/tombstone and non-zero budget-key state. Capacity exhaustion fails closed rather than evicting authoritative accounting state. `stats()` exposes retention counters, and completed time-window budget keys can be removed explicitly with `retireBudgetKey()` once the application knows that accounting window is permanently over.
