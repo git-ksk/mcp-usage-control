@@ -24,18 +24,20 @@ Completed before the v1 decision:
 - public API/export/version, built-in Store, security, horizontal-scale, Node support, CI, release, and npm-publication workflow audit;
 - README/API documentation synchronization and explicit stable/experimental/deferred boundaries.
 
-The additional pre-v1 evidence/contract gates opened after the original readiness audit are now resolved: Firestore ambiguous-commit semantics (#77), bounded cross-instance clock-skew safety (#78), Node 24 full-matrix evidence (#79), and same-key mutable quota-limit semantics (#85). These changes did not require a redesign of the core transaction model.
+The additional pre-v1 evidence/contract gates opened after the original readiness audit are resolved: Firestore ambiguous-commit semantics (#77), bounded cross-instance clock-skew safety (#78), Node 24 full-matrix evidence (#79), and same-key mutable quota-limit semantics (#85). These changes did not require a redesign of the core transaction model.
 
-The remaining pre-v1 work is an explicit **API-freeze boundary decision**, not an unimplemented correctness repair: #83 and #84 must be accepted as post-v1 capabilities under the current fixed-reservation / same-units multi-budget v1 contract, or changed before the stable tag.
+The #83/#84 API-freeze boundary decision is also now recorded. **v1 intentionally freezes a bounded fixed reservation with one scalar quoted/actual unit count applied to every budget participating in that reservation.** Progressive reservation growth (#83) and heterogeneous per-dimension/vector accounting (#84) remain open post-v1 design/implementation tracks and are not v1 blockers.
+
+The v1 contract does not endorse emulating either capability by creating a second logical operation or by issuing independent reserve calls whose partial success would weaken the all-or-nothing admission guarantee.
 
 ## Current priorities
 
-1. **Final API-freeze decisions (#83, #84)** — progressive reservation growth and heterogeneous multi-dimensional usage do not need to be implemented before v1, but the project must explicitly accept the current fixed-reservation / same-units multi-budget model as the v1 contract or change it before the stable tag.
-2. **Release-candidate / API-freeze mechanics** — after that boundary decision and explicit release authorization, choose the exact release commit, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
-3. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
-4. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
-5. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, mutable-policy boundaries, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
-6. **Operational observability (#76, #82)** — keep current observer/event behavior stable for v1, while treating richer operational snapshots and threshold/exhaustion signals as optional tooling outside the authoritative accounting state machine.
+1. **Release-candidate / API-freeze mechanics** — with the #83/#84 boundary decision recorded, choose the exact release commit after explicit release authorization, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
+2. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
+3. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
+4. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, mutable-policy boundaries, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
+5. **Operational observability (#76, #82)** — keep current observer/event behavior stable for v1, while treating richer operational snapshots and threshold/exhaustion signals as optional tooling outside the authoritative accounting state machine.
+6. **Post-v1 accounting extensions (#83, #84)** — treat progressive reservation growth as the nearer additive candidate when a failure-safe top-up protocol is proven; keep heterogeneous multi-dimensional usage as a broader design track that may require a major-version contract if the stable scalar model cannot be extended compatibly.
 
 ## Issue classification for the v1 boundary
 
@@ -49,8 +51,8 @@ The issues opened after the original readiness review are classified as follows.
 | #79 Node 24 CI evidence | Pre-v1 release/support-policy gate | **Resolved** — Node 20/22/24 run the same full build/test/package/clean-consumer matrix |
 | #81 operation reconciliation/status capability | Post-v1 capability | Not a v1 blocker; unsupported/indeterminate states remain fail closed |
 | #82 quota threshold/exhaustion signals | Post-v1 optional operational tooling | Not a v1 blocker |
-| #83 progressive reservation growth | Post-v1 feature candidate; pre-v1 boundary decision | Implementation deferred; explicitly accept/defer current fixed-reservation model before API freeze |
-| #84 heterogeneous multi-dimensional usage | Post-v1 design candidate; pre-v1 boundary decision | Implementation deferred; explicitly accept/defer current same-units multi-budget model before API freeze |
+| #83 progressive reservation growth | Post-v1 additive feature candidate | **v1 decision recorded** — fixed reservation is the stable v1 contract; issue remains open for a failure-safe atomic top-up design |
+| #84 heterogeneous multi-dimensional usage | Post-v1 design candidate | **v1 decision recorded** — one scalar unit count across participating budgets is the stable v1 contract; future vector accounting may require a major-version change |
 | #85 mutable quota-limit semantics | Pre-v1 policy/Store-contract gate | **Resolved** — same-key limit-change contract plus portable Memory/Redis/Cloudflare/Firestore conformance evidence |
 
 This classification intentionally distinguishes **correctness/safety evidence needed to support an existing v1 claim** from **new capabilities that can safely remain outside v1**.
@@ -147,8 +149,8 @@ Only add these when there is a concrete user/integration need and the change pre
 - operational snapshot/helper work from #76 without creating a second source of accounting truth;
 - operation reconciliation/status capability from #81 where a Store can prove authoritative state;
 - quota threshold/exhaustion helpers from #82 as non-authoritative operational tooling;
-- progressive reservation growth from #83 if a safe atomic top-up model is proven;
-- heterogeneous multi-dimensional usage from #84 if all dimensions can remain atomically admitted;
+- progressive reservation growth from #83 as the nearer additive accounting extension, only after atomic top-up identity, replay, lost-ACK, expiry, and settlement semantics are proven;
+- heterogeneous multi-dimensional usage from #84 only after a provider-neutral atomic vector model is proven; treat a breaking representation/settlement change as a major-version concern rather than weakening the v1 scalar contract;
 - a standalone versioned telemetry/event wire schema;
 - optional external billing/metering adapters;
 - additional production policy examples;
