@@ -73,7 +73,7 @@ jobs:
     needs: changes
     strategy:
       matrix:
-        node: [20, 22]
+        node: [20, 22, 24]
     runs-on: ubuntu-latest
     env:
       REDIS_URL: redis://127.0.0.1:6379

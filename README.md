@@ -27,7 +27,7 @@ pnpm check
 
 See **[Use from source / local tarballs](docs/using-from-source.md)** for clean-consumer installation.
 
-Requirements: **Node.js 20+**, ESM. CI exercises Node.js 20/22, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
+Requirements: **Node.js 20+**, ESM. CI exercises Node.js 20/22/24, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
 
 ## Core lifecycle
 
