@@ -8,18 +8,23 @@
 
 ## 判定
 
-**current source treeはv1.0 API-freeze / finalizationを継続できる状態です。元の監査後に追加されたpre-v1 correctness / evidence gateは解決済みで、core transaction modelの再設計は不要でした。**
+**current source treeは、確認済みのpre-v1 correctness / evidence gateと#83 / #84 accounting-model boundary decisionを完了しました。normal v1.0 release mechanicsへ進む前にcore transaction modelを再設計する必要のあるpre-v1 design gateは残っていません。**
 
-解決済みgate:
+解決済みcorrectness / evidence gate:
 
 - #77 — Firestore ambiguous commit / ACK loss semantics
 - #78 — Firestore bounded cross-instance clock-skew safety
 - #79 — Node.js 24 full compatibility-evidence matrix
 - #85 — existing accounting bucketに対するmutable quota-limit semantics
 
-残るpre-v1 design workは#83 / #84の明示的なboundary decisionです。progressive reservation growthとheterogeneous multi-dimensional usageはv1前の実装必須ではありませんが、現行fixed-reservation / same-units multi-budget modelをstable v1 boundaryとしてacceptするか、tag前に変更するかを決める必要があります。
+確定したAPI-freeze decision:
 
-optional integrationがすべて完成したという意味ではありません。stable enforcement boundaryは十分狭く、failure semanticsは明示され、built-in Store support claimに必要なevidence / contractが揃い、third-party Store compatibilityもexecutableです。optional operational capabilityはpost-v1候補として残します。
+- #83 — progressive reservation growthはpost-v1へdeferし、stable v1ではmetered work前にboundedなfixed reservationを確保する
+- #84 — heterogeneous multi-dimensional usageはpost-v1へdeferし、stable v1では1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用する
+
+v1 contractでは、second logical operationを作る擬似top-upや、partial successによってall-or-nothing admissionを弱めるdimension別の独立reserveを回避策として推奨・保証しません。
+
+optional integrationがすべて完成したという意味ではありません。stable enforcement boundaryは意図的に狭く、failure semanticsは明示され、built-in Store support claimに必要なevidence / contractが揃い、third-party Store compatibilityもexecutableです。optional operational / accounting extensionはpost-v1候補として残します。
 
 実際にv1.0 tagを作る前には、この文書末尾のrelease-time checkを実行し、明示的なrelease authorizationを得ます。
 
@@ -29,6 +34,8 @@ optional integrationがすべて完成したという意味ではありません
 
 - `UsagePolicy` quote -> atomic `UsageStore.reserve()`
 - all-or-nothing multi-budget admission
+- 1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用
+- metered work前にboundedなfixed reservationを確保し、v1 contractではreservation growth / top-upを提供しない
 - replay identity `(tenantId, principal.id, tool, operationId)`
 - `markLiable()` によるexplicit `pending -> cost-liable`
 - renewable lease
@@ -62,9 +69,11 @@ Deferredです。現行shared / durable one-time claimですでにsticky session
 
 ### Progressive reservation growth / heterogeneous multi-dimensional usage
 
-#83と#84はdesign候補で、v1必須capabilityではありません。current candidate contractではmetered work前にbounded maximumをreserveし、1 reservationに参加する全budgetへ同じquoted / actual unit countを適用します。
+#83 / #84のv1 boundary decisionは完了しています。
 
-API freeze前にこれをv1 limitationとして明示的にacceptします。将来のprogressive top-up / per-dimension vector accountingはatomic admission、replay safety、liability / expiry、ACK ambiguity safetyを維持する必要があります。
+#83について、v1はmetered work前のbounded reservationを要求し、reservation growth / top-up APIを提供しません。将来additive top-up APIを追加する場合は、各incrementについてatomic multi-budget admission、deterministic retry identity、lost-ACK safety、liability / expiry recovery、`actual <= total successfully reserved` settlement semanticsを維持する必要があります。容量確保だけのために別logical operationを作る方法はv1 workaroundではありません。
+
+#84について、v1は1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用します。将来per-dimension / vector modelを追加する場合は、1 logical replay identityと必要dimension全体のatomic admission / settlementを維持する必要があります。互換的に追加できない場合はv1 scalar guaranteeを弱めずmajor-version contractとして扱います。atomic all-or-nothing admissionが必要な場合、dimension別の独立reserveは同等ではありません。
 
 ### Operational snapshot / reconciliation / threshold helper
 
@@ -224,9 +233,9 @@ same-key contractはincrease / decreaseでもauthoritative reserved / consumed s
 
 ### Issue #83 / #84 — future accounting-model extension
 
-**分類: post-v1 implementation候補 + remaining pre-v1 boundary decision。**
+**分類: post-v1 track。pre-v1 boundary decisionは完了済み。**
 
-progressive reservation growth / heterogeneous per-dimension unitsはcurrent correctnessの必須機能ではありません。v1 API freeze前にstable v1 contractがbounded reservationとparticipating budget全体へのcommon unit countを採用すると明示します。acceptできない場合だけstable tag前に変更します。
+v1ではbounded fixed reservationとparticipating budget全体への1つのcommon scalar unit countを採用します。#83はfailure-safe atomic top-up capabilityを設計する比較的近いadditive post-v1 extensionとしてopen維持します。#84はatomic heterogeneous / vector usageを設計するためopen維持し、representation / settlement modelを互換的に追加できない場合はmajor-version changeとして扱います。どちらも残存v1 release gateではありません。
 
 ### Issue #76 / #81 / #82 — operational capability
 
@@ -236,9 +245,11 @@ operational snapshot、per-operation status / reconciliation helper、quota thre
 
 ## Breaking-change review before v1
 
-以下はevidence gateによってstable choiceとして確認済みです。
+以下はevidence / boundary decisionによってstable choiceとして確認済みです。
 
 - replay identityは `(tenantId, principal.id, tool, operationId)`
+- 1 reservationに参加する全budgetへ同じquoted / actual scalar unit countを適用する (#84 decision)
+- `actualUnits` はreservationを超えず、reservation growth / top-upはv1 contract外 (#83 decision)
 - liable expiryはactual usage不明ならfull reservation保持
 - observer deliveryはbest-effort / non-transactional
 - multi-round business result replayはapplication-owned
@@ -247,17 +258,13 @@ operational snapshot、per-operation status / reconciliation helper、quota thre
 - Firestore stable supportはexplicit ambiguous-ACK / bounded-clock contractを使う
 - Node runtime supportはNode 20 / 22 / 24 full CI evidenceで裏付ける
 
-final API-freezeでは次だけを明示確認します。
-
-1. 1 reservationに参加する全budgetへ同じquoted / actual unit countを適用する (#84)
-2. `actualUnits` はreservationを超えず、reservation growthはv1 contract外 (#83)
-3. current public package / subpath名をlong-lived stable APIとして受け入れる
+final release reviewでは、current public package / subpath名をlong-lived stable APIとして受け入れられることと、今回記録したboundaryを無効化するpost-decision changeが入っていないことを確認します。
 
 breaking contract changeが必要なら **v1 tag前** に行います。
 
 ## Release時の最終確認
 
-1. #83 / #84 API-freeze decisionを記録し、変更しない限りfixed reservation / same-units multi-budgetをv1 boundaryとしてaccept
+1. 記録済み#83 / #84 boundary decisionが変わっていないことを確認し、fixed reservation / same-units scalar multi-budget accountingをv1 contractとする
 2. exact release commitを選び、`main` clean / greenを確認
 3. dedicated release PRで5 packageを同時に `1.0.0` へversion bump
 4. intended `Unreleased` entryだけを新しい `1.0.0` changelog sectionへ移動
@@ -270,11 +277,13 @@ breaking contract changeが必要なら **v1 tag前** に行います。
 
 ## 現在の結論
 
-**Source/API readiness: v1.0 API-freeze / finalization継続へGO。**
+**Source/API readiness: normal v1.0 release-candidate / release mechanicsへGO。**
 
 **Pre-v1 correctness / evidence gate #77 / #78 / #79 / #85: 解決済み。**
 
-**Final v1.0 tag / release readiness: #83 / #84の明示boundary decision + 通常release mechanics / authorizationのみがgate。**
+**Pre-v1 #83 / #84 accounting-model boundary decision: 記録済みでrelease gateとして解決。**
+
+**Final v1.0 tag / release readiness: 通常release mechanics / final API-name reviewとexplicit release authorizationのみが条件。**
 
 **実際のv1.0 tag / release: 未実施。**
 
