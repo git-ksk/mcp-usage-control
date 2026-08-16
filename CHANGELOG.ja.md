@@ -6,13 +6,42 @@
 
 ## [Unreleased]
 
+現在entryはありません。
+
+## [0.5.0] - 2026-08-17
+
+5回目のGitHub/source releaseです。pre-v1 stabilization releaseとして扱い、npm registry publicationは引き続き意図的にdeferredし、このreleaseには含めません。
+
 ### Added
 
-- optionalな `mcp-usage-control-cloudflare/auth` subpathと `createCloudflareBearerTokenAuthorizer()` を追加しました。current token 1本とprevious token 1本を一時的に受け付けることで、mandatoryなapplication-defined `authorize(request)` contractを維持したまま、remote Cloudflare gatewayのcredentialを認証断なしでrotationできます。
+- optionalな `mcp-usage-control-cloudflare/auth` subpathと `createCloudflareBearerTokenAuthorizer()` を追加しました。current token 1本とprevious token 1本を一時的に受け付けることで、mandatoryなapplication-defined `authorize(request)` contractを維持したままremote Cloudflare gatewayのcredentialを認証断なしでrotationできます。
+- Firestore ambiguous commit / ACK lossについて、reserve、liability、renewal、settlementのretry / replay behaviorを明文化し、post-commit lost-ACK fault-injection coverageを追加しました。
+- Firestore cross-instance clock skewについて、boundedなsupport envelopeとpending / liable recoveryのdeterministic multi-instance testを追加しました。
+- same-key plan / override changeとapplication-owned policy rollout consistencyを扱うmutable quota-limit guidanceを英日で追加しました。
 
-### Validation / compatibility
+### Changed / hardened
 
-- local workerdのcredential-rotation coverageと、英日deployed-dogfood runbookへ zero-downtime sequence（currentをpreviousへコピー -> currentを置換 -> callerを切替 -> previousをretire）を追加しました。quota / accounting semantics、Durable Object schema、retry / fail-closed behavior、既存custom authorizerは変更していません。
+- same-key mutable quota-limit contractを定義しました。`budget.limit` はreserve attemptごとのeffective admission ceilingで、authoritative reserved / consumed usageはStoreに残ります。limit increase / decreaseで既存accounting stateをreset / revoke / re-price / refundしません。
+- portable `UsageStore` conformanceへmutable-limit increase / decreaseとstrict / stale policy viewのconcurrency caseを追加しました。
+- Memory / Redis / Cloudflare local workerd / Firestore Emulatorでportable Store conformanceを実行し、Firestoreではshared conformance assumptionに必要なlazy cleanup pathも検証しました。
+- Firestoreのv1-candidate support claimを、`expiryGraceMs` をmaximum expected positive clock lead + marginへ合わせるbounded / synchronized host-clock deployment profileとして明確化しました。unknown / unbounded skewはsupport claim外です。
+- roadmap / readiness planningを更新し、直近releaseをv0.5.0 stabilizationとし、final v1 scope / API freezeはv0.5後の再評価対象へ戻しました。#83 progressive reservation growth / #84 heterogeneous multi-dimensional usageは確定post-v1ではなくopen v1-scope candidateです。
+
+### Validation / CI
+
+- Node.js 24をNode.js 20 / 22と同じnormal full build / test / Redis / package / clean-consumer matrixへ追加しました。public compatibility floorはNode.js 20+のままです。
+- Redis real integration、Cloudflare local workerd、Firestore Emulatorでportable Store conformanceを追加しました。
+- local workerdのcredential-rotation coverageと、英日deployed-dogfood runbookへzero-downtime sequence（currentをpreviousへコピー -> currentを置換 -> callerを切替 -> previousをretire）を追加しました。
+
+### Compatibility / release boundary
+
+- backward-compatibleなpre-1.0 minor source releaseで、意図的なbreaking public runtime APIは導入しません。
+- Redis / Cloudflare Durable Object / Firestore accounting storage schemaは変更しておらず、v0.5.0向けprovider data migration / resetは不要です。
+- core accounting invariantはfail closedを維持します。atomic admission、explicit liability、replay / idempotency safety、conservative ambiguity / expiry handling、mutable effective limit変更時のauthoritative usage preservationは不変です。
+- current runtimeはbounded fixed reservation + participating budget全体への1 scalar unit countを維持します。これはv0.5 behaviorとcurrent v1 candidateであり、取り消せないv1 freezeではありません。
+- Issue #24はCloudflare実環境の追加operational evidence向けにopenのままで、このsource releaseにはnon-blockingです。
+- Issue #6は意図的にdeferredしたままで、packageは引き続きnpm未公開です。
+- このsource releaseはv1.0 stableを宣言せず、npm publishせず、experimentalなfirst-class Tasks protocol adapterや#83 / #84 implementationも追加しません。
 
 ## [0.4.0] - 2026-08-13
 
