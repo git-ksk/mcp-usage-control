@@ -4,7 +4,7 @@
 
 ## Supported versions
 
-The latest GitHub/source minor line is supported for security fixes. For this policy, v0.2.x is the current supported source-release line and supersedes v0.1.x. npm registry publication is a separate operation and may remain deferred even while the GitHub/source release is supported.
+The latest GitHub/source minor line is supported for security fixes. For this policy, v0.4.x is the current supported source-release line and supersedes earlier v0.x source-release lines. npm registry publication is a separate operation and may remain deferred even while the GitHub/source release is supported.
 
 ## Reporting a vulnerability
 
