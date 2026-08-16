@@ -8,54 +8,66 @@ quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 
 このprojectはgeneric agent-budget、gateway、billing、governance、workflow productへ広げるのではなく、この境界のcorrectnessを深くします。戦略上の境界は [Project positioning](positioning.ja.md) を参照してください。
 
-## v1 readiness status
+## 現在のrelease方針
 
-v0.2後のcorrectness programは、v1.0 release-candidate準備を継続できる状態まで完了しています。詳細な監査とblocker分類は [v1.0 readiness review](v1-readiness.ja.md) にまとめています。
+次のsource releaseは **v1.0.0ではなくv0.5.0** です。
 
-v1判断前に完了したもの:
+v0.5.0はv0.4.0以降のcorrectness / compatibility workをまとめるpre-v1 stabilization releaseです。
 
-- current MCP `2026-07-28` / TypeScript SDK v2のfresh-request multi-round proof
-- principal / tenant / tool / args binding付きone-time resumeとambiguous consumeのfail closed
-- sticky MCP sessionなしでshared / durable compare-and-consumeを使うv1 MRTR方針の確定
-- long-running MCP Tasks accounting semantics + core proof test
-- usage accountingとbusiness task/result replayの明示分離
-- third-party `UsageStore` / `McpUsageFlowStore` のnormative safety contract
-- reusable portable conformance runner + package / clean-consumer検証
-- public API / export / version、built-in Store、security、horizontal scale、Node support、CI、release / npm workflow監査
-- README / API docs同期とstable / experimental / deferred境界の明示
+- Firestore ambiguous commit / lost-ACK semanticsとfault-injection evidence (#77)
+- boundedなFirestore cross-instance clock-skew supportとdeterministic evidence (#78)
+- Node.js 24をNode 20 / 22と同じfull CI / package / clean-consumer pathで検証 (#79)
+- same-key mutable quota-limit semanticsとMemory / Redis / Cloudflare / Firestore共通portable Store conformance (#85)
+- Cloudflare Bearer token rotation supportとlocal workerd rotation coverage
+- #83 / #84に関するcurrent accounting-model boundaryの文書化
 
-元のreadiness監査後に追加されたpre-v1 evidence / contract gateは解決済みです。Firestore ambiguous-commit semantics (#77)、boundedなcross-instance clock-skew safety (#78)、Node 24 full-matrix evidence (#79)、same-key mutable quota-limit semantics (#85)を完了し、core transaction model自体の再設計は不要でした。
+v1 readiness workで得たevidenceはそのまま有効ですが、**v1を直近の次release、またはすでにAPI freeze済みとは扱いません**。v0.5.0の運用後、integration需要と実装経験を見てopen capabilityのどこまでをv1へ入れるか再判断します。
 
-#83 / #84のAPI-freeze boundary decisionも確定しました。**v1はmetered work前にboundedなfixed reservationを確保し、1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用するcontractとしてfreezeします。** progressive reservation growth (#83) とheterogeneous per-dimension / vector accounting (#84) はopenのpost-v1 design / implementation trackとして残し、v1 blockerにはしません。
+## current v0.5 behaviorとv1候補
 
-v1 contractでは、second logical operationを作る擬似top-upや、partial successによってall-or-nothing admissionを弱めるdimension別の独立reserveを回避策として推奨・保証しません。
+v0.5.0は現在proof済みのaccounting modelを維持します。
+
+- metered work前にboundedなfixed reservationを確保
+- `actualUnits <= reservedUnits`
+- 1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用
+- participating budgetは全部atomic admit、または全部deny
+- second logical operationをaccounting-equivalentなtop-up workaroundとは扱わない
+- all-or-nothing admissionが必要な場面でdimension別independent reserveを同等代替とは扱わない
+
+これらは **v0.5 behavior + current v1 candidate** であり、取り消せないv1 freezeではありません。
+
+特に:
+
+- #83 progressive reservation growthはopenのまま。failure-safe atomic top-up protocolをv1前にproofできればv1へ入れてよい
+- #84 heterogeneous multi-dimensional usageもopenのまま。provider-neutral atomic vector modelをv1前にproofできればv1へ入れてよい
+- 既存transaction guaranteeを不安定にする、またはevidence不足のままstable surfaceを広げる場合はpost-v1へ残せる
+
+以前「post-v1」と分類したからという理由だけでv1から外しません。v1 boundaryは実需要・failure evidence・互換性から決めます。
 
 ## Current priorities
 
-1. **Release-candidate / API-freeze mechanics** — #83 / #84 boundary decision確定後の段階として、explicit release authorizationがある場合にexact release commitを選び、5 packageを同時versioning、intended `Unreleased` entryだけをv1 sectionへ移動、full package/integration matrix、long-lived public name / semanticsの最終確認を行います。通常のreadiness workではtag / releaseしません。
-2. **Cloudflare operational evidence (#24)** — documented real credential rotationを実行し、genuine platform-limit / overload / Free-plan exhaustion eventを安全に観測できた場合にcaptureします。post-v1 operational evidenceでありprovider-neutral core blockerではありません。Issueを閉じるためだけにshared Free-plan quotaを意図的に消費しません。
-3. **First npm publication (#6)** — manual / deferredを維持します。registry publicationはsource readinessと別操作で、別途explicit authorizationが必要です。
-4. **Failure semantics maintenance** — upstream protocol / provider変化に合わせ、crash recovery、ACK ambiguity、liability、cancellation、multi-round claim / recovery、Tasks lifetime、reconciliation、mutable-policy boundary、Store-specific durability assumptionを明示し続けます。
-5. **Operational observability (#76, #82)** — current observer / event behaviorはv1でstableに保ち、より豊富なoperational snapshotやthreshold / exhaustion signalはauthoritative accounting state machine外のoptional toolingとして扱います。
-6. **Post-v1 accounting extension (#83, #84)** — progressive reservation growthはfailure-safe top-up protocolをproofできた場合の比較的近いadditive候補とし、heterogeneous multi-dimensional usageはstable scalar modelへ互換的に追加できない場合にmajor-version contractも許容する広いdesign trackとして扱います。
+1. **v0.5.0 release** — 5 packageを同時versioningし、full matrix green後にGitHub/source release。npm publicationは別工程のままdeferred。
+2. **v0.5 stabilization / dogfood** — Firestore failure envelope、mutable-limit contract、Node 24 path、portable Store conformance、Cloudflare credential rotationを通常利用で観測。
+3. **v1 scope再評価** — #83 / #84、および他のlow-risk / high-valueなopen capabilityをactual API freeze前にv1へ含めるか判断。
+4. **Cloudflare operational evidence (#24)** — genuine platform-limit / overload / Free-plan exhaustionを自然かつ安全に観測できた場合にcapture。Issueを閉じるためだけにshared quotaを消費しない。
+5. **First npm publication (#6)** — separate explicit authorizationまでmanual / deferred。
+6. **Failure semantics maintenance** — crash recovery、ACK ambiguity、liability、cancellation、multi-round claim / recovery、Tasks lifetime、reconciliation、mutable-policy boundary、Store-specific durability assumptionをupstream変化に合わせて明示し続ける。
 
-## v1境界に対するIssue分類
+## v1に向けたIssue分類
 
-元のreadiness review後に追加されたIssueは、次のように分類します。
-
-| Issue | v1分類 | 現在のv1 status |
+| Issue | 現在の分類 | v1での扱い |
 | --- | --- | --- |
-| #76 operational usage snapshot | Post-v1 optional operational tooling | v1 blockerではない。current observability semanticsをv1境界とする |
-| #77 Firestore ambiguous-commit reconciliation | Pre-v1 Firestore evidence / contract gate | **解決済み** — reserve ambiguityのfail closedとliability / renewal / settlement retry/replay evidenceを明文化・test済み |
-| #78 Firestore cross-instance clock skew | Pre-v1 Firestore safety gate | **解決済み** — bounded / synchronized clockのdeployment contractとdeterministic multi-instance evidenceを追加済み |
-| #79 Node 24 CI evidence | Pre-v1 release / support-policy gate | **解決済み** — Node 20 / 22 / 24で同じfull build / test / package / clean-consumer matrixを実行 |
-| #81 operation reconciliation / status capability | Post-v1 capability | v1 blockerではない。proveできないstateはfail closedを維持 |
-| #82 quota threshold / exhaustion signals | Post-v1 optional operational tooling | v1 blockerではない |
-| #83 progressive reservation growth | Post-v1 additive feature候補 | **v1 decision確定** — fixed reservationをstable v1 contractとする。Issueはfailure-safe atomic top-up design用にopen維持 |
-| #84 heterogeneous multi-dimensional usage | Post-v1 design候補 | **v1 decision確定** — participating budget全体へ1つのscalar unit countを適用するmodelをstable v1 contractとする。将来vector accountingはmajor-version変更になる可能性あり |
-| #85 mutable quota-limit semantics | Pre-v1 policy / Store-contract gate | **解決済み** — same-key limit-change contractとMemory / Redis / Cloudflare / Firestore共通portable conformance evidenceを追加 |
+| #76 operational usage snapshot | Future optional operational capability | non-authoritative / low-riskならv1候補として再評価可 |
+| #77 Firestore ambiguous-commit reconciliation | **解決済みcorrectness / evidence gate** | v0.5および将来v1へevidenceを継承 |
+| #78 Firestore cross-instance clock skew | **解決済みsafety / evidence gate** | v0.5および将来v1へevidenceを継承 |
+| #79 Node 24 CI evidence | **解決済みsupport-policy gate** | Node 20 / 22 / 24をtested lineとして維持 |
+| #81 operation reconciliation / status capability | Future capability | authoritative semanticsを明確にできる場合だけv1再評価 |
+| #82 quota threshold / exhaustion signals | Future optional operational capability | non-authoritative toolingとしてのみv1再評価 |
+| #83 progressive reservation growth | **open v1-scope candidate** | v0.5はtop-upなし。v1採用はfailure model proof後に判断 |
+| #84 heterogeneous multi-dimensional usage | **open v1-scope candidate** | v0.5はscalar model。v1採用はatomic vector design proof後に判断 |
+| #85 mutable quota-limit semantics | **解決済みpolicy / Store-contract gate** | portable conformanceをv0.5 evidence baseへ含める |
 
-この分類では、**既存のv1 support claimを成立させるために必要なcorrectness / safety evidence** と、**v1外に安全に残せる新しいcapability** を分けています。
+これは以前の「#83 / #84を確定post-v1」としたplanning assumptionを更新します。以前のanalysis自体はdesign inputとして残し、変えるのはrelease boundaryの最終性だけです。
 
 ## MCP-native correctness
 
@@ -63,63 +75,33 @@ protocol固有機能はexecution boundaryのaccounting safetyを変える場合�
 
 ### Multi-round request / response
 
-**v1方針**は現行shared / durable flow claim + atomic compare-and-consumeです。
-
-維持するinvariant:
+current directionはshared / durable flow claim + atomic compare-and-consumeです。
 
 - logical operationごとにreservation 1回
 - client round-trip request stateのintegrity verification
 - trusted principal / tenant / tool / args binding
 - one-time resume claim
 - mismatch時に正当なstateを保持
-- ambiguous consume ACKのfail closed
+- ambiguous consume ACKをfail closed
 - sticky MCP session不要
 - execution開始後のconservative liability behavior
 
-新しいstateless / client-carried claim designは、concurrency / ACK ambiguity下で同じinvariantをproofし、具体的なoperational advantageを示せるまでdeferredです。
-
-stateless transportはstateless accountingを意味しません。
+新しいstateless / client-carried claimは、同等のone-time / ambiguity safetyと具体的なoperational advantageをproofするまでdeferredです。
 
 ### MCP Tasks
 
-[MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) で次を定義・proof済みです。
-
-- task IDと独立してlogical operationごとに1 admission / reservation
-- `working` から推測せずmetered work直前にliability
-- authoritative execution / intentional input wait中のrenewal
-- completion / failure / cancellation / abandonment / worker crash
-- ambiguous reserve / liability / renew / settlementのconservative handling
-- cooperative cancellation ACKだけではrefundしない
-- business operationをblind replayしないreconciliation
-- task / result / worker ownershipを `UsageStore` から分離
-
-新しいcore primitiveは不要です。upstream TypeScript Tasks extension surfaceがexperimentalな間、first-class Tasks protocol integrationは **deferred / experimental** です。boundaryが変わるまでstable Tasks adapter supportとは宣伝しません。
+[MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) でsafe accounting lifecycleは定義・proof済みです。ただしupstream TypeScript integration surfaceがexperimentalな間、first-class Tasks protocol adapterはdeferred / experimentalです。これは既存core primitiveのcorrectness gapではなくv1 scope decisionとして扱います。
 
 ## Third-party Store contract
 
-予定していたinvariant kitは実装済みです。詳しくは [Store実装contract](store-contract.ja.md)。
-
-portable runner:
+portable invariant kitは実装済みです。詳しくは [Store実装contract](store-contract.ja.md)。
 
 ```ts
 import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
 import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
 ```
 
-compatibleと主張するStoreは、対象に応じて少なくとも次をproofする必要があります。
-
-- atomic all-or-nothing multi-budget admission
-- concurrent admission correctness
-- same-key authoritative usageをresetしないmutable effective-limit behavior
-- logical-operation replay semantics
-- idempotent liability / settlement replay
-- pending / liableを区別したexpiry recovery
-- renewable / resumable state
-- conflicting settlement rejection
-- binding-aware one-time MCP flow consume
-- invalid / corrupt stateのfail closed
-
-portable runner合格はproduction-safe claimの必要条件ですが十分条件ではありません。backend-specific durability、failover、authoritative time、lost-ACK evidenceが別途必要です。
+compatible Storeはatomic admission、replay / idempotency、pending / liable expiry、renew / resume、conflicting settlement rejection、mutable-limit semantics、invalid / ambiguous stateのfail closedを維持する必要があります。portable runner合格だけでbackend durability / failover / authoritative time / lost-ACK safetyまで証明したことにはなりません。
 
 ## External billing / metering
 
@@ -131,46 +113,26 @@ transactional enforcement core
         -> optional billing/telemetry adapter
 ```
 
-外部billing schemaがbalance、price、invoice、receipt、eventなど別guaranteeを持っても、次を弱めたり置き換えたりしません。
+financial-grade ledger、payment / subscription system、pricing catalog、gateway / router、OAuth provider、arbitrary business-side-effect replay engineはcore transaction modelの外です。
 
-- atomic admission
-- reservation
-- cost-liability state
-- idempotency
-- lease / expiry recovery
-- ambiguous settlementのconservative handling
+## Future candidates
 
-financial-grade ledgerが必要なら別system boundaryに置きます。
+v1前は、具体的価値とfailure evidenceが追加stable surfaceを正当化できる場合だけv1 scopeへ取り込みます。v1後もnormal compatibility constraintの下で同じ原則を使います。
 
-## Post-v1 candidates
+候補:
 
-具体的なuser / integration需要があり、stable transaction modelを維持できる場合だけ追加します。
-
-- #76のoperational snapshot / helper。second accounting sourceは作らない
-- #81のoperation reconciliation / status capability。Storeがauthoritative stateをproofできる場合だけ提供
-- #82のquota threshold / exhaustion helper。non-authoritative operational toolingとして提供
-- #83のprogressive reservation growth。atomic top-up identity、replay、lost-ACK、expiry、settlement semanticsをproofできた場合の比較的近いadditive accounting extension
-- #84のheterogeneous multi-dimensional usage。provider-neutral atomic vector modelをproofできた場合のみ追加し、representation / settlementがbreakingになるならv1 scalar contractを弱めずmajor-version concernとして扱う
+- #76 operational snapshot。second accounting source of truthは作らない
+- #81 authoritative operation reconciliation / status。Storeがproofできる場合のみ
+- #82 threshold / exhaustion helper。non-authoritative operational toolingのみ
+- #83 progressive reservation growth。atomic top-up identity / replay / lost-ACK / expiry proof必須
+- #84 heterogeneous multi-dimensional usage。provider-neutral atomic vector semantics必須
 - standalone versioned telemetry / event wire schema
-- optional external billing / metering adapter
+- optional billing / metering adapter
 - additional production policy example
 - upstream stabilizes後のfirst-class MCP Tasks adapter
-- equivalent one-time / ambiguity proofを持つalternative MRTR claim representation
+- equivalent one-time / ambiguity proofを持つalternative MRTR claim
 - 同じconformance / failure contractを満たすadditional provider Store
 
 ## Non-goals
 
-core runtimeは以下にはしません。
-
-- generic agent runtime / budget authority
-- generic HTTP / API rate limiter
-- payment processor / subscription checkout system
-- OAuth / identity provider
-- billing dashboard / pricing catalog
-- financial-grade ledger
-- gateway / router product
-- vendor billing protocolそのもののimplementation
-- arbitrary business side effectをreplayするworkflow engine
-- ambiguous state-changing operationをblind retryするsystem
-
-これらとのintegrationはexplicit adapter / policy boundaryで扱います。
+core runtimeはgeneric agent runtime / budget authority、ordinary HTTP rate limiter、payment / subscription system、financial ledger、OAuth provider、billing dashboard / pricing catalog、gateway / router、vendor billing protocol implementation、generic workflow engine、ambiguous state-changing operationをblind retryするsystemにはしません。

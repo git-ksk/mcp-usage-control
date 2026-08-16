@@ -2,305 +2,200 @@
 
 [English](v1-readiness.md) | [日本語](v1-readiness.ja.md)
 
-This review records the state of the repository after the post-v0.2.0 MCP correctness and Store-contract work. It is a **release-readiness assessment**, not a v1.0 release instruction.
+This document records the evidence accumulated toward a future v1.0. It is a **readiness assessment**, not a release instruction or an immutable API-freeze decision.
 
 No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
+## Status update — v0.5 before v1
+
+The immediate next source release is **v0.5.0**.
+
+The repository previously reached a point where the current fixed-reservation / scalar-unit model could have been frozen for v1. That conclusion remains evidence that the existing model is internally coherent, but the project is intentionally taking one more pre-1.0 stabilization release before committing to the final v1 surface.
+
+Therefore, statements from the earlier review that #83/#84 were *definitively post-v1* are superseded by the current plan:
+
+- v0.5.0 keeps the current bounded fixed-reservation model;
+- v0.5.0 keeps one scalar quoted/actual unit count across all budgets participating in one reservation;
+- #83 progressive reservation growth remains an open **v1-scope candidate**;
+- #84 heterogeneous multi-dimensional usage remains an open **v1-scope candidate**;
+- either capability may still remain post-v1 if its design cannot preserve the existing safety guarantees with sufficient evidence.
+
+This is a release-planning change, not a rollback of the correctness work already completed.
+
 ## Verdict
 
-**The source tree has completed the identified pre-v1 correctness/evidence gates and the #83/#84 accounting-model boundary decision. No remaining pre-v1 design gate requires a core transaction redesign before normal v1.0 release mechanics.**
+**GO for v0.5.0 stabilization/source release.**
 
-Resolved correctness/evidence gates:
+The identified correctness/evidence gates are resolved:
 
 - #77 — Firestore ambiguous-commit / acknowledgement-loss semantics;
 - #78 — Firestore bounded cross-instance clock-skew safety;
 - #79 — Node.js 24 full compatibility-evidence matrix;
 - #85 — mutable quota-limit semantics for an existing accounting bucket.
 
-Recorded API-freeze decision:
+No known defect in those areas requires holding v0.5.0.
 
-- #83 — progressive reservation growth is deferred to post-v1; stable v1 uses a bounded fixed reservation established before metered work;
-- #84 — heterogeneous multi-dimensional usage is deferred to post-v1; stable v1 uses one scalar quoted/actual unit count across every budget participating in a reservation.
+**v1.0 readiness remains intentionally provisional.** The final v1 scope should be chosen after v0.5 experience, including explicit reconsideration of #83/#84 and any other low-risk/high-value capability that would be materially harder to add after a stable API commitment.
 
-The v1 contract does not endorse bypassing those limits by creating a second logical operation for top-up or by issuing independent per-dimension reserve calls whose partial success would weaken all-or-nothing admission.
+## v0.5 accounting boundary
 
-That does **not** mean every optional integration is complete. The stable enforcement boundary is intentionally narrow, its failure semantics are explicit, built-in Store support claims have the required evidence/contracts, and third-party Store compatibility is executable. Optional operational and accounting extensions remain post-v1 candidates.
-
-Before actually creating a v1.0 tag, perform the release-time checks below and obtain explicit release authorization.
-
-## Stable v1 candidate boundary
-
-The following behavior is a candidate for the v1 stable contract:
+v0.5.0 preserves the currently proven contract:
 
 - `UsagePolicy` quote followed by atomic `UsageStore.reserve()`;
 - all-or-nothing multi-budget admission;
 - one scalar quoted/actual unit count applied to every budget participating in one reservation;
-- a bounded fixed reservation established before metered work, with no reservation growth/top-up in the v1 contract;
+- a bounded fixed reservation established before metered work;
+- `actualUnits <= reservedUnits`;
 - replay identity `(tenantId, principal.id, tool, operationId)`;
 - explicit `pending -> cost-liable` transition via `markLiable()`;
 - renewable leases;
 - conservative expiry after liability;
-- terminal settlement with `actualUnits <= reservedUnits`;
 - identical settlement replay and conflicting-settlement rejection;
 - fail-closed storage semantics;
 - same-key mutable effective limits that preserve authoritative reserved/consumed usage;
-- `MemoryUsageStore` as a process-local reference implementation;
-- Redis, Cloudflare Durable Objects, and Firestore `UsageStore` adapters with their documented deployment constraints;
-- `protectTool()` for single-round MCP TypeScript SDK v2 tools;
-- `protectMultiRoundTool()` for the currently supported `input_required` multi-round accounting path;
-- integrity-verified request-state resume, principal/tenant/tool/args binding, one-time compare-and-consume, and no second quota reservation on resume;
-- `RedisMcpUsageFlowStore` for shared/durable multi-round flow claims;
+- Memory, Redis, Cloudflare Durable Objects, and Firestore Stores under their documented deployment constraints;
+- single-round and supported multi-round MCP TypeScript SDK v2 accounting paths;
+- shared/durable one-time multi-round flow claims without sticky MCP session affinity;
 - provider-neutral observability that cannot change enforcement outcomes;
-- portable `UsageStore` / `McpUsageFlowStore` conformance runners as behavioral compatibility checks.
+- portable `UsageStore` / `McpUsageFlowStore` conformance runners.
 
-The v1 direction for multi-round state is the current **shared/durable compare-and-consume** model. Fresh MCP requests may land on different server instances; sticky MCP session affinity is not required for accounting.
+A second logical operation is not treated as an accounting-equivalent top-up workaround. Independent per-dimension reserve calls are not treated as equivalent when all dimensions must admit atomically.
 
-## Experimental / deferred boundary
+## v1 scope questions intentionally left open
 
-The following are intentionally **not** part of the v1 stable runtime promise.
+### #83 — progressive reservation growth
 
-### First-class MCP Tasks protocol adapter
+The feature can enter v1 if the design proves, before API freeze:
 
-The accounting state machine is defined and proof-tested in [MCP Tasks accounting](mcp-tasks-accounting.md), including admission, liability, renewal, completion, failure, cancellation, abandonment, worker crash, ambiguous acknowledgements, and reconciliation.
+- every increment is atomically admitted across all participating budgets or not applied;
+- one top-up attempt has deterministic retry/idempotency identity;
+- lost ACK after a committed increment cannot duplicate capacity;
+- pending vs. cost-liable semantics remain explicit;
+- expiry/recovery retains the correct conservative charge after one or more increments;
+- settlement cannot exceed total successfully reserved capacity;
+- long-running / multi-round execution does not create a second logical operation merely to gain capacity.
 
-However, the upstream `io.modelcontextprotocol/tasks` TypeScript integration surface remains experimental. The project therefore does not claim a stable first-class Tasks wire/runtime adapter for v1 unless that upstream surface stabilizes before release.
+If this proof is not ready, v1 may retain the v0.5 fixed-reservation model and add top-up later.
 
-This is not an accounting blocker because the existing core primitives already express the safe task lifecycle. Business task creation, worker ownership, and result replay remain outside `UsageStore`.
+### #84 — heterogeneous multi-dimensional usage
 
-### New stateless MRTR resume mode
+The feature can enter v1 if the design proves, before API freeze:
 
-Deferred. The current shared/durable one-time claim already provides cross-instance resume without sticky sessions. A client-carried/stateless claim would add surface area and is not justified unless it can preserve one-time claim and ambiguous-ACK safety with a concrete operational advantage.
+- all required dimensions admit atomically or none commit;
+- one logical operation keeps one replay identity;
+- hierarchical budgets inside one dimension compose cleanly;
+- settlement/replay/expiry/lost-ACK semantics remain deterministic;
+- the representation stays provider-neutral and does not turn usage enforcement into billing/pricing logic;
+- built-in and third-party Store conformance can express the required transaction shape.
 
-### Progressive reservation growth and heterogeneous multi-dimensional usage
+If a safe vector model is not ready, v1 may retain the v0.5 scalar model and introduce a later compatible or major-version extension as appropriate.
 
-The v1 boundary decision for #83/#84 is complete.
+### Other open capabilities
 
-For #83, v1 requires a bounded reservation before metered work and does not expose reservation growth/top-up. A future additive top-up API is acceptable only if each increment preserves atomic multi-budget admission, deterministic retry identity, lost-ACK safety, liability/expiry recovery, and `actual <= total successfully reserved` settlement semantics. Creating another logical operation merely to obtain more capacity is not the v1 workaround.
+Issues #76, #81, and #82 are not automatically excluded from v1 merely because earlier planning called them post-v1. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
 
-For #84, v1 applies one scalar quoted/actual unit count to all budgets participating in a reservation. A future per-dimension/vector model must preserve one logical replay identity and atomic admission/settlement across all required dimensions. If that cannot be added compatibly, it should be treated as a major-version contract rather than weakening the v1 scalar guarantee. Independent per-dimension reserve calls are not equivalent when atomic all-or-nothing admission is required.
+First-class MCP Tasks integration likewise remains dependent on the upstream TypeScript protocol surface; the accounting lifecycle itself is already defined and proof-tested.
 
-### Operational snapshot / reconciliation / threshold helpers
+## Production-readiness evidence
 
-Issues #76, #81, and #82 are post-v1 operational capability candidates. They may compose with authoritative Store results and current observer events, but they must not become a second accounting ledger or turn best-effort telemetry into enforcement authority.
+### Public API / packaging / Node
 
-### Stable billing / financial-ledger contract
-
-Deferred/out of scope. Observability and optional downstream billing adapters remain outside the enforcement transaction. The project does not become a financial-grade ledger, payment processor, or billing platform.
-
-### Generic workflow/result replay
-
-Out of scope. Usage accounting may preserve/reconcile its own state, but it does not authorize blind replay of arbitrary business side effects after a crash or ambiguous acknowledgement.
-
-## Production-readiness audit
-
-### Public API / exports / versions
-
-- All five publishable package manifests remain version-aligned at the current source-release line.
-- ESM and Node.js 20+ remain the current public compatibility floor.
-- Normal full CI exercises Node.js 20, 22, and 24 on the same build/test/package/clean-consumer path.
-- The manual npm publication runtime uses Node 24, which is therefore inside normal compatibility evidence rather than being a publish-only runtime.
-- Public subpath exports are explicitly enumerated and package tarball contents are allow-listed.
-- Clean-consumer CI installs all locally packed tarballs and imports the public entry points, including Redis MCP flow and the conformance subpaths.
-
-No v1 version bump is performed as part of this readiness review.
+- all five publishable package manifests are version-aligned for each source release;
+- ESM and Node.js 20+ remain the public compatibility floor;
+- normal CI exercises Node.js 20, 22, and 24 on the same build/test/package/clean-consumer path;
+- public subpath exports are enumerated and package tarball contents are allow-listed;
+- clean-consumer CI installs locally packed tarballs and imports public entry points.
 
 ### Store invariant alignment
 
-The built-in stores preserve the same public lifecycle but have different provider-specific implementation boundaries:
+- **Memory** — process-local reference implementation with bounded retained state and fail-closed capacity exhaustion;
+- **Redis** — one Lua transaction domain, Redis server time, concurrency/expiry/replay/ACK-loss evidence;
+- **Cloudflare Durable Objects** — Durable Object + SQLite transaction domain, local workerd conformance, deployed dogfood, explicit remote ambiguity handling, and optional two-token credential rotation;
+- **Firestore** — transactions with hashed identifiers, explicit ambiguous-ACK behavior, and bounded/synchronized-host-clock deployment contract with deterministic skew evidence.
 
-- **Memory** — process-local reference implementation; suitable for tests, development, and controlled single-process deployments that explicitly accept restart loss, but not restart-durable or horizontally shared enforcement.
-- **Redis** — one Lua transaction domain, Redis server time, concurrency/expiry/replay/ACK-loss evidence; persistence and HA remain deployment-specific.
-- **Cloudflare Durable Objects** — Durable Object + SQLite transaction domain, portable conformance via local workerd plus real deployed dogfood; remote state-changing ambiguity is surfaced rather than blindly retried.
-- **Firestore** — Firestore transactions with hashed storage identifiers; explicit ambiguous-ACK behavior and bounded/synchronized-host-clock deployment contract with deterministic skew evidence. Shared-document contention remains a deployment constraint.
+Portable Store conformance exercises the common mutable-limit and lifecycle contract across Memory, Redis, Cloudflare local workerd, and Firestore Emulator. Passing portable conformance proves behavioral compatibility, not backend durability/HA/failover by itself.
 
-The same mutable-limit contract is exercised through the portable `UsageStore` conformance runner against Memory, Redis, Cloudflare local workerd, and Firestore Emulator.
-
-Third-party implementations should use [Store implementation contract](store-contract.md) and the portable conformance runners. Passing the runner proves behavioral compatibility, not backend durability or failover safety by itself.
-
-### Concurrent admission / replay / crash / expiry / partial failure
+### Failure semantics covered
 
 Evidence covers:
 
 - concurrent shared-budget admission;
 - multi-budget all-or-nothing behavior;
-- same-key limit increase/decrease without resetting authoritative usage;
-- concurrent stricter/stale-higher effective-policy views;
 - duplicate logical-operation rejection;
 - idempotent liability and terminal settlement replay;
 - conflicting settlement rejection;
-- pending expiry release;
-- liable expiry conservative full retention;
+- pending expiry release and liable expiry conservative retention;
 - lease renewal;
-- provider-specific lost-ACK/retry evidence for Redis, Cloudflare, and Firestore under their documented contracts;
-- Firestore multi-instance bounded-skew lease/recovery behavior;
-- one-time multi-round resume and mismatch preservation;
-- lost multi-round consume acknowledgement failing closed;
-- no automatic business-operation replay after ambiguous execution state.
+- provider-specific lost-ACK/retry evidence;
+- Firestore multi-instance bounded-skew recovery;
+- same-key mutable limit increase/decrease without resetting authoritative usage;
+- one-time multi-round resume, mismatch preservation, and fail-closed ambiguous consume;
+- separation of usage-accounting recovery from blind business-operation replay.
 
-Cancellation is intentionally conservative. A cancellation request/ACK is not proof of zero cost; zero settlement is valid only when pre-cost cancellation is actually established.
+Cancellation remains conservative: a cancellation request/ACK is not proof that no metered cost occurred.
 
-### Mutable policy boundary
+## Mutable policy boundary
 
-For the same `budget.key`, the supplied `budget.limit` is the effective admission ceiling for that call, while authoritative used/reserved state remains in the Store.
+For the same `budget.key`, `budget.limit` is the effective admission ceiling supplied for that call while authoritative used/reserved state remains in the Store.
 
-- increase: existing usage remains counted and only new headroom opens;
-- decrease: existing usage/reservations remain and new work denies while at/above the lower limit;
+- increases preserve existing usage and open only new headroom;
+- decreases preserve usage/reservations and deny new work while at/above the lower limit;
 - active reservations are not re-priced or revoked by a policy change;
 - settled usage is not refunded by lowering a limit;
 - key changes are reserved for genuinely different application-owned accounting buckets/windows;
-- `MemoryUsageStore.retireBudgetKey()` is not a plan-change/reset API.
+- Store atomicity does not provide distributed policy-version consensus across application instances.
 
-`UsageStore` does not provide distributed policy-version consensus. If application instances concurrently present old/new effective limits, each admission uses the limit supplied by that caller. Strict downgrade cutovers therefore require application-level policy rollout consistency. See [Mutable quota limits](mutable-quota-limits.md).
+See [Mutable quota limits](mutable-quota-limits.md).
 
-### Security boundary
+## Security / horizontal-scale boundary
 
-- `Principal` is trusted application input derived from authentication/authorization, not a client credential format.
-- `operationId` is idempotency input, not identity proof.
-- MCP request state is integrity-verified before use and rebound to trusted principal/tenant/tool/args identity.
-- Remote Cloudflare requires application-defined authorization and HTTPS outside local tests.
-- Firestore is server-side enforcement infrastructure; untrusted clients must not receive direct write authority.
-- Raw tool arguments and secrets are not collected by default for enforcement telemetry.
-- Hashing of identifiers is privacy minimization, not encryption.
+- `Principal` is trusted application input derived from authentication/authorization;
+- `operationId` is idempotency input, not identity proof;
+- MCP request state is integrity-verified and rebound to trusted identity/tool/args context;
+- remote Cloudflare requires application-defined authorization and HTTPS outside local tests;
+- Firestore is server-side enforcement infrastructure;
+- raw tool arguments and secrets are not collected by default for enforcement telemetry;
+- production horizontal scale requires shared provider-backed accounting/flow state where appropriate;
+- Firestore's supported lease-recovery profile requires bounded/synchronized host clocks and correctly sized `expiryGraceMs`.
 
-### Horizontal scale
+## v0.5 release checks
 
-The v1 accounting model supports multiple stateless MCP HTTP handlers as long as authoritative accounting/flow state is shared where required:
+Before creating the v0.5.0 source tag/release:
 
-```text
-HTTP/MCP handlers
-    -> shared UsageStore
-    -> shared McpUsageFlowStore for multi-round flows
-```
+1. version all five packages together to `0.5.0`;
+2. move the intended post-v0.4 changes into the `0.5.0` changelog section;
+3. run Node 20/22/24 normal CI;
+4. run Redis, Cloudflare local/workerd, and Firestore Emulator integration checks;
+5. run package tarball/content/version and clean-consumer verification;
+6. verify README/roadmap/release docs describe v0.5 as the immediate release and v1 as a later scope decision;
+7. create the v0.5.0 source tag/GitHub Release only after the release commit is green;
+8. keep npm publication separate unless independently authorized.
 
-Memory stores remain explicitly single-process. Production horizontal scale must use provider-backed shared state.
+## Future v1 release gate
 
-For Firestore, the supported v1 profile requires bounded, synchronized application clocks with `expiryGraceMs` sized at least to the maximum expected positive pairwise clock lead plus measurement margin. Unknown/unbounded skew is outside the stable Firestore lease-recovery claim.
+A future v1.0 release should happen only after:
 
-### Packaging / clean consumer / Node support
+1. v0.5 stabilization/dogfood has produced enough operational confidence;
+2. #83/#84 and other deliberate v1-scope candidates have been explicitly accepted or deferred;
+3. long-lived public package/subpath/API names are reviewed one final time;
+4. any breaking contract change judged necessary is made before the v1 tag;
+5. the full package/integration matrix is green at `1.0.0`;
+6. explicit v1 source-release authorization is given.
 
-CI validates:
+There is no requirement that v1 immediately follow v0.5, nor that every future capability be completed before v1. The stable boundary should reflect demonstrated product need and safety evidence.
 
-- build + unit/integration tests;
-- Node.js 20, 22, and 24;
-- Redis 7 integration behavior;
-- Cloudflare local workerd integration;
-- Firestore Emulator integration;
-- aligned package versions;
-- `npm pack` for all five packages;
-- expected tarball files and no leaked source/test artifacts;
-- no leaked `workspace:` dependencies;
-- installation/import from a clean consumer project.
+## Release / npm separation
 
-### Release / npm workflow
-
-GitHub source release and npm publication are deliberately separate operations.
-
-The npm publish workflow is manual-only and requires:
-
-- `workflow_dispatch`;
-- an existing release tag;
-- explicit `confirm: true` authorization;
-- package versions matching the tag;
-- a successful test/pack path before publication.
-
-**npm publication remains deferred and must not be run as part of this readiness work.**
-
-## Open issues and blocker classification
-
-### Issue #63 — v1 MCP semantics
-
-**Classification: resolved by the current source tree; not a v1 blocker.**
-
-The current-protocol fresh-request proof, shared-state MRTR decision, Tasks accounting design/proof, and third-party flow/store contracts cover the intended acceptance boundary. First-class experimental Tasks adapter work remains explicitly deferred.
-
-### Issue #24 — real Cloudflare operational observations
-
-**Classification: post-v1 operational evidence; not a core v1 blocker.**
-
-Real deployed dogfood has already covered reserve, liability, renewal, settlement, parallel contention, retry, lost ACK, conservative error settlement, fail-closed behavior, and transport/privacy review. The remaining items are execution of the documented real credential-rotation procedure and capture of a genuine platform-limit/overload/Free-plan exhaustion event.
-
-Those observations limit broad operational claims but do not justify holding the provider-neutral v1 API or core accounting semantics. Do not intentionally burn shared Free-plan quota merely to close the issue.
-
-### Issue #6 — first npm publication
-
-**Classification: deliberately deferred release operation; not a source-readiness blocker.**
-
-Keep stating that packages are not yet available from npm until an explicit publication decision is made. Do not close #6 merely because the source tree is ready for v1 consideration.
-
-### Issues #77 and #78 — Firestore failure/time evidence
-
-**Classification: resolved pre-v1 gates.**
-
-#77 defines fail-closed ambiguous reserve handling and safe same-reservation retry/replay behavior for liability, renewal, and settlement, with post-commit acknowledgement-loss fault injection. #78 defines the bounded/synchronized-clock support envelope and proves cross-instance pending/liability recovery behavior deterministically.
-
-### Issue #79 — Node 24 compatibility evidence
-
-**Classification: resolved pre-v1 release/support-policy gate.**
-
-Node 24 runs the same full normal CI path as Node 20/22, including build/test, Redis integration, package verification, `npm pack`, and clean-consumer installation/import. The minimum runtime remains Node 20+.
-
-### Issue #85 — mutable quota-limit semantics
-
-**Classification: resolved pre-v1 policy/Store-contract gate.**
-
-The same-key contract preserves authoritative reserved/consumed state across increases/decreases, keeps active reservations intact, denies new work at/above a lower limit, and documents application-owned rollout consistency. Portable conformance verifies the same contract against Memory, Redis, Cloudflare, and Firestore.
-
-### Issues #83 and #84 — future accounting-model extensions
-
-**Classification: post-v1 tracks; the pre-v1 boundary decision is complete.**
-
-For v1, the project accepts a bounded fixed reservation and one common scalar unit count across all participating budgets. #83 remains open to design a failure-safe atomic top-up capability as a likely additive post-v1 extension. #84 remains open to design atomic heterogeneous/vector usage; if its representation or settlement model cannot be added compatibly, it should be treated as a major-version change. Neither issue is a remaining v1 release gate.
-
-### Issues #76, #81, and #82 — operational capabilities
-
-**Classification: post-v1 optional capabilities; not v1 blockers.**
-
-Operational snapshots, per-operation status/reconciliation helpers, and quota-threshold signals can improve production usability, but they must remain read-only/non-authoritative with respect to admission and settlement. Existing fail-closed semantics remain valid when a Store cannot prove a resumable status.
-
-## Breaking-change review before v1
-
-The evidence and boundary decisions now confirm the following stable choices:
-
-- replay identity remains `(tenantId, principal.id, tool, operationId)`;
-- one quoted/actual scalar unit count applies to every budget participating in one reservation (#84 decision);
-- `actualUnits` may not exceed the reservation, and reservation growth/top-up is outside the v1 contract (#83 decision);
-- liable expiry retains the full reservation when actual usage is unknown;
-- observer delivery is best-effort/non-transactional;
-- multi-round business result replay remains application-owned;
-- built-in Store time/durability differences remain explicit rather than hidden behind a stronger generic guarantee;
-- same-key effective-limit changes preserve authoritative usage and do not reset a bucket;
-- Firestore stable support uses explicit ambiguous-ACK and bounded-clock contracts;
-- the Node runtime support statement is backed by Node 20/22/24 full CI evidence.
-
-The final release review still must confirm that current public package/subpath names are acceptable for the long-lived stable API and that no post-decision change has invalidated the recorded boundaries.
-
-If that review identifies a breaking contract change, make it **before** the v1 tag.
-
-## Release-time checks
-
-Immediately before an actual v1.0 source release:
-
-1. verify that the recorded #83/#84 boundary decision remains unchanged: fixed reservation and same-units scalar multi-budget accounting are the v1 contract;
-2. choose the exact release commit and ensure `main` is clean/green;
-3. update all five package versions together to `1.0.0` in a dedicated release PR;
-4. move only the intended `Unreleased` entries into a new `1.0.0` changelog section without rewriting historical release sections;
-5. run the full Node 20/22/24 matrix plus Redis, Cloudflare local/workerd, and Firestore integration checks;
-6. run package tarball + clean-consumer verification at `1.0.0`;
-7. verify README/API docs no longer describe the release candidate as pre-v1 where that wording has become false;
-8. inspect the tag-triggered GitHub Release workflow against the exact release commit;
-9. only then create the v1.0 source tag/GitHub Release if explicitly authorized;
-10. keep npm publication separate unless it receives its own explicit authorization.
+GitHub source releases and npm publication remain separate operations. npm publication is still intentionally deferred and must not happen merely because v0.5.0 or a future v1.0 source release is ready.
 
 ## Current decision
 
-**Source/API readiness: GO for normal v1.0 release-candidate/release mechanics.**
+**Next source release: v0.5.0.**
 
-**Pre-v1 correctness/evidence gates #77/#78/#79/#85: RESOLVED.**
+**v0.5.0 readiness: GO, subject to normal release CI/packaging checks.**
 
-**Pre-v1 #83/#84 accounting-model boundary decision: RECORDED and RESOLVED as a release gate.**
+**v1.0 scope/API freeze: NOT FINAL; re-evaluate after v0.5.**
 
-**Final v1.0 tag/release readiness: subject only to normal release mechanics/final API-name review and explicit release authorization.**
+**#83/#84: OPEN v1-scope candidates, not predetermined post-v1 work.**
 
-**Actual v1.0 tag/release: NOT performed.**
-
-**npm publication: NOT performed and still explicitly deferred.**
+**npm publication: still deferred and separate.**

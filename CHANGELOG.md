@@ -6,13 +6,42 @@ All notable project changes are recorded here.
 
 ## [Unreleased]
 
+No entries yet.
+
+## [0.5.0] - 2026-08-17
+
+Fifth GitHub/source release. This is a pre-v1 stabilization release; npm registry publication remains intentionally deferred and is not part of this release.
+
 ### Added
 
 - Added the optional `mcp-usage-control-cloudflare/auth` subpath with `createCloudflareBearerTokenAuthorizer()`, supporting one current and one previous Bearer token so remote Cloudflare gateways can rotate credentials without an authentication gap while preserving the mandatory application-defined `authorize(request)` contract.
+- Added explicit Firestore ambiguous-commit / acknowledgement-loss guidance and fault-injection coverage for reserve, liability, renewal, and settlement retry/replay behavior.
+- Added explicit Firestore bounded cross-instance clock-skew guidance plus deterministic multi-instance tests for pending/liability recovery.
+- Added English/Japanese mutable quota-limit guidance covering same-key plan/override changes and application-owned policy-rollout consistency.
 
-### Validation / compatibility
+### Changed / hardened
 
-- Added local workerd credential-rotation coverage and English/Japanese deployed-dogfood guidance for the zero-downtime sequence: copy current -> previous, replace current, move callers, then retire previous. Quota/accounting semantics, Durable Object schema, retry/fail-closed behavior, and existing custom authorizers are unchanged.
+- Defined the same-key mutable quota-limit contract: `budget.limit` is the effective admission ceiling for a reserve attempt while authoritative reserved/consumed usage remains in the Store; limit increases/decreases do not reset, revoke, re-price, or refund existing accounting state.
+- Extended portable `UsageStore` conformance with mutable-limit increase/decrease and concurrent stale/strict policy-view cases.
+- Ran the portable Store conformance contract against Memory, Redis, Cloudflare local workerd, and Firestore Emulator, including the Firestore lazy-cleanup path required by the shared conformance assumptions.
+- Clarified Firestore v1-candidate support as a bounded/synchronized host-clock deployment profile with `expiryGraceMs` sized for maximum expected positive clock lead plus margin; unknown/unbounded skew remains outside the supported claim.
+- Updated roadmap/readiness planning so v0.5.0 is the immediate stabilization release and the final v1 scope/API freeze remains open for post-v0.5 review. #83 progressive reservation growth and #84 heterogeneous multi-dimensional usage remain open v1-scope candidates rather than predetermined post-v1 work.
+
+### Validation / CI
+
+- Added Node.js 24 to the same normal full build/test/Redis/package/clean-consumer matrix as Node.js 20 and 22 without raising the public Node.js 20+ compatibility floor.
+- Added real Redis portable Store conformance integration, Cloudflare local workerd portable conformance, and Firestore Emulator portable conformance.
+- Added local workerd credential-rotation coverage and English/Japanese deployed-dogfood guidance for the zero-downtime sequence: copy current -> previous, replace current, move callers, then retire previous.
+
+### Compatibility / release boundary
+
+- This remains a backward-compatible pre-1.0 minor source release; no intentional breaking public runtime API is introduced.
+- Redis, Cloudflare Durable Object, and Firestore accounting storage schemas are unchanged; no provider data migration/reset is required for v0.5.0.
+- Core accounting invariants remain fail closed: atomic admission, explicit liability, replay/idempotency safety, conservative ambiguity/expiry handling, and authoritative usage preservation across mutable effective limits.
+- The current runtime still uses bounded fixed reservations and one scalar unit count across participating budgets; those behaviors are v0.5 behavior and current v1 candidates, not an irreversible v1 freeze.
+- Issue #24 remains open for additional real Cloudflare operational evidence and is non-blocking for this source release.
+- Issue #6 remains intentionally deferred; the packages are still unpublished to npm.
+- This source release does not declare v1.0 stable, publish to npm, add a first-class experimental Tasks protocol adapter, or implement #83/#84.
 
 ## [0.4.0] - 2026-08-13
 

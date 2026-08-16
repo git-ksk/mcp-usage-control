@@ -66,23 +66,27 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.4.0`. `v0.4.0` is the GitHub/source release prepared by this branch; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.5.0`. `v0.5.0` is the next GitHub/source stabilization release; npm registry publication remains intentionally deferred.
 
-## Stability boundary for v1 consideration
+## v1 scope under consideration after v0.5
 
-| Area | Status | Boundary |
+The current runtime behavior remains the leading v1 candidate, but **the v1 API freeze is not final**. v0.5.0 is intentionally being released first so the final stable surface can reflect real integration experience.
+
+| Area | Current status | Boundary |
 | --- | --- | --- |
-| Core reserve / liability / renew / settle | **v1 stable candidate** | Failure-safe transaction contract |
-| Multi-budget admission / replay protection | **v1 stable candidate** | Atomic and scoped by logical operation identity |
-| Redis / Cloudflare / Firestore Stores | **v1 stable candidate with documented deployment constraints** | Provider durability/time/HA differences remain explicit |
-| `protectTool()` | **v1 stable candidate** | Single-round MCP tools |
-| `protectMultiRoundTool()` | **v1 stable candidate** | Supported `input_required` multi-round accounting |
-| Shared/durable MRTR compare-and-consume | **v1 direction** | Cross-instance resume without sticky MCP sessions |
-| First-class MCP Tasks wire/runtime adapter | **deferred / experimental upstream** | Accounting semantics are defined; stable adapter is not claimed |
-| New stateless MRTR claim mode | **deferred** | No demonstrated advantage over shared one-time claim |
+| Core reserve / liability / renew / settle | **strong v1 candidate** | Failure-safe transaction contract |
+| Multi-budget admission / replay protection | **strong v1 candidate** | Atomic and scoped by logical operation identity |
+| Redis / Cloudflare / Firestore Stores | **strong v1 candidate with documented deployment constraints** | Provider durability/time/HA differences remain explicit |
+| `protectTool()` | **strong v1 candidate** | Single-round MCP tools |
+| `protectMultiRoundTool()` | **strong v1 candidate** | Supported `input_required` multi-round accounting |
+| Shared/durable MRTR compare-and-consume | **current v1 direction** | Cross-instance resume without sticky MCP sessions |
+| Progressive reservation growth (#83) | **open v1-scope candidate** | v0.5 uses fixed reservation; atomic top-up needs failure proof |
+| Heterogeneous multi-dimensional usage (#84) | **open v1-scope candidate** | v0.5 uses one scalar unit count; vector accounting needs atomic design proof |
+| First-class MCP Tasks wire/runtime adapter | **scope depends on upstream stabilization** | Accounting semantics are defined; stable adapter is not yet claimed |
+| New stateless MRTR claim mode | **deferred unless justified** | No demonstrated advantage over shared one-time claim |
 | Billing / financial ledger / workflow replay | **out of scope** | Remains outside usage enforcement |
 
-See **[v1.0 readiness review](docs/v1-readiness.md)** for the complete blocker classification and release-time checks.
+See **[v1.0 readiness review](docs/v1-readiness.md)** and **[Roadmap](docs/roadmap.md)** for the current scope decision process.
 
 ## Multi-budget admission
 
@@ -242,11 +246,13 @@ Redis uses Lua for atomic transitions and Redis server `TIME` for lease/tombston
 
 The Cloudflare adapter uses a Durable Object + SQLite transaction domain. Remote applications use an explicitly authenticated HTTPS gateway. Network/timeout ambiguity is surfaced, not blindly retried.
 
-Real deployed dogfood has validated the main accounting path, while Issue #24 intentionally remains open for two additional real-platform operational observations. Do not interpret the adapter as proven under every Cloudflare platform-limit condition.
+Real deployed dogfood has validated the main accounting path, while Issue #24 intentionally remains open for additional real-platform operational observations. Do not interpret the adapter as proven under every Cloudflare platform-limit condition.
+
+The optional `mcp-usage-control-cloudflare/auth` helper supports a current and previous Bearer token to make controlled credential rotation possible without weakening the application-defined authorization boundary.
 
 ### Firestore
 
-The Firestore adapter is server-side only and uses Firestore transactions for admission, settlement, and expiry recovery. It uses host-clock lease arithmetic with a configurable expiry grace; strongly shared budget documents can become contention hotspots.
+The Firestore adapter is server-side only and uses Firestore transactions for admission, settlement, and expiry recovery. Its supported recovery profile assumes bounded/synchronized host clocks with `expiryGraceMs` sized to cover maximum expected positive clock lead plus margin; strongly shared budget documents can become contention hotspots.
 
 See [Redis](docs/redis.md), [Cloudflare](docs/cloudflare.md), and [Firestore](docs/firestore.md) before production deployment.
 
@@ -281,7 +287,7 @@ See [Observability](docs/observability.md).
 4. Metered execution is preceded by `markLiable()`.
 5. Pending expiry may release capacity; liable expiry conservatively retains the reservation.
 6. Active long-running leases are renewable.
-7. `actualUnits` cannot exceed `reservedUnits`.
+7. `actualUnits` cannot exceed `reservedUnits` in the current v0.5 model.
 8. Identical settlement replay is idempotent during retention; conflicting settlement fails.
 9. Storage failures do not become allow decisions.
 10. Ambiguous state-changing outcomes are not blindly retried.
@@ -315,7 +321,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.4.0` is the GitHub/source release boundary prepared by this branch. After publication, `main` may contain post-v0.4.0 hardening and remains the basis for later v1.0 API-freeze/release review; this does not declare v1.0 stable.
+`v0.5.0` is the immediate GitHub/source stabilization release. The project will re-evaluate the final v1 scope after v0.5 rather than treating the current candidate boundary as already frozen.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 
