@@ -10,7 +10,7 @@ The project should deepen correctness at that boundary rather than expand into a
 
 ## v1 readiness status
 
-The post-v0.2 correctness program is complete enough to begin v1.0 release-candidate/final-release preparation. The detailed audit and blocker classification are in [v1.0 readiness review](v1-readiness.md).
+The post-v0.2 correctness program is complete enough to continue v1.0 release-candidate preparation. The detailed audit and blocker classification are in [v1.0 readiness review](v1-readiness.md).
 
 Completed before the v1 decision:
 
@@ -24,15 +24,35 @@ Completed before the v1 decision:
 - public API/export/version, built-in Store, security, horizontal-scale, Node support, CI, release, and npm-publication workflow audit;
 - README/API documentation synchronization and explicit stable/experimental/deferred boundaries.
 
-No known correctness blocker currently requires a new runtime feature or redesign before v1.0.
+Issues filed after the original readiness audit add several **final v1 release gates**. They do not currently imply that the core transaction model needs a redesign, but they must be resolved, validated, or explicitly narrowed before the v1.0 tag where noted below.
 
 ## Current priorities
 
-1. **Release-candidate / API-freeze mechanics** — when explicitly authorized, choose the exact release commit, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
-2. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
-3. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
-4. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
-5. **Observer/event compatibility** — treat the current event/log types as part of the API-freeze review. A future standalone wire-schema/version field may be introduced only when an external telemetry/billing adapter actually needs one; it must remain outside the enforcement transaction and follow SemVer.
+1. **Pre-v1 evidence and contract gates (#77, #78, #79, #85)** — close the Firestore ambiguous-commit and cross-instance clock-skew evidence gaps, align Node 24 runtime claims with CI evidence, and define mutable-limit semantics for an existing accounting bucket. If any item is intentionally not supported for v1, narrow the corresponding v1 support claim instead of leaving an implicit guarantee.
+2. **Final API-freeze decisions (#83, #84)** — progressive reservation growth and heterogeneous multi-dimensional usage do not need to be implemented before v1, but the project must explicitly accept the current fixed-reservation / same-units multi-budget model as the v1 contract or change it before the stable tag.
+3. **Release-candidate / API-freeze mechanics** — after the gates above are satisfied and release is explicitly authorized, choose the exact release commit, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
+4. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
+5. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
+6. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
+7. **Operational observability (#76, #82)** — keep current observer/event behavior stable for v1, while treating richer operational snapshots and threshold/exhaustion signals as optional tooling outside the authoritative accounting state machine.
+
+## Issue classification for the v1 boundary
+
+The issues opened after the original readiness review are classified as follows.
+
+| Issue | v1 classification | Required before v1.0 tag |
+| --- | --- | --- |
+| #76 operational usage snapshot | Post-v1 optional operational tooling | No; current observability semantics remain the v1 boundary |
+| #77 Firestore ambiguous-commit reconciliation | Pre-v1 Firestore evidence/contract gate | Yes, if Firestore remains a stable v1 adapter claim |
+| #78 Firestore cross-instance clock skew | Pre-v1 Firestore safety gate | Yes, if Firestore remains a stable horizontally shared v1 adapter claim |
+| #79 Node 24 CI evidence | Pre-v1 release/support-policy gate | Yes: test Node 24 or narrow the public support claim |
+| #81 operation reconciliation/status capability | Post-v1 capability | No; unsupported/indeterminate states remain fail closed |
+| #82 quota threshold/exhaustion signals | Post-v1 optional operational tooling | No |
+| #83 progressive reservation growth | Post-v1 feature candidate; pre-v1 boundary decision | No implementation required; explicitly accept/defer before API freeze |
+| #84 heterogeneous multi-dimensional usage | Post-v1 design candidate; pre-v1 boundary decision | No implementation required; explicitly accept/defer before API freeze |
+| #85 mutable quota-limit semantics | Pre-v1 policy/Store-contract gate | Yes; define and conformance-test the same-key limit-change semantics |
+
+This classification intentionally distinguishes **correctness/safety evidence needed to support an existing v1 claim** from **new capabilities that can safely remain outside v1**.
 
 ## MCP-native correctness
 
@@ -122,6 +142,11 @@ A financial-grade ledger remains a separate system boundary where required.
 
 Only add these when there is a concrete user/integration need and the change preserves the stable transaction model:
 
+- operational snapshot/helper work from #76 without creating a second source of accounting truth;
+- operation reconciliation/status capability from #81 where a Store can prove authoritative state;
+- quota threshold/exhaustion helpers from #82 as non-authoritative operational tooling;
+- progressive reservation growth from #83 if a safe atomic top-up model is proven;
+- heterogeneous multi-dimensional usage from #84 if all dimensions can remain atomically admitted;
 - a standalone versioned telemetry/event wire schema;
 - optional external billing/metering adapters;
 - additional production policy examples;
