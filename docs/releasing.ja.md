@@ -51,7 +51,7 @@ pre-1.0 GitHub/source releaseは、対象surfaceについて次を満たした�
 ## GitHub/source release procedure
 
 1. package version、changelog、英日docsを更新。
-2. Node.js 20 / 22 + 実Redis + frozen dependencyでCI。
+2. Node.js 20 / 22 / 24 + 実Redis + frozen dependencyのfull CI matrixを実行。
 3. 対象codeについてCloudflare workerd integrationとFirestore Emulator integrationを実行。
 4. public packageをpackしtarball contentを検証。
 5. release PRを `main` へmerge。
@@ -73,6 +73,10 @@ npm publishは後日の明示的な別工程です。Git tag / GitHub Releaseが
 7. clean consumer projectからregistry metadata / installをverify。
 
 GitHub-hosted runnerではnpm Trusted Publishing / OIDCを優先します。long-lived npm tokenをrepository file、log、release artifactへ入れません。
+
+## npm publication runtime
+
+manual publish workflowは現在Node.js 24で実行します。Node 24もnormal full CI evidence matrixに含めるため、publish toolingがpublic packageで未検証のNode majorだけに依存する状態を作りません。
 
 ## Release notes
 
