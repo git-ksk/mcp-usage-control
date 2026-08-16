@@ -118,6 +118,143 @@ export async function runUsageStoreConformance(
     );
   });
 
+  await runCase(harness, cases, 'mutable-limit-increase-preserves-usage', async store => {
+    const budgetKey = 'contract:mutable-increase';
+    const seed = await store.reserve({
+      request: request('mutable-increase-seed'),
+      units: 2,
+      budgets: [{ key: budgetKey, limit: 2 }],
+      ttlMs: 5_000,
+    });
+    assertAccepted(seed, 'initial full bucket');
+
+    const deniedAtOldLimit = await store.reserve({
+      request: request('mutable-increase-old-limit'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 2 }],
+      ttlMs: 5_000,
+    });
+    assertDenied(deniedAtOldLimit, 'quota_exceeded', 'admission at old full limit');
+
+    const admittedAtHigherLimit = await store.reserve({
+      request: request('mutable-increase-new-limit'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 3 }],
+      ttlMs: 5_000,
+    });
+    assertAccepted(admittedAtHigherLimit, 'admission after limit increase');
+
+    const exhaustedAtHigherLimit = await store.reserve({
+      request: request('mutable-increase-exhausted'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 3 }],
+      ttlMs: 5_000,
+    });
+    assertDenied(
+      exhaustedAtHigherLimit,
+      'quota_exceeded',
+      'existing usage must remain counted after limit increase',
+    );
+  });
+
+  await runCase(harness, cases, 'mutable-limit-decrease-preserves-active-and-used-state', async store => {
+    const budgetKey = 'contract:mutable-decrease';
+    const active = await store.reserve({
+      request: request('mutable-decrease-active'),
+      units: 2,
+      budgets: [{ key: budgetKey, limit: 3 }],
+      ttlMs: 5_000,
+    });
+    assertAccepted(active, 'active reservation before decrease');
+
+    const deniedWhilePending = await store.reserve({
+      request: request('mutable-decrease-pending-denied'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 1 }],
+      ttlMs: 5_000,
+    });
+    assertDenied(
+      deniedWhilePending,
+      'quota_exceeded',
+      'lower limit must not rewrite pending reserved usage',
+    );
+
+    await store.markLiable({ reservationId: active.reservation.id });
+    const deniedWhileLiable = await store.reserve({
+      request: request('mutable-decrease-liable-denied'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 1 }],
+      ttlMs: 5_000,
+    });
+    assertDenied(
+      deniedWhileLiable,
+      'quota_exceeded',
+      'lower limit must not rewrite cost-liable reserved usage',
+    );
+
+    await store.settle({
+      reservationId: active.reservation.id,
+      actualUnits: 2,
+      outcome: 'completed-under-lower-limit',
+    });
+
+    const deniedAfterSettlement = await store.reserve({
+      request: request('mutable-decrease-settled-denied'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 1 }],
+      ttlMs: 5_000,
+    });
+    assertDenied(
+      deniedAfterSettlement,
+      'quota_exceeded',
+      'limit decrease must not refund already-incurred usage',
+    );
+
+    const admittedWithRoom = await store.reserve({
+      request: request('mutable-decrease-room-restored'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 3 }],
+      ttlMs: 5_000,
+    });
+    assertAccepted(admittedWithRoom, 'raising the effective limit must reuse the same bucket state');
+  });
+
+  await runCase(harness, cases, 'mutable-limit-concurrent-policy-views', async store => {
+    const budgetKey = 'contract:mutable-concurrent';
+    const seed = await store.reserve({
+      request: request('mutable-concurrent-seed'),
+      units: 1,
+      budgets: [{ key: budgetKey, limit: 2 }],
+      ttlMs: 5_000,
+    });
+    assertAccepted(seed, 'seed usage for concurrent policy views');
+
+    const [strictResult, staleHigherResult] = await Promise.all([
+      store.reserve({
+        request: request('mutable-concurrent-strict'),
+        units: 1,
+        budgets: [{ key: budgetKey, limit: 1 }],
+        ttlMs: 5_000,
+      }),
+      store.reserve({
+        request: request('mutable-concurrent-stale-higher'),
+        units: 1,
+        budgets: [{ key: budgetKey, limit: 2 }],
+        ttlMs: 5_000,
+      }),
+    ]);
+
+    assertDenied(
+      strictResult,
+      'quota_exceeded',
+      'caller using the stricter limit must deny when usage is already at that limit',
+    );
+    assertAccepted(
+      staleHigherResult,
+      'caller still using the higher effective limit remains able to admit within that limit',
+    );
+  });
+
   await runCase(harness, cases, 'logical-operation-replay-scope', async store => {
     const base = {
       request: request('same-operation', 'user-1', 'tenant-a', 'read'),
