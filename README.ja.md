@@ -27,7 +27,7 @@ pnpm check
 
 別projectへのinstallは [Source / local tarballから使う](docs/using-from-source.ja.md) を参照してください。
 
-要件は **Node.js 20+ / ESM**。CIではNode.js 20 / 22、Redis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
+要件は **Node.js 20+ / ESM**。CIではNode.js 20 / 22 / 24、Redis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
 
 ## Core lifecycle
 
