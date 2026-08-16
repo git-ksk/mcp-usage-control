@@ -39,7 +39,13 @@ function sleep(ms) {
 async function testPortableConformance() {
   const report = await assertUsageStoreConformance({
     createStore(scenario) {
-      return storeFor(`contract_${scenario.replaceAll('-', '_')}`);
+      // The portable contract expects normal admission-time expiry recovery.
+      // Most focused emulator cases disable background/lazy cleanup so they can
+      // call recoverExpired() explicitly, but that would invalidate this suite.
+      return storeFor(`contract_${scenario.replaceAll('-', '_')}`, {
+        cleanupBatchSize: 16,
+        cleanupIntervalMs: 0,
+      });
     },
     async waitForLeaseExpiry(ttlMs) {
       await sleep(ttlMs + 120);
