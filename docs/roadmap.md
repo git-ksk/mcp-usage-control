@@ -8,54 +8,66 @@ quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 
 The project should deepen correctness at that boundary rather than expand into a generic agent-budget, gateway, billing, governance, or workflow product. See [Project positioning](positioning.md).
 
-## v1 readiness status
+## Current release direction
 
-The post-v0.2 correctness program is complete enough to continue v1.0 release-candidate preparation. The detailed audit and blocker classification are in [v1.0 readiness review](v1-readiness.md).
+The next source release is **v0.5.0**, not v1.0.0.
 
-Completed before the v1 decision:
+v0.5.0 is a pre-v1 stabilization release that packages the correctness and compatibility work completed after v0.4.0:
 
-- current MCP `2026-07-28` / TypeScript SDK v2 fresh-request multi-round proof;
-- principal/tenant/tool/args-bound one-time resume with fail-closed ambiguous consume handling;
-- explicit decision to keep shared/durable compare-and-consume as the v1 MRTR model, without sticky MCP sessions;
-- long-running MCP Tasks accounting semantics and core proof tests;
-- explicit separation of usage accounting from business task/result replay;
-- normative third-party `UsageStore` / `McpUsageFlowStore` safety contracts;
-- reusable portable conformance runners and package/clean-consumer coverage;
-- public API/export/version, built-in Store, security, horizontal-scale, Node support, CI, release, and npm-publication workflow audit;
-- README/API documentation synchronization and explicit stable/experimental/deferred boundaries.
+- Firestore ambiguous-commit / lost-ACK semantics and fault-injection evidence (#77);
+- bounded Firestore cross-instance clock-skew support and deterministic evidence (#78);
+- Node.js 24 on the same full CI/package/clean-consumer path as Node 20/22 (#79);
+- same-key mutable quota-limit semantics plus portable Store conformance across Memory, Redis, Cloudflare, and Firestore (#85);
+- Cloudflare bearer-token rotation support and local workerd rotation coverage;
+- the current accounting-model boundary documentation for #83/#84.
 
-The additional pre-v1 evidence/contract gates opened after the original readiness audit are resolved: Firestore ambiguous-commit semantics (#77), bounded cross-instance clock-skew safety (#78), Node 24 full-matrix evidence (#79), and same-key mutable quota-limit semantics (#85). These changes did not require a redesign of the core transaction model.
+The v1 readiness work remains useful evidence, but **v1 is no longer treated as the immediate next release or as already API-frozen**. After v0.5.0, the project will use implementation experience and integration needs to decide which open capabilities belong in v1.
 
-The #83/#84 API-freeze boundary decision is also now recorded. **v1 intentionally freezes a bounded fixed reservation with one scalar quoted/actual unit count applied to every budget participating in that reservation.** Progressive reservation growth (#83) and heterogeneous per-dimension/vector accounting (#84) remain open post-v1 design/implementation tracks and are not v1 blockers.
+## Current v0.5 behavior vs. v1 candidates
 
-The v1 contract does not endorse emulating either capability by creating a second logical operation or by issuing independent reserve calls whose partial success would weaken the all-or-nothing admission guarantee.
+v0.5.0 keeps the current proven accounting model:
+
+- a bounded fixed reservation is established before metered work;
+- `actualUnits <= reservedUnits`;
+- one scalar quoted/actual unit count is applied across every budget participating in one reservation;
+- all participating budgets admit atomically or none do;
+- a second logical operation is not an accounting-equivalent top-up workaround;
+- independent per-dimension reserve calls are not an equivalent replacement when all-or-nothing admission is required.
+
+These are **v0.5 behavior and current v1 candidates**, not an irreversible v1 freeze.
+
+In particular:
+
+- #83 progressive reservation growth remains open and may be included in v1 if a failure-safe atomic top-up protocol is proven before v1;
+- #84 heterogeneous multi-dimensional usage remains open and may be included in v1 if a provider-neutral atomic vector model is proven before v1;
+- if either design would destabilize the existing transaction guarantees or expand the release surface without sufficient evidence, it can still remain post-v1.
+
+The project should choose the v1 boundary from demonstrated need and failure evidence, not from an artificial requirement that every previously labeled post-v1 item stay out of v1.
 
 ## Current priorities
 
-1. **Release-candidate / API-freeze mechanics** — with the #83/#84 boundary decision recorded, choose the exact release commit after explicit release authorization, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
-2. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
-3. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
-4. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, mutable-policy boundaries, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
-5. **Operational observability (#76, #82)** — keep current observer/event behavior stable for v1, while treating richer operational snapshots and threshold/exhaustion signals as optional tooling outside the authoritative accounting state machine.
-6. **Post-v1 accounting extensions (#83, #84)** — treat progressive reservation growth as the nearer additive candidate when a failure-safe top-up protocol is proven; keep heterogeneous multi-dimensional usage as a broader design track that may require a major-version contract if the stable scalar model cannot be extended compatibly.
+1. **Release v0.5.0** — version all five packages together, publish the GitHub/source release after the full matrix is green, and keep npm publication separate/deferred.
+2. **v0.5 stabilization / dogfood** — exercise the newly documented Firestore failure envelope, mutable-limit contract, Node 24 path, portable Store conformance, and Cloudflare credential rotation in normal use.
+3. **Re-evaluate v1 scope** — decide whether #83 and/or #84, and any other low-risk high-value open capability, should enter v1 before the actual API freeze.
+4. **Cloudflare operational evidence (#24)** — capture genuine platform-limit/overload/Free-plan exhaustion evidence when naturally/safely observable; do not burn shared quota solely to close the issue.
+5. **First npm publication (#6)** — remain manual/deferred until separately authorized.
+6. **Failure-semantics maintenance** — keep crash recovery, ACK ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, mutable-policy boundaries, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
 
-## Issue classification for the v1 boundary
+## Issue classification toward v1
 
-The issues opened after the original readiness review are classified as follows.
-
-| Issue | v1 classification | Current status for v1 |
+| Issue | Current classification | v1 treatment |
 | --- | --- | --- |
-| #76 operational usage snapshot | Post-v1 optional operational tooling | Not a v1 blocker; current observability semantics remain the v1 boundary |
-| #77 Firestore ambiguous-commit reconciliation | Pre-v1 Firestore evidence/contract gate | **Resolved** — explicit fail-closed reserve ambiguity plus retry/replay evidence for liability, renewal, and settlement |
-| #78 Firestore cross-instance clock skew | Pre-v1 Firestore safety gate | **Resolved** — bounded/synchronized-clock deployment contract plus deterministic multi-instance evidence |
-| #79 Node 24 CI evidence | Pre-v1 release/support-policy gate | **Resolved** — Node 20/22/24 run the same full build/test/package/clean-consumer matrix |
-| #81 operation reconciliation/status capability | Post-v1 capability | Not a v1 blocker; unsupported/indeterminate states remain fail closed |
-| #82 quota threshold/exhaustion signals | Post-v1 optional operational tooling | Not a v1 blocker |
-| #83 progressive reservation growth | Post-v1 additive feature candidate | **v1 decision recorded** — fixed reservation is the stable v1 contract; issue remains open for a failure-safe atomic top-up design |
-| #84 heterogeneous multi-dimensional usage | Post-v1 design candidate | **v1 decision recorded** — one scalar unit count across participating budgets is the stable v1 contract; future vector accounting may require a major-version change |
-| #85 mutable quota-limit semantics | Pre-v1 policy/Store-contract gate | **Resolved** — same-key limit-change contract plus portable Memory/Redis/Cloudflare/Firestore conformance evidence |
+| #76 operational usage snapshot | Future optional operational capability | May be considered for v1 if it remains non-authoritative and low risk |
+| #77 Firestore ambiguous-commit reconciliation | **Resolved correctness/evidence gate** | Evidence carried into v0.5 and future v1 |
+| #78 Firestore cross-instance clock skew | **Resolved safety/evidence gate** | Evidence carried into v0.5 and future v1 |
+| #79 Node 24 CI evidence | **Resolved support-policy gate** | Node 20/22/24 remain tested lines |
+| #81 operation reconciliation/status capability | Future capability | Re-evaluate for v1 only if authoritative semantics are clear |
+| #82 quota threshold/exhaustion signals | Future optional operational capability | Re-evaluate for v1 only as non-authoritative tooling |
+| #83 progressive reservation growth | **Open v1-scope candidate** | Current v0.5 model has no top-up; v1 inclusion remains undecided pending proof |
+| #84 heterogeneous multi-dimensional usage | **Open v1-scope candidate** | Current v0.5 model is scalar; v1 inclusion remains undecided pending atomic vector design |
+| #85 mutable quota-limit semantics | **Resolved policy/Store-contract gate** | Portable conformance is part of the v0.5 evidence base |
 
-This classification intentionally distinguishes **correctness/safety evidence needed to support an existing v1 claim** from **new capabilities that can safely remain outside v1**.
+This replaces the earlier planning assumption that #83/#84 were definitively post-v1. The earlier analysis remains useful design input; only the release-boundary finality changed.
 
 ## MCP-native correctness
 
@@ -63,9 +75,7 @@ Protocol-specific work belongs in core only when it changes accounting safety at
 
 ### Multi-round request/response
 
-The **v1 direction** is the existing shared/durable flow claim with atomic compare-and-consume.
-
-It preserves:
+The current direction is the existing shared/durable flow claim with atomic compare-and-consume. It preserves:
 
 - one reservation per logical operation;
 - integrity-verified client-round-tripped request state;
@@ -76,50 +86,22 @@ It preserves:
 - no sticky MCP session requirement;
 - conservative post-execution liability behavior.
 
-A new stateless/client-carried claim design is deferred unless it proves the same invariants under concurrency and acknowledgement ambiguity and offers a concrete operational advantage.
-
-Stateless transport does not imply stateless accounting.
+A new stateless/client-carried claim design remains deferred unless it proves equivalent one-time/ambiguity safety and offers a concrete operational advantage.
 
 ### MCP Tasks
 
-[MCP Tasks accounting](mcp-tasks-accounting.md) defines and proof-tests:
-
-- one admission/reservation per logical operation independent of task ID;
-- liability immediately before metered work, not inferred from `working`;
-- renewal during authoritative execution and intentional input waits;
-- completion, failure, cancellation, abandonment, and worker crash;
-- conservative reserve/liability/renew/settlement ambiguity handling;
-- no refund merely because cooperative cancellation was acknowledged;
-- reconciliation without blind business replay;
-- strict separation of task/result/worker ownership from `UsageStore`.
-
-No new core primitive is required. First-class Tasks protocol integration remains **deferred/experimental** while the upstream TypeScript extension surface is experimental. Do not advertise stable Tasks adapter support until that boundary changes.
+[MCP Tasks accounting](mcp-tasks-accounting.md) defines and proof-tests the safe accounting lifecycle, but the first-class Tasks protocol adapter remains deferred/experimental while the upstream TypeScript integration surface is experimental. This remains a v1 scope decision rather than a correctness gap in the existing core primitives.
 
 ## Third-party Store contract
 
-The planned invariant kit is now implemented. See [Store implementation contract](store-contract.md).
-
-Portable runners are available at:
+The portable invariant kit is implemented. See [Store implementation contract](store-contract.md).
 
 ```ts
 import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
 import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
 ```
 
-A Store should not claim behavioral compatibility unless it can prove, as applicable:
-
-- atomic all-or-nothing multi-budget admission;
-- concurrent admission correctness;
-- mutable effective-limit behavior without resetting same-key authoritative usage;
-- logical-operation replay semantics;
-- idempotent liability and settlement replay;
-- pending-vs-liable expiry recovery;
-- renewable/resumable state;
-- conflicting settlement rejection;
-- binding-aware one-time MCP flow consumption;
-- fail-closed invalid/corrupt state behavior.
-
-Passing the portable runner is necessary but not sufficient for a production-safe claim. Backend-specific durability, failover, authoritative time, and lost-ACK evidence remain required.
+A compatible Store must preserve atomic admission, replay/idempotency, pending-vs-liable expiry, renewal/resume, conflicting-settlement rejection, mutable-limit semantics, and fail-closed invalid/ambiguous state. Passing the portable runner proves behavioral compatibility, not backend durability, failover, authoritative time, or lost-ACK safety by itself.
 
 ## External billing and metering
 
@@ -131,46 +113,26 @@ transactional enforcement core
         -> optional billing/telemetry adapter
 ```
 
-External billing schemas may define balances, prices, invoices, receipts, or events with different guarantees. They must not weaken or replace:
+A financial-grade ledger, payment/subscription system, pricing catalog, gateway/router, OAuth provider, or arbitrary business-side-effect replay engine remains outside the core transaction model.
 
-- atomic admission;
-- reservation;
-- cost-liability state;
-- idempotency;
-- lease/expiry recovery;
-- conservative handling of ambiguous settlement.
+## Future candidates
 
-A financial-grade ledger remains a separate system boundary where required.
+Before v1, candidates may be pulled into the v1 scope only when concrete value and failure evidence justify the additional stable surface. After v1, the same rule applies under normal compatibility constraints.
 
-## Post-v1 candidates
+Candidates include:
 
-Only add these when there is a concrete user/integration need and the change preserves the stable transaction model:
-
-- operational snapshot/helper work from #76 without creating a second source of accounting truth;
-- operation reconciliation/status capability from #81 where a Store can prove authoritative state;
-- quota threshold/exhaustion helpers from #82 as non-authoritative operational tooling;
-- progressive reservation growth from #83 as the nearer additive accounting extension, only after atomic top-up identity, replay, lost-ACK, expiry, and settlement semantics are proven;
-- heterogeneous multi-dimensional usage from #84 only after a provider-neutral atomic vector model is proven; treat a breaking representation/settlement change as a major-version concern rather than weakening the v1 scalar contract;
+- #76 operational snapshots without a second accounting source of truth;
+- #81 authoritative operation reconciliation/status where a Store can prove it;
+- #82 threshold/exhaustion helpers as non-authoritative operational tooling;
+- #83 progressive reservation growth with atomic top-up identity/replay/lost-ACK/expiry proof;
+- #84 heterogeneous multi-dimensional usage with atomic provider-neutral vector semantics;
 - a standalone versioned telemetry/event wire schema;
-- optional external billing/metering adapters;
+- optional billing/metering adapters;
 - additional production policy examples;
 - a first-class MCP Tasks adapter after upstream stabilization;
-- alternative MRTR claim representations only with equivalent one-time/ambiguity proof;
-- additional provider Stores that can satisfy the same conformance/failure contract.
+- alternative MRTR claims with equivalent one-time/ambiguity proof;
+- additional provider Stores satisfying the same conformance/failure contract.
 
 ## Non-goals
 
-The core runtime should not become:
-
-- a generic agent runtime or budget authority;
-- a generic HTTP/API rate limiter;
-- a payment processor or subscription checkout system;
-- an OAuth/identity provider;
-- a billing dashboard or pricing catalog;
-- a financial-grade ledger;
-- a gateway/router product;
-- an implementation of a vendor billing protocol;
-- a workflow engine for replaying arbitrary business side effects;
-- a system that blindly retries ambiguous state-changing operations.
-
-Integrations with those systems belong at explicit adapter/policy boundaries.
+The core runtime should not become a generic agent runtime/budget authority, ordinary HTTP rate limiter, payment/subscription system, financial ledger, OAuth provider, billing dashboard/pricing catalog, gateway/router, vendor billing protocol implementation, generic workflow engine, or a system that blindly retries ambiguous state-changing operations.
