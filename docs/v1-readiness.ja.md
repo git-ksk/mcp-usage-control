@@ -8,11 +8,13 @@
 
 ## 判定
 
-**現在のsource treeは、v1.0 release candidate / 最終release reviewへ進める状態です。既知のcorrectness blockerとして、v1前に再設計や新しいruntime機能を必須とするものは残っていません。**
+**現在のsource treeはv1.0 release-candidate準備を継続できる状態で、新たに見つかったIssueもcore transaction model自体の再設計を要求してはいません。ただし、元のreadiness監査後に追加されたIssueにより、v1.0 tag前に解決・検証するかsupport claimを明示的に狭める必要があるfinal-release gateが追加されました。**
 
-これはoptional integrationがすべて完成したという意味ではありません。stable enforcement boundaryが十分狭く、failure semanticsが明示され、built-in Storeにはprovider-specific evidenceがあり、third-party Store compatibilityも実行可能なcontractになったため、v1 API freezeを検討できるという判断です。
+現在のpre-v1 gateは #77（Firestore ambiguous-commit semantics）、#78（Firestore cross-instance clock-skew safety）、#79（Node 24 support evidence）、#85（mutable quota-limit semantics）です。#83と#84はv1前の実装を必須としませんが、API freeze時に現行のfixed reservation / same-units multi-budget boundaryをv1 stable contractとして受け入れるか、stable tag前に変更するかを明示的に決める必要があります。
 
-実際にv1.0 tagを作る直前には [Release時の最終確認](#release時の最終確認) を実施します。これはarchitecture未完成ではなくrelease hygieneです。
+これはoptional integrationがすべて完成したという意味ではありません。stable enforcement boundaryは十分狭く、failure semanticsは明示され、third-party Store compatibilityも実行可能なため、v1 API freeze / finalization processへ進めます。残るgateは既存support claimに対するevidence / contract整備であり、project scopeを広げるためのものではありません。
+
+実際にv1.0 tagを作る直前には [Release時の最終確認](#release時の最終確認) を実施し、上記Issue gateも確認します。
 
 ## v1 stable候補の境界
 
@@ -28,7 +30,7 @@
 - identical settlement replay / conflicting settlement rejection
 - fail-closed storage semantics
 - process-local reference implementationとしての `MemoryUsageStore`
-- documented deployment constraintを持つRedis / Cloudflare Durable Objects / Firestore `UsageStore`
+- documented deployment constraintとfinal pre-v1 evidence gateを満たしたRedis / Cloudflare Durable Objects / Firestore `UsageStore`
 - single-round MCP TypeScript SDK v2 tool向け `protectTool()`
 - 現在対応している `input_required` multi-round accounting向け `protectMultiRoundTool()`
 - integrity-verified request-state resume、principal / tenant / tool / args binding、one-time compare-and-consume、resume時のsecond reservation禁止
@@ -54,6 +56,16 @@ multi-round stateのv1方針は現行の **shared / durable compare-and-consume*
 
 Deferredです。現行shared / durable one-time claimですでにsticky sessionなしのcross-instance resumeを実現しています。client-carried / stateless claimは、one-time claimとambiguous-ACK safetyを維持しつつ具体的な運用上の利点を示せる場合だけ再検討します。
 
+### Progressive reservation growth / heterogeneous multi-dimensional usage
+
+#83と#84はdesign候補であり、v1必須capabilityではありません。current candidate contractでは、metered work開始前にbounded maximumをreserveし、1つのreservationに参加する全budgetへ同じquoted / actual unit countを適用します。
+
+API freeze前に、これらをv1 limitationとして明示的にacceptします。将来progressive top-upやper-dimension / vector accountingを追加する場合は、atomic admission、replay safety、liability / expiry semantics、ACK ambiguity safetyを維持する必要があり、採用するdesignによってpost-v1 additive changeまたはmajor-version contractになる可能性があります。
+
+### Operational snapshot / reconciliation / threshold helper
+
+#76、#81、#82はpost-v1 operational capability候補です。authoritative Store resultやcurrent observer eventと組み合わせることはできますが、second accounting ledgerを作ったりbest-effort telemetryをenforcement authorityにしてはいけません。
+
 ### Stable billing / financial-ledger contract
 
 Deferred / out of scopeです。observabilityやoptional downstream billing adapterはenforcement transactionの外側です。このprojectをfinancial-grade ledger、payment processor、billing platformにはしません。
@@ -67,8 +79,8 @@ Out of scopeです。usage accounting自身のstateはreconcileできますが�
 ### Public API / exports / versions
 
 - publish対象5 packageのmanifestはcurrent source-release lineでversion aligned
-- ESM / Node.js 20+をpublic compatibility floorとして維持
-- CIはNode.js 20 / 22を実行
+- ESM / Node.js 20+をcurrent public compatibility floorとして維持
+- CIは現在Node.js 20 / 22を実行。#79でopen-endedな `>=20` declaration / Node 24 publish pathとfull Node 24 compatibility evidenceの差を追跡
 - public subpath exportをexplicitに列挙し、package tarball内容をallow-list検証
 - clean-consumer CIで全local tarballをinstallし、Redis MCP flow / conformance subpathを含むpublic entry pointをimport検証
 
@@ -81,7 +93,7 @@ built-in Storeは同じpublic lifecycleを守りつつ、providerごとの実装
 - **Memory** — process-local reference implementation。restart lossを明示的に許容するtest / development / controlled single-process deploymentには利用可能だが、restart-durableまたはhorizontal shared enforcementには使わない
 - **Redis** — 1 Lua transaction domain、Redis server time、concurrency / expiry / replay / ACK-loss evidence。persistence / HAはdeployment-specific
 - **Cloudflare Durable Objects** — Durable Object + SQLite transaction domain、local workerd test + real deployed dogfood。remote state-changing ambiguityはblind retryせずsurface
-- **Firestore** — Firestore transaction + hashed storage identifier。host clock + documented expiry grace / contention limit
+- **Firestore** — Firestore transaction + hashed storage identifier。host clock + documented expiry grace / contention limit。#77でambiguous commit / lost-ACK reconciliation semanticsとevidence、#78でcross-instance clock skew下のsupported safety envelopeを追跡
 
 third-party実装は [Store実装contract](store-contract.ja.md) とportable conformance runnerを使います。runner合格だけでbackend durability / failover safetyまで証明したことにはしません。
 
@@ -97,7 +109,7 @@ third-party実装は [Store実装contract](store-contract.ja.md) とportable con
 - pending expiry release
 - liable expiry conservative full retention
 - lease renewal
-- provider-specific testでのlost reserve / liability / settlement ACK
+- 現時点で実装済みのprovider-specific lost-ACK / retry evidence（Redis / Cloudflareを含む）。Firestoreのexplicit ambiguous-commit reconciliation boundaryは#77で継続追跡
 - one-time multi-round resume / mismatch preservation
 - lost multi-round consume ACKのfail closed
 - ambiguous execution state後にbusiness operationをautomatic replayしない
@@ -124,11 +136,11 @@ HTTP/MCP handlers
     -> shared McpUsageFlowStore for multi-round flows
 ```
 
-Memory Storeは明示的にsingle-process専用です。production horizontal scaleではprovider-backed shared stateを使います。
+Memory Storeは明示的にsingle-process専用です。production horizontal scaleではprovider-backed shared stateを使います。Firestoreについて広いhorizontal shared v1 claimを行う前に、host-clock deployment envelopeが#78のfinal decision / evidenceを満たす必要があります。
 
 ### Packaging / clean consumer / Node support
 
-CIで次を確認しています。
+CIでは現在次を確認しています。
 
 - build + unit/integration test
 - Node.js 20 / 22
@@ -138,6 +150,8 @@ CIで次を確認しています。
 - expected tarball file / source・test artifact漏れなし
 - `workspace:` dependency漏れなし
 - clean consumerへのinstall / public import
+
+v1前に#79でNode 24を同等のcompatibility evidenceへ追加するか、public runtime claimを実際のtested matrixに合わせて狭めます。
 
 ### Release / npm workflow
 
@@ -175,38 +189,75 @@ real deployed dogfoodではreserve、liability、renewal、settlement、parallel
 
 明示的なpublish判断があるまでは、npmからinstallできないことをREADME等で明記し続けます。source treeがv1検討可能になっただけで#6をcloseしません。
 
+### Issue #77 / #78 — Firestore failure / time evidence
+
+**分類: Firestore stable-support claimに対するpre-v1 gate。**
+
+#77ではambiguousなFirestore commit / acknowledgement後のsupported behaviorを、second reservationを作らずuncertaintyをunmetered allowへ変換しない形で定義・proofします。#78ではhost-clock skew、expiry grace、lease lifetime、horizontal deploymentのsupported relationshipを定義・検証します。v1前に安全境界を確立できない場合は、暗黙に強い保証を置かずFirestoreのv1 support claimを狭めます。
+
+### Issue #79 — Node 24 compatibility evidence
+
+**分類: pre-v1 release / support-policy gate。**
+
+current package engine declarationはNode 24を許容し、publish pathもNode 24を使用しますが、normal full CI matrixは現在Node 20 / 22です。v1前にNode 24を同じpublic compatibility pathでtestするか、support claimを狭める・明確化します。
+
+### Issue #85 — mutable quota-limit semantics
+
+**分類: pre-v1 policy / Store-contract gate。**
+
+同じ `budget.key` に対してeffective limitを変更する操作は一般的なapplication use caseなので、stable freeze前に1つのexplicit cross-Store contractを定義します。想定方向は、authoritative used / reserved stateを維持し、limit増加後は新limitまでfuture admissionを許可し、limit減少後にcurrent usageがnew limit以上なら新規admissionをdenyすることです。Memory / Redis / Cloudflare / Firestoreでconformance evidenceを持たせます。
+
+### Issue #83 / #84 — future accounting-model extension
+
+**分類: post-v1 implementation候補 + pre-v1 boundary decision。**
+
+progressive reservation growthもheterogeneous per-dimension unitsも、current correctnessを維持するための必須機能ではありません。v1 API freeze前に、stable v1 contractはbounded reservationとparticipating budget全体へのcommon unit countを採用すると明記します。その制約をv1で受け入れられないと判断した場合だけstable tag前に変更します。
+
+### Issue #76 / #81 / #82 — operational capability
+
+**分類: post-v1 optional capability。v1 blockerではありません。**
+
+operational snapshot、per-operation status / reconciliation helper、quota-threshold signalはproduction usabilityを改善できますが、admission / settlementに対してread-only / non-authoritativeのままにします。Storeがsafe resumable stateをproofできない場合、既存fail-closed semanticsを維持します。
+
 ## v1前のbreaking-change review
 
-必須のpre-v1 redesignは見つかっていません。ただしv1後に変えると高コストなため、final API-freezeで次を再確認します。
+必須のcore redesignは見つかっていません。ただしv1後に変えると高コストなため、final API-freezeで次を再確認します。
 
 1. replay identityは `(tenantId, principal.id, tool, operationId)` のまま
-2. 1 reservationに参加する全budgetは同じquoted / actual unit count
-3. `actualUnits` はreservationを超えない
+2. 1 reservationに参加する全budgetは同じquoted / actual unit countを使う（#84 boundary）
+3. `actualUnits` はreservationを超えず、reservation growthはv1 contractに含めない（#83 boundary）
 4. liable expiryでactual usage不明ならfull reservationを保持
 5. observer deliveryはbest-effort / non-transactional
 6. multi-round business result replayはapplication-owned
 7. built-in Storeのtime / durability差を隠してgeneric guaranteeを強くしない
 8. 現在のpublic package / subpath名をlong-lived stable APIとして受け入れられるか
+9. same-key quota-limit changeは1つのexplicit cross-Store semantic contractに従う（#85）
+10. Firestoreのambiguous-commit / clock-skew boundaryが意図したstable support claimに十分明確か（#77 / #78）
+11. Node runtime support statementがtested compatibility matrixと一致するか（#79）
 
-変更する可能性が高いものがあるなら **v1 tag前** に変更します。現時点のknown correctness evidenceから必須変更はありません。
+breaking contract changeが必要なら **v1 tag前** に行います。
 
 ## Release時の最終確認
 
-実際のv1.0 source release直前に、mechanicalな最終passを行います。
+実際のv1.0 source release直前に、final passを行います。
 
-1. exact release commitを選び、`main` がclean / greenであることを確認
-2. dedicated release PRで5 packageを同時に `1.0.0` へversion bump
-3. intended `Unreleased` entryだけを新しい `1.0.0` changelog sectionへ移し、historical v0.2.0 sectionは書き換えない
-4. full Node 20/22 CI + Redis + Cloudflare local/workerd + Firestore integrationを実行
-5. `1.0.0` tarball + clean-consumer verification
-6. README / API docsに残るpre-v1表現がrelease後に嘘にならないか確認
-7. exact release commitに対してtag-triggered GitHub Release workflowを再監査
-8. explicit authorizationがある場合だけv1.0 source tag / GitHub Releaseを作成
-9. npm publicationは別のexplicit authorizationがない限り実施しない
+1. #77、#78、#79、#85を解決・検証するか、対応するstable support claimを明示的に狭める
+2. #83 / #84のAPI-freeze decisionを記録し、intentional changeがない限りfixed reservation / same-units multi-budgetをv1 boundaryとしてacceptする
+3. exact release commitを選び、`main` がclean / greenであることを確認
+4. dedicated release PRで5 packageを同時に `1.0.0` へversion bump
+5. intended `Unreleased` entryだけを新しい `1.0.0` changelog sectionへ移し、historical v0.2.0 sectionは書き換えない
+6. full supported Node matrix + Redis + Cloudflare local/workerd + Firestore integrationを実行
+7. `1.0.0` tarball + clean-consumer verification
+8. README / API docsに残るpre-v1表現がrelease後に嘘にならないか確認
+9. exact release commitに対してtag-triggered GitHub Release workflowを再監査
+10. explicit authorizationがある場合だけv1.0 source tag / GitHub Releaseを作成
+11. npm publicationは別のexplicit authorizationがない限り実施しない
 
 ## 現在の結論
 
-**Source/API readiness: v1.0 release-candidate / final-release準備へGO。**
+**Source/API readiness: v1.0 release-candidate / API-freeze準備の継続へGO。**
+
+**Final v1.0 tag / release readiness: #77、#78、#79、#85と#83 / #84のexplicit boundary decision完了までGATED。**
 
 **実際のv1.0 tag / release: 未実施。**
 
