@@ -8,18 +8,23 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Verdict
 
-**The source tree is ready to continue v1.0 API-freeze/finalization work. The additional pre-v1 correctness/evidence gates identified after the original audit are resolved, and none required a redesign of the core transaction model.**
+**The source tree has completed the identified pre-v1 correctness/evidence gates and the #83/#84 accounting-model boundary decision. No remaining pre-v1 design gate requires a core transaction redesign before normal v1.0 release mechanics.**
 
-Resolved gates:
+Resolved correctness/evidence gates:
 
 - #77 — Firestore ambiguous-commit / acknowledgement-loss semantics;
 - #78 — Firestore bounded cross-instance clock-skew safety;
 - #79 — Node.js 24 full compatibility-evidence matrix;
 - #85 — mutable quota-limit semantics for an existing accounting bucket.
 
-The remaining pre-v1 design work is the explicit #83/#84 boundary decision. Progressive reservation growth and heterogeneous multi-dimensional usage do not need to be implemented before v1, but the project must explicitly accept the current fixed-reservation and same-units multi-budget model as the stable v1 boundary or change it before the tag.
+Recorded API-freeze decision:
 
-That does **not** mean every optional integration is complete. The stable enforcement boundary is narrow, its failure semantics are explicit, built-in Store support claims now have the required evidence/contracts, and third-party Store compatibility is executable. Optional operational capabilities remain post-v1 candidates.
+- #83 — progressive reservation growth is deferred to post-v1; stable v1 uses a bounded fixed reservation established before metered work;
+- #84 — heterogeneous multi-dimensional usage is deferred to post-v1; stable v1 uses one scalar quoted/actual unit count across every budget participating in a reservation.
+
+The v1 contract does not endorse bypassing those limits by creating a second logical operation for top-up or by issuing independent per-dimension reserve calls whose partial success would weaken all-or-nothing admission.
+
+That does **not** mean every optional integration is complete. The stable enforcement boundary is intentionally narrow, its failure semantics are explicit, built-in Store support claims have the required evidence/contracts, and third-party Store compatibility is executable. Optional operational and accounting extensions remain post-v1 candidates.
 
 Before actually creating a v1.0 tag, perform the release-time checks below and obtain explicit release authorization.
 
@@ -29,6 +34,8 @@ The following behavior is a candidate for the v1 stable contract:
 
 - `UsagePolicy` quote followed by atomic `UsageStore.reserve()`;
 - all-or-nothing multi-budget admission;
+- one scalar quoted/actual unit count applied to every budget participating in one reservation;
+- a bounded fixed reservation established before metered work, with no reservation growth/top-up in the v1 contract;
 - replay identity `(tenantId, principal.id, tool, operationId)`;
 - explicit `pending -> cost-liable` transition via `markLiable()`;
 - renewable leases;
@@ -66,9 +73,11 @@ Deferred. The current shared/durable one-time claim already provides cross-insta
 
 ### Progressive reservation growth and heterogeneous multi-dimensional usage
 
-Issues #83 and #84 are design candidates, not mandatory v1 capabilities. The current candidate contract reserves a bounded maximum before metered work and applies one quoted/actual unit count across every budget participating in one reservation.
+The v1 boundary decision for #83/#84 is complete.
 
-Before API freeze, explicitly confirm that these are accepted v1 limitations. Future progressive top-up or per-dimension/vector accounting must preserve atomic admission, replay safety, liability/expiry semantics, and acknowledgement-ambiguity safety and may therefore require a post-v1 additive or major-version contract depending on the chosen design.
+For #83, v1 requires a bounded reservation before metered work and does not expose reservation growth/top-up. A future additive top-up API is acceptable only if each increment preserves atomic multi-budget admission, deterministic retry identity, lost-ACK safety, liability/expiry recovery, and `actual <= total successfully reserved` settlement semantics. Creating another logical operation merely to obtain more capacity is not the v1 workaround.
+
+For #84, v1 applies one scalar quoted/actual unit count to all budgets participating in a reservation. A future per-dimension/vector model must preserve one logical replay identity and atomic admission/settlement across all required dimensions. If that cannot be added compatibly, it should be treated as a major-version contract rather than weakening the v1 scalar guarantee. Independent per-dimension reserve calls are not equivalent when atomic all-or-nothing admission is required.
 
 ### Operational snapshot / reconciliation / threshold helpers
 
@@ -104,7 +113,7 @@ The built-in stores preserve the same public lifecycle but have different provid
 - **Cloudflare Durable Objects** — Durable Object + SQLite transaction domain, portable conformance via local workerd plus real deployed dogfood; remote state-changing ambiguity is surfaced rather than blindly retried.
 - **Firestore** — Firestore transactions with hashed storage identifiers; explicit ambiguous-ACK behavior and bounded/synchronized-host-clock deployment contract with deterministic skew evidence. Shared-document contention remains a deployment constraint.
 
-The same mutable-limit contract is now exercised through the portable `UsageStore` conformance runner against Memory, Redis, Cloudflare local workerd, and Firestore Emulator.
+The same mutable-limit contract is exercised through the portable `UsageStore` conformance runner against Memory, Redis, Cloudflare local workerd, and Firestore Emulator.
 
 Third-party implementations should use [Store implementation contract](store-contract.md) and the portable conformance runners. Passing the runner proves behavioral compatibility, not backend durability or failover safety by itself.
 
@@ -228,7 +237,7 @@ Keep stating that packages are not yet available from npm until an explicit publ
 
 **Classification: resolved pre-v1 release/support-policy gate.**
 
-Node 24 now runs the same full normal CI path as Node 20/22, including build/test, Redis integration, package verification, `npm pack`, and clean-consumer installation/import. The minimum runtime remains Node 20+.
+Node 24 runs the same full normal CI path as Node 20/22, including build/test, Redis integration, package verification, `npm pack`, and clean-consumer installation/import. The minimum runtime remains Node 20+.
 
 ### Issue #85 — mutable quota-limit semantics
 
@@ -238,9 +247,9 @@ The same-key contract preserves authoritative reserved/consumed state across inc
 
 ### Issues #83 and #84 — future accounting-model extensions
 
-**Classification: post-v1 implementation candidates with a remaining pre-v1 boundary decision.**
+**Classification: post-v1 tracks; the pre-v1 boundary decision is complete.**
 
-Neither progressive reservation growth nor heterogeneous per-dimension units is required to preserve current correctness. Before the v1 API freeze, explicitly document that the stable v1 contract uses a bounded reservation and one common unit count across participating budgets, unless the project intentionally changes those boundaries before the tag.
+For v1, the project accepts a bounded fixed reservation and one common scalar unit count across all participating budgets. #83 remains open to design a failure-safe atomic top-up capability as a likely additive post-v1 extension. #84 remains open to design atomic heterogeneous/vector usage; if its representation or settlement model cannot be added compatibly, it should be treated as a major-version change. Neither issue is a remaining v1 release gate.
 
 ### Issues #76, #81, and #82 — operational capabilities
 
@@ -250,9 +259,11 @@ Operational snapshots, per-operation status/reconciliation helpers, and quota-th
 
 ## Breaking-change review before v1
 
-The evidence gates now confirm the following stable choices:
+The evidence and boundary decisions now confirm the following stable choices:
 
 - replay identity remains `(tenantId, principal.id, tool, operationId)`;
+- one quoted/actual scalar unit count applies to every budget participating in one reservation (#84 decision);
+- `actualUnits` may not exceed the reservation, and reservation growth/top-up is outside the v1 contract (#83 decision);
 - liable expiry retains the full reservation when actual usage is unknown;
 - observer delivery is best-effort/non-transactional;
 - multi-round business result replay remains application-owned;
@@ -261,19 +272,15 @@ The evidence gates now confirm the following stable choices:
 - Firestore stable support uses explicit ambiguous-ACK and bounded-clock contracts;
 - the Node runtime support statement is backed by Node 20/22/24 full CI evidence.
 
-The final API-freeze review still must confirm:
+The final release review still must confirm that current public package/subpath names are acceptable for the long-lived stable API and that no post-decision change has invalidated the recorded boundaries.
 
-1. one quoted/actual unit count applies to every budget participating in one reservation (#84 boundary);
-2. `actualUnits` may not exceed the reservation, and reservation growth is not part of the v1 contract (#83 boundary);
-3. current public package/subpath names are acceptable for a long-lived stable API.
-
-If any of those need a breaking contract change, make that change **before** the v1 tag.
+If that review identifies a breaking contract change, make it **before** the v1 tag.
 
 ## Release-time checks
 
 Immediately before an actual v1.0 source release:
 
-1. record the #83/#84 API-freeze decision: fixed reservation and same-units multi-budget remain accepted v1 boundaries unless intentionally changed before release;
+1. verify that the recorded #83/#84 boundary decision remains unchanged: fixed reservation and same-units scalar multi-budget accounting are the v1 contract;
 2. choose the exact release commit and ensure `main` is clean/green;
 3. update all five package versions together to `1.0.0` in a dedicated release PR;
 4. move only the intended `Unreleased` entries into a new `1.0.0` changelog section without rewriting historical release sections;
@@ -286,11 +293,13 @@ Immediately before an actual v1.0 source release:
 
 ## Current decision
 
-**Source/API readiness: GO for continued v1.0 API-freeze/finalization.**
+**Source/API readiness: GO for normal v1.0 release-candidate/release mechanics.**
 
 **Pre-v1 correctness/evidence gates #77/#78/#79/#85: RESOLVED.**
 
-**Final v1.0 tag/release readiness: GATED only on the explicit #83/#84 boundary decision plus normal release mechanics/authorization.**
+**Pre-v1 #83/#84 accounting-model boundary decision: RECORDED and RESOLVED as a release gate.**
+
+**Final v1.0 tag/release readiness: subject only to normal release mechanics/final API-name review and explicit release authorization.**
 
 **Actual v1.0 tag/release: NOT performed.**
 
