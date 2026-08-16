@@ -80,6 +80,28 @@ Concurrent `reserve()` calls against overlapping budgets must serialize/coordina
 
 Correctness is required across all processes/instances that share the same enforcement domain. A process-local mutex does not make a horizontally scaled store safe.
 
+### Mutable effective limits
+
+The authoritative accounting bucket is identified by `budget.key`; `budget.limit` is the effective policy ceiling supplied for the **current admission attempt**. A compatible Store must not persist a limit in a way that makes a later legitimate limit change reset, replace, or reinterpret already authoritative usage.
+
+For the same `budget.key`:
+
+- raising the supplied limit preserves existing reserved/consumed usage and exposes only the newly available headroom;
+- lowering the supplied limit preserves existing reserved/consumed usage and denies new admission while authoritative usage is at or above the lower limit;
+- a limit change does not cancel, shrink, refund, re-price, or re-admit an existing pending or liable reservation;
+- settlement continues to retain actual usage and releases only normal unused reserved capacity;
+- a plan/override change must not require a different key unless the application intentionally means a new accounting bucket/window.
+
+Conceptually, each admission evaluates:
+
+```text
+remaining = max(0, suppliedEffectiveLimit - authoritativeUsedOrReserved)
+```
+
+The Store provides atomic accounting, not distributed policy-version consensus. If concurrent application instances supply different limits for the same key, each reserve attempt is evaluated against its supplied limit and the then-authoritative usage. A stale caller with a higher limit can therefore admit work that a caller already using a stricter limit would deny. Applications requiring a strict downgrade cutover must coordinate effective-policy rollout outside the Store.
+
+See [Mutable quota limits](mutable-quota-limits.md) for upgrade, downgrade, trial, override, and rollout examples.
+
 ### 3. Logical-operation replay identity
 
 Duplicate protection is scoped by the exact tuple:
@@ -226,6 +248,9 @@ The runner currently proves provider-neutral behavior for:
 
 - all-or-nothing multi-budget denial;
 - concurrent admission at a shared limit;
+- limit increase without resetting existing usage;
+- limit decrease while usage is pending, liable, and settled;
+- concurrent stricter/stale-higher policy views against the same authoritative bucket;
 - logical-operation replay scope;
 - idempotent liability transition;
 - active lease renewal;
@@ -298,14 +323,14 @@ As with `UsageStore`, backend durability and lost-consume-ACK behavior need impl
 
 ## Built-in implementation evidence
 
-The built-in stores combine the portable semantics with provider-specific tests/documentation:
+The built-in stores combine the portable semantics with provider-specific tests/documentation. The same `UsageStore` conformance runner is exercised against Memory in unit CI, Redis in the normal Redis-backed test matrix, Cloudflare Durable Objects through local workerd, and Firestore through the Local Emulator Suite.
 
 | Store | Atomic primitive | Time model | Production-specific evidence/boundary |
 | --- | --- | --- | --- |
 | `MemoryUsageStore` | process-local synchronous state | host `Date.now()` | reference implementation; controlled single-process use may accept restart loss, but it is not restart-durable or horizontally shared |
-| `RedisUsageStore` | one Redis Lua transaction domain | Redis `TIME` | concurrency, ACK-loss, expiry, renew, replay tests; persistence/HA remains deployment-specific |
-| `CloudflareUsageStore` | one Durable Object + SQLite transaction domain | Durable Object runtime/store | local workerd + deployed dogfood; remote ambiguity is surfaced, not blindly retried |
-| `FirestoreUsageStore` | Firestore transactions | host clock + documented grace | emulator concurrency/atomicity/expiry tests; clock skew and shared-document contention are documented deployment limits |
+| `RedisUsageStore` | one Redis Lua transaction domain | Redis `TIME` | portable conformance, concurrency, ACK-loss, expiry, renew, replay tests; persistence/HA remains deployment-specific |
+| `CloudflareUsageStore` | one Durable Object + SQLite transaction domain | Durable Object runtime/store | portable conformance via local workerd + deployed dogfood; remote ambiguity is surfaced, not blindly retried |
+| `FirestoreUsageStore` | Firestore transactions | host clock + documented grace | portable conformance via emulator plus bounded-skew/ambiguity evidence; shared-document contention remains a deployment limit |
 | `MemoryMcpUsageFlowStore` | process-local compare/delete | host `Date.now()` | reference/single-process only |
 | `RedisMcpUsageFlowStore` | per-flow Redis Lua compare/delete | Redis expiry/server time | concurrent consume, mismatch preservation, lost-consume-ACK fail-closed tests; Redis HA remains deployment-specific |
 

@@ -70,6 +70,28 @@ overlapするbudgetへのconcurrent `reserve()` はstoreのauthoritative transac
 
 同じenforcement domainを共有する全process / instance間でcorrectnessが必要です。process-local mutexだけではhorizontal scaleで安全になりません。
 
+### Mutable effective limit
+
+`budget.key` がauthoritative accounting bucketを識別し、`budget.limit` は **current admission attemptに渡されたeffective policy ceiling** として扱います。compatibleなStoreはlimitを固定bucket definitionとしてpersistし、後から正当にlimitが変わったときに既存usageをreset / replace / reinterpretする実装にしてはいけません。
+
+同じ `budget.key` では:
+
+- supplied limitを上げても既存reserved / consumed usageを維持し、増えたheadroomだけを新たに使えるようにする
+- supplied limitを下げても既存usageを維持し、authoritative usageがlower limit以上ならnew admissionをdenyする
+- limit changeで既存pending / liable reservationをcancel / shrink / refund / re-price / re-admitしない
+- settlementは通常どおりactual usageを保持し、unused reserved capacityだけをreleaseする
+- plan / override変更だけを理由にkeyを変えない。key変更はapplicationが本当に新しいaccounting bucket / windowを意味する場合だけ行う
+
+各admissionは概念的に次を評価します。
+
+```text
+remaining = max(0, suppliedEffectiveLimit - authoritativeUsedOrReserved)
+```
+
+Storeが提供するのはatomic accountingであり、distributed policy-version consensusではありません。同じkeyについてconcurrent application instanceが異なるlimitを渡した場合、それぞれのreserve attemptはそのcallerのsupplied limitとその時点のauthoritative usageで評価されます。そのためstaleなhigher limit callerが、すでにstricter limitを使うcallerならdenyするworkをadmitできることがあります。strict downgrade cutoverが必要なapplicationはeffective-policy rolloutをStore外でcoordinateする必要があります。
+
+upgrade / downgrade / trial / override / rollout例は [Mutable quota limit](mutable-quota-limits.ja.md) を参照してください。
+
 ### 3. Logical-operation replay identity
 
 duplicate protectionのscopeはexact tupleです。
@@ -211,6 +233,9 @@ runnerは少なくとも次をproofします。
 
 - all-or-nothing multi-budget denial
 - shared limitでのconcurrent admission
+- 既存usageをresetしないlimit increase
+- pending / liable / settled usageを維持するlimit decrease
+- 同じauthoritative bucketに対するstricter / stale-higher policy viewのconcurrency
 - logical-operation replay scope
 - idempotent liability transition
 - active lease renewal
@@ -281,12 +306,14 @@ UsageStoreと同様、backend durabilityとlost-consume-ACK behaviorはportable 
 
 ## Built-in implementation evidence
 
+built-in Storeはportable semanticsとprovider-specific test / documentationを組み合わせます。同じ `UsageStore` conformance runnerをMemoryはunit CI、Redisは通常のRedis-backed test matrix、Cloudflare Durable Objectsはlocal workerd、FirestoreはLocal Emulator Suiteで実行します。
+
 | Store | Atomic primitive | Time model | Production固有のboundary/evidence |
 | --- | --- | --- | --- |
 | `MemoryUsageStore` | process-local synchronous state | host `Date.now()` | reference implementation。restart lossを許容するcontrolled single-process用途は可。restart-durable / horizontal sharedではない |
-| `RedisUsageStore` | 1 Redis Lua transaction domain | Redis `TIME` | concurrency / ACK-loss / expiry / renew / replay test。persistence / HAはdeployment-specific |
-| `CloudflareUsageStore` | 1 Durable Object + SQLite transaction domain | Durable Object runtime/store | local workerd + deployed dogfood。remote ambiguityはsurfaceしblind retryしない |
-| `FirestoreUsageStore` | Firestore transaction | host clock + documented grace | emulator concurrency / atomicity / expiry test。clock skewとshared-document contentionはdeployment limitとして明記 |
+| `RedisUsageStore` | 1 Redis Lua transaction domain | Redis `TIME` | portable conformance + concurrency / ACK-loss / expiry / renew / replay test。persistence / HAはdeployment-specific |
+| `CloudflareUsageStore` | 1 Durable Object + SQLite transaction domain | Durable Object runtime/store | local workerdでportable conformance + deployed dogfood。remote ambiguityはsurfaceしblind retryしない |
+| `FirestoreUsageStore` | Firestore transaction | host clock + documented grace | emulatorでportable conformance + bounded skew / ambiguity evidence。shared-document contentionはdeployment limit |
 | `MemoryMcpUsageFlowStore` | process-local compare/delete | host `Date.now()` | reference/single-process専用 |
 | `RedisMcpUsageFlowStore` | per-flow Redis Lua compare/delete | Redis expiry/server time | concurrent consume / mismatch preservation / lost-consume-ACK fail-closed test。Redis HAはdeployment-specific |
 

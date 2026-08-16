@@ -24,33 +24,34 @@ Completed before the v1 decision:
 - public API/export/version, built-in Store, security, horizontal-scale, Node support, CI, release, and npm-publication workflow audit;
 - README/API documentation synchronization and explicit stable/experimental/deferred boundaries.
 
-Issues filed after the original readiness audit add several **final v1 release gates**. They do not currently imply that the core transaction model needs a redesign, but they must be resolved, validated, or explicitly narrowed before the v1.0 tag where noted below.
+The additional pre-v1 evidence/contract gates opened after the original readiness audit are now resolved: Firestore ambiguous-commit semantics (#77), bounded cross-instance clock-skew safety (#78), Node 24 full-matrix evidence (#79), and same-key mutable quota-limit semantics (#85). These changes did not require a redesign of the core transaction model.
+
+The remaining pre-v1 work is an explicit **API-freeze boundary decision**, not an unimplemented correctness repair: #83 and #84 must be accepted as post-v1 capabilities under the current fixed-reservation / same-units multi-budget v1 contract, or changed before the stable tag.
 
 ## Current priorities
 
-1. **Pre-v1 evidence and contract gates (#77, #78, #79, #85)** — close the Firestore ambiguous-commit and cross-instance clock-skew evidence gaps, align Node 24 runtime claims with CI evidence, and define mutable-limit semantics for an existing accounting bucket. If any item is intentionally not supported for v1, narrow the corresponding v1 support claim instead of leaving an implicit guarantee.
-2. **Final API-freeze decisions (#83, #84)** — progressive reservation growth and heterogeneous multi-dimensional usage do not need to be implemented before v1, but the project must explicitly accept the current fixed-reservation / same-units multi-budget model as the v1 contract or change it before the stable tag.
-3. **Release-candidate / API-freeze mechanics** — after the gates above are satisfied and release is explicitly authorized, choose the exact release commit, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
-4. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
-5. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
-6. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
-7. **Operational observability (#76, #82)** — keep current observer/event behavior stable for v1, while treating richer operational snapshots and threshold/exhaustion signals as optional tooling outside the authoritative accounting state machine.
+1. **Final API-freeze decisions (#83, #84)** — progressive reservation growth and heterogeneous multi-dimensional usage do not need to be implemented before v1, but the project must explicitly accept the current fixed-reservation / same-units multi-budget model as the v1 contract or change it before the stable tag.
+2. **Release-candidate / API-freeze mechanics** — after that boundary decision and explicit release authorization, choose the exact release commit, version all five packages together, move only intended `Unreleased` changelog entries into the v1 section, run the full package/integration matrix, and review long-lived public names/semantics one last time. Do not tag/release as part of ordinary readiness work.
+3. **Cloudflare operational evidence (#24)** — execute the documented real credential rotation and capture a genuine platform-limit/overload/Free-plan exhaustion event if/when safely observable. These are post-v1 operational evidence, not a provider-neutral core blocker. Do not intentionally burn shared Free-plan quota solely to close the issue.
+4. **First npm publication (#6)** — remain explicitly manual/deferred. Registry publication is separate from source readiness and requires its own authorization.
+5. **Failure semantics maintenance** — keep crash recovery, acknowledgement ambiguity, liability, cancellation, multi-round claim/recovery, Tasks lifetime, reconciliation, mutable-policy boundaries, and Store-specific durability assumptions explicit as upstream protocols/providers evolve.
+6. **Operational observability (#76, #82)** — keep current observer/event behavior stable for v1, while treating richer operational snapshots and threshold/exhaustion signals as optional tooling outside the authoritative accounting state machine.
 
 ## Issue classification for the v1 boundary
 
 The issues opened after the original readiness review are classified as follows.
 
-| Issue | v1 classification | Required before v1.0 tag |
+| Issue | v1 classification | Current status for v1 |
 | --- | --- | --- |
-| #76 operational usage snapshot | Post-v1 optional operational tooling | No; current observability semantics remain the v1 boundary |
-| #77 Firestore ambiguous-commit reconciliation | Pre-v1 Firestore evidence/contract gate | Yes, if Firestore remains a stable v1 adapter claim |
-| #78 Firestore cross-instance clock skew | Pre-v1 Firestore safety gate | Yes, if Firestore remains a stable horizontally shared v1 adapter claim |
-| #79 Node 24 CI evidence | Pre-v1 release/support-policy gate | Yes: test Node 24 or narrow the public support claim |
-| #81 operation reconciliation/status capability | Post-v1 capability | No; unsupported/indeterminate states remain fail closed |
-| #82 quota threshold/exhaustion signals | Post-v1 optional operational tooling | No |
-| #83 progressive reservation growth | Post-v1 feature candidate; pre-v1 boundary decision | No implementation required; explicitly accept/defer before API freeze |
-| #84 heterogeneous multi-dimensional usage | Post-v1 design candidate; pre-v1 boundary decision | No implementation required; explicitly accept/defer before API freeze |
-| #85 mutable quota-limit semantics | Pre-v1 policy/Store-contract gate | Yes; define and conformance-test the same-key limit-change semantics |
+| #76 operational usage snapshot | Post-v1 optional operational tooling | Not a v1 blocker; current observability semantics remain the v1 boundary |
+| #77 Firestore ambiguous-commit reconciliation | Pre-v1 Firestore evidence/contract gate | **Resolved** — explicit fail-closed reserve ambiguity plus retry/replay evidence for liability, renewal, and settlement |
+| #78 Firestore cross-instance clock skew | Pre-v1 Firestore safety gate | **Resolved** — bounded/synchronized-clock deployment contract plus deterministic multi-instance evidence |
+| #79 Node 24 CI evidence | Pre-v1 release/support-policy gate | **Resolved** — Node 20/22/24 run the same full build/test/package/clean-consumer matrix |
+| #81 operation reconciliation/status capability | Post-v1 capability | Not a v1 blocker; unsupported/indeterminate states remain fail closed |
+| #82 quota threshold/exhaustion signals | Post-v1 optional operational tooling | Not a v1 blocker |
+| #83 progressive reservation growth | Post-v1 feature candidate; pre-v1 boundary decision | Implementation deferred; explicitly accept/defer current fixed-reservation model before API freeze |
+| #84 heterogeneous multi-dimensional usage | Post-v1 design candidate; pre-v1 boundary decision | Implementation deferred; explicitly accept/defer current same-units multi-budget model before API freeze |
+| #85 mutable quota-limit semantics | Pre-v1 policy/Store-contract gate | **Resolved** — same-key limit-change contract plus portable Memory/Redis/Cloudflare/Firestore conformance evidence |
 
 This classification intentionally distinguishes **correctness/safety evidence needed to support an existing v1 claim** from **new capabilities that can safely remain outside v1**.
 
@@ -107,6 +108,7 @@ A Store should not claim behavioral compatibility unless it can prove, as applic
 
 - atomic all-or-nothing multi-budget admission;
 - concurrent admission correctness;
+- mutable effective-limit behavior without resetting same-key authoritative usage;
 - logical-operation replay semantics;
 - idempotent liability and settlement replay;
 - pending-vs-liable expiry recovery;

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Firestore } from '@google-cloud/firestore';
+import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
 import { FirestoreUsageStore } from '../dist/index.js';
 
 const projectId = process.env.GCLOUD_PROJECT ?? 'demo-muc-firestore';
@@ -33,6 +34,27 @@ function storeFor(name, options = {}) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function testPortableConformance() {
+  const report = await assertUsageStoreConformance({
+    createStore(scenario) {
+      // The portable contract expects normal admission-time expiry recovery.
+      // Most focused emulator cases disable background/lazy cleanup so they can
+      // call recoverExpired() explicitly, but that would invalidate this suite.
+      return storeFor(`contract_${scenario.replaceAll('-', '_')}`, {
+        cleanupBatchSize: 16,
+        cleanupIntervalMs: 0,
+      });
+    },
+    async waitForLeaseExpiry(ttlMs) {
+      await sleep(ttlMs + 120);
+    },
+    leaseTtlMs: 80,
+    concurrency: 8,
+  });
+
+  assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
 }
 
 async function testMultiBudgetAtomicity() {
@@ -183,6 +205,7 @@ async function testIdempotentSettlement() {
 }
 
 const tests = [
+  ['portable UsageStore conformance', testPortableConformance],
   ['multi-budget atomicity', testMultiBudgetAtomicity],
   ['shared-budget concurrency', testSharedBudgetConcurrency],
   ['pending expiry recovery', testPendingExpiryRecovery],

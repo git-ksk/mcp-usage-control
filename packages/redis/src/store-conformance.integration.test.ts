@@ -1,0 +1,40 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createClient } from 'redis';
+import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import { RedisUsageStore } from './index.js';
+
+const redisUrl = process.env.REDIS_URL;
+const integration = redisUrl ? describe : describe.skip;
+const client = createClient({ url: redisUrl ?? 'redis://127.0.0.1:6379' });
+const runId = `portable-${Date.now()}`;
+
+integration('RedisUsageStore portable conformance', () => {
+  beforeAll(async () => {
+    await client.connect();
+    await client.flushDb();
+  });
+
+  afterAll(async () => {
+    await client.flushDb();
+    await client.quit();
+  });
+
+  it('passes the UsageStore contract including mutable limits', async () => {
+    const report = await assertUsageStoreConformance({
+      createStore(scenario) {
+        return new RedisUsageStore(client, {
+          prefix: `${runId}-${scenario}`,
+          hashTag: `${runId}-${scenario}`,
+        });
+      },
+      async waitForLeaseExpiry(ttlMs) {
+        await new Promise(resolve => setTimeout(resolve, ttlMs + 80));
+      },
+      leaseTtlMs: 60,
+      concurrency: 8,
+    });
+
+    expect(report.passed).toBe(true);
+    expect(report.cases.every(result => result.passed)).toBe(true);
+  });
+});

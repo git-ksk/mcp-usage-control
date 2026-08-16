@@ -68,6 +68,7 @@ protectTool()
 - [MCP protocol conformance](mcp-conformance.ja.md) — current protocol / SDK baseline、fresh-request multi-round proof、horizontal scale / session affinityの前提
 - [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
+- [Mutable quota limit](mutable-quota-limits.ja.md) — same-key upgrade / downgrade / override semanticsとpolicy rollout consistency
 - [API reference](api-reference.ja.md) — current sourceのpublic API / package entry point
 - [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics
 - [Roadmap](roadmap.ja.md) — current priorityとpost-v1 boundary

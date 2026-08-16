@@ -24,33 +24,34 @@ v1判断前に完了したもの:
 - public API / export / version、built-in Store、security、horizontal scale、Node support、CI、release / npm workflow監査
 - README / API docs同期とstable / experimental / deferred境界の明示
 
-元のreadiness監査後に追加されたIssueにより、**v1最終release前のgate** がいくつか増えました。現時点でcore transaction model自体の再設計が必要という意味ではありませんが、下記でpre-v1に分類した項目は、v1.0 tag前に解決・検証するか、対応しない保証範囲を明示的に狭める必要があります。
+元のreadiness監査後に追加されたpre-v1 evidence / contract gateは解決済みです。Firestore ambiguous-commit semantics (#77)、boundedなcross-instance clock-skew safety (#78)、Node 24 full-matrix evidence (#79)、same-key mutable quota-limit semantics (#85)を完了し、core transaction model自体の再設計は不要でした。
+
+残るpre-v1作業は未修正のcorrectness defectではなく、明示的な **API-freeze boundary decision** です。#83 / #84を、現行fixed-reservation / same-units multi-budgetのv1 contractに対するpost-v1 capabilityとしてacceptするか、stable tag前に変更するかを決める必要があります。
 
 ## Current priorities
 
-1. **Pre-v1 evidence / contract gate (#77, #78, #79, #85)** — Firestoreのambiguous commitとcross-instance clock skewのevidence gapを閉じ、Node 24のpublic support claimとCI evidenceを揃え、既存accounting bucketのmutable limit semanticsを定義します。v1で意図的にsupportしない項目がある場合は、暗黙の保証を残さずv1 support claimを狭めます。
-2. **Final API-freeze decision (#83, #84)** — progressive reservation growthとheterogeneous multi-dimensional usageをv1前に実装する必要はありません。ただし、現行のfixed reservation / same-units multi-budget modelをv1 stable contractとして受け入れるのか、stable tag前に変更するのかは明示的に決めます。
-3. **Release-candidate / API-freeze mechanics** — 上記gate完了後、explicit authorizationがある場合にexact release commitを選び、5 packageを同時versioning、intended `Unreleased` entryだけをv1 sectionへ移動、full package/integration matrix、long-lived public name / semanticsの最終確認を行います。通常のreadiness workではtag / releaseしません。
-4. **Cloudflare operational evidence (#24)** — documented real credential rotationを実行し、genuine platform-limit / overload / Free-plan exhaustion eventを安全に観測できた場合にcaptureします。post-v1 operational evidenceでありprovider-neutral core blockerではありません。Issueを閉じるためだけにshared Free-plan quotaを意図的に消費しません。
-5. **First npm publication (#6)** — manual / deferredを維持します。registry publicationはsource readinessと別操作で、別途explicit authorizationが必要です。
-6. **Failure semantics maintenance** — upstream protocol / provider変化に合わせ、crash recovery、ACK ambiguity、liability、cancellation、multi-round claim / recovery、Tasks lifetime、reconciliation、Store-specific durability assumptionを明示し続けます。
-7. **Operational observability (#76, #82)** — current observer / event behaviorはv1でstableに保ち、より豊富なoperational snapshotやthreshold / exhaustion signalはauthoritative accounting state machine外のoptional toolingとして扱います。
+1. **Final API-freeze decision (#83, #84)** — progressive reservation growthとheterogeneous multi-dimensional usageをv1前に実装する必要はありません。ただし、現行のfixed reservation / same-units multi-budget modelをv1 stable contractとして受け入れるのか、stable tag前に変更するのかは明示的に決めます。
+2. **Release-candidate / API-freeze mechanics** — 上記boundary decisionとexplicit release authorization後、exact release commitを選び、5 packageを同時versioning、intended `Unreleased` entryだけをv1 sectionへ移動、full package/integration matrix、long-lived public name / semanticsの最終確認を行います。通常のreadiness workではtag / releaseしません。
+3. **Cloudflare operational evidence (#24)** — documented real credential rotationを実行し、genuine platform-limit / overload / Free-plan exhaustion eventを安全に観測できた場合にcaptureします。post-v1 operational evidenceでありprovider-neutral core blockerではありません。Issueを閉じるためだけにshared Free-plan quotaを意図的に消費しません。
+4. **First npm publication (#6)** — manual / deferredを維持します。registry publicationはsource readinessと別操作で、別途explicit authorizationが必要です。
+5. **Failure semantics maintenance** — upstream protocol / provider変化に合わせ、crash recovery、ACK ambiguity、liability、cancellation、multi-round claim / recovery、Tasks lifetime、reconciliation、mutable-policy boundary、Store-specific durability assumptionを明示し続けます。
+6. **Operational observability (#76, #82)** — current observer / event behaviorはv1でstableに保ち、より豊富なoperational snapshotやthreshold / exhaustion signalはauthoritative accounting state machine外のoptional toolingとして扱います。
 
 ## v1境界に対するIssue分類
 
 元のreadiness review後に追加されたIssueは、次のように分類します。
 
-| Issue | v1分類 | v1.0 tag前に必要なこと |
+| Issue | v1分類 | 現在のv1 status |
 | --- | --- | --- |
-| #76 operational usage snapshot | Post-v1 optional operational tooling | 不要。current observability semanticsをv1境界とする |
-| #77 Firestore ambiguous-commit reconciliation | Pre-v1 Firestore evidence / contract gate | Firestoreをv1 stable adapterとしてclaimするなら必要 |
-| #78 Firestore cross-instance clock skew | Pre-v1 Firestore safety gate | Firestoreをhorizontal sharedなv1 stable adapterとしてclaimするなら必要 |
-| #79 Node 24 CI evidence | Pre-v1 release / support-policy gate | Node 24をtestするかpublic support claimを狭める |
-| #81 operation reconciliation / status capability | Post-v1 capability | 不要。proveできないstateはfail closedを維持 |
-| #82 quota threshold / exhaustion signals | Post-v1 optional operational tooling | 不要 |
-| #83 progressive reservation growth | Post-v1 feature候補 + pre-v1 boundary decision | 実装不要。API freeze前に現行modelをaccept / deferすると明示 |
-| #84 heterogeneous multi-dimensional usage | Post-v1 design候補 + pre-v1 boundary decision | 実装不要。API freeze前に現行modelをaccept / deferすると明示 |
-| #85 mutable quota-limit semantics | Pre-v1 policy / Store-contract gate | same-key limit change semanticsを定義しconformance testする |
+| #76 operational usage snapshot | Post-v1 optional operational tooling | v1 blockerではない。current observability semanticsをv1境界とする |
+| #77 Firestore ambiguous-commit reconciliation | Pre-v1 Firestore evidence / contract gate | **解決済み** — reserve ambiguityのfail closedとliability / renewal / settlement retry/replay evidenceを明文化・test済み |
+| #78 Firestore cross-instance clock skew | Pre-v1 Firestore safety gate | **解決済み** — bounded / synchronized clockのdeployment contractとdeterministic multi-instance evidenceを追加済み |
+| #79 Node 24 CI evidence | Pre-v1 release / support-policy gate | **解決済み** — Node 20 / 22 / 24で同じfull build / test / package / clean-consumer matrixを実行 |
+| #81 operation reconciliation / status capability | Post-v1 capability | v1 blockerではない。proveできないstateはfail closedを維持 |
+| #82 quota threshold / exhaustion signals | Post-v1 optional operational tooling | v1 blockerではない |
+| #83 progressive reservation growth | Post-v1 feature候補 + pre-v1 boundary decision | 実装deferred。API freeze前に現行fixed-reservation modelをaccept / deferすると明示 |
+| #84 heterogeneous multi-dimensional usage | Post-v1 design候補 + pre-v1 boundary decision | 実装deferred。API freeze前に現行same-units multi-budget modelをaccept / deferすると明示 |
+| #85 mutable quota-limit semantics | Pre-v1 policy / Store-contract gate | **解決済み** — same-key limit-change contractとMemory / Redis / Cloudflare / Firestore共通portable conformance evidenceを追加 |
 
 この分類では、**既存のv1 support claimを成立させるために必要なcorrectness / safety evidence** と、**v1外に安全に残せる新しいcapability** を分けています。
 
@@ -107,6 +108,7 @@ compatibleと主張するStoreは、対象に応じて少なくとも次をproof
 
 - atomic all-or-nothing multi-budget admission
 - concurrent admission correctness
+- same-key authoritative usageをresetしないmutable effective-limit behavior
 - logical-operation replay semantics
 - idempotent liability / settlement replay
 - pending / liableを区別したexpiry recovery
