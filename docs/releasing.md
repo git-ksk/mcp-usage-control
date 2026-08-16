@@ -51,7 +51,7 @@ A pre-1.0 GitHub/source release is ready only when the applicable surfaces satis
 ## GitHub/source release procedure
 
 1. update package versions, changelog, and bilingual docs;
-2. run Node.js 20/22 CI with real Redis and frozen dependencies;
+2. run the full Node.js 20/22/24 CI matrix with real Redis and frozen dependencies;
 3. run Cloudflare workerd integration and Firestore Emulator integration for the tagged code where applicable;
 4. pack all public packages and inspect tarball contents;
 5. merge the release PR to `main`;
@@ -73,6 +73,10 @@ npm publication is a later, explicit operation. It must not happen merely becaus
 7. verify registry metadata and installation from a clean consumer project.
 
 Prefer npm Trusted Publishing / OIDC on GitHub-hosted runners. Do not add long-lived npm tokens to repository files, logs, or release artifacts.
+
+## npm publication runtime
+
+The manual publication workflow currently runs on Node.js 24. Node 24 is also part of the normal full CI evidence matrix, so publication tooling does not rely on a Node major outside the tested public-package matrix.
 
 ## Release notes
 
