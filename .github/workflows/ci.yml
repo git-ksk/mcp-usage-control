@@ -224,7 +224,6 @@ jobs:
             assertUsageStoreConformance,
             runProgressiveUsageStoreConformance,
             runVectorUsageStoreConformance,
-            runVectorUsageStoreConformance,
           } from 'mcp-usage-control/conformance';
           import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
           import { protectTool } from 'mcp-usage-control-mcp';
