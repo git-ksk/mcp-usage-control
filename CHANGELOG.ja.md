@@ -8,6 +8,39 @@
 
 現在entryはありません。
 
+## [0.6.0] - 2026-08-17
+
+6回目のGitHub/source release preparation。npm publicationは引き続き別操作で、この変更では許可しません。
+
+### Added
+
+- 既存third-party `UsageStore`へgrowthをmandatory化せず、`UsageLease.grow()` + optional `ProgressiveUsageStore.growReservation()`でfailure-safe progressive reservation growthを追加。
+- incrementごとのstable identityとStore-issued opaque growth cursorを追加。lost ACK後のexact retryはcommit済みresultをreplayし、stale cursorでdifferent incrementを送るとfail closed。authoritative quota denialもcapacityを消費せずcursorをrotate。
+- sequential / replay / concurrent growth、multi-budget all-or-nothing denial、pending / liable expiry、settlement bound、grow / settle raceをcoverするportable progressive Store conformanceを追加。
+- small initial reservation、bounded top-up、deny / ambiguity時のsafe stop、same logical operationを維持するmulti-round / Tasks patternのMCP向け英日exampleを追加。
+
+### Provider implementation / proof
+
+- Memory: detached Store snapshot、exact growth replay、lost-ACK before / after commit、terminal-state fail-closedをreference proof。
+- Redis: 1本のLua transactionで全participating budget + reservationをatomic growth。既存reservation JSONへadditive replay metadataを保存し、v0.5 rowはfixed/non-growableのまま。
+- Cloudflare Durable Objects: v1 accounting rowを変更せずschema v2で`reservation_growth` tableを追加。`transactionSync`でatomic growthし、local workerdでportable progressive conformance + remote lost-growth-ACK replayを検証。
+- Firestore: reservation + 全budget documentを1 transactionで更新。automatic transaction retryで二重growしないようnext growth cursorをcallback外で生成。Emulator progressive conformance + committed-growth ACK-loss fault injectionでprovider境界を検証。
+
+### Safety / compatibility
+
+- `renew()`はlease duration専用のまま。capacity growthは別責務。
+- growthはpending / liable stateを維持しTTLをrenewしない。pending expiryはgrown total全量をrelease、liable expiryはgrown total全量をconservative retain。
+- `actualUnits`はtotal successfully reserved capacityを超えない。denied incrementはcapacityを増やさない。
+- settled / expired/recovered reservationはreplayを含む全growth callをrejectし、stale ACK recoveryでterminal後の追加metered workをauthorizeしない。
+- v0.5 provider dataはreadable。growth metadataのないRedis / Firestore record、growth rowのないCloudflare reservationはfixed reservationのまま。
+- v0.6判断としてprogressive reservation growthをoptional capabilityとしてfuture v1 stable surfaceへ採用。#84がv0.7.0の次feature decision gate。
+
+### Release boundary
+
+- 5 package manifestを`0.6.0`へ揃える。
+- normal release gateはNode 20/22/24、Redis、Cloudflare local workerd、Firestore Emulator、package tarball/content、clean-consumer verification。
+- このpreparationでは`v0.6.0` tag、GitHub Release、npm publicationを作成しない。
+
 ## [0.5.0] - 2026-08-17
 
 5回目のGitHub/source releaseです。pre-v1 stabilization releaseとして扱い、npm registry publicationは引き続き意図的にdeferredし、このreleaseには含めません。

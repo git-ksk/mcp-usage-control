@@ -233,6 +233,52 @@ assert.deepEqual(reserveRetry, { accepted: false, reason: 'duplicate_operation' 
 const competingAfterLostAck = await reserve(store, 'lost-reserve-competitor', 'lost-reserve-budget', 1, 500);
 assert.equal(competingAfterLostAck.accepted, false, 'committed lost-ACK reserve must still consume capacity');
 
+// Lost growth ACK is resolved only by replaying the same stable increment identity.
+const growthFixture = await reserve(store, 'lost-growth-ack', 'lost-growth-budget', 3, 2_000, 1);
+assert.equal(growthFixture.accepted, true);
+if (!growthFixture.accepted || !growthFixture.reservation.growthCursor) {
+  throw new Error('expected growable growth fixture');
+}
+const growthInput = {
+  reservationId: growthFixture.reservation.id,
+  incrementId: `${nonce}-stable-growth-increment`,
+  expectedGrowthCursor: growthFixture.reservation.growthCursor,
+  additionalUnits: 1,
+  budgets: [{ key: `${nonce}:lost-growth-budget`, limit: 3 }],
+};
+let loseNextGrowthAck = true;
+const lostGrowthAckStore = new RemoteCloudflareUsageStore({
+  endpoint,
+  headers: authHeaders,
+  fetch: async (input, init) => {
+    const parsed = JSON.parse(String(init?.body ?? '{}'));
+    const response = await fetch(input, init);
+    if (parsed.method === 'grow' && loseNextGrowthAck) {
+      loseNextGrowthAck = false;
+      await response.text();
+      throw new Error('simulated lost growth acknowledgement');
+    }
+    return response;
+  },
+});
+await assert.rejects(
+  () => lostGrowthAckStore.growReservation(growthInput),
+  error => error instanceof CloudflareUsageTransportError && error.code === 'network',
+);
+const growthReplay = await store.growReservation(growthInput);
+assert.equal(growthReplay.accepted, true);
+assert.equal(growthReplay.replayed, true);
+assert.equal(growthReplay.reservedUnits, 2);
+await assert.rejects(
+  () =>
+    store.growReservation({
+      ...growthInput,
+      incrementId: `${nonce}-fresh-growth-after-lost-ack`,
+    }),
+  /cursor/i,
+  'a fresh increment on the stale pre-ACK cursor must fail closed',
+);
+
 // Lost settlement ACK can be reconciled by replaying the identical settlement.
 const settleFixture = await reserve(store, 'lost-settle-ack', 'lost-settle-budget', 1, 1_000);
 assert.equal(settleFixture.accepted, true);

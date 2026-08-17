@@ -3,12 +3,15 @@ import {
   emitUsageEvent,
   type Budget,
   type BudgetRemaining,
+  type GrowReservationInput,
   type MarkLiableInput,
+  type ProgressiveUsageStore,
   type MarkLiableResult,
   type RenewInput,
   type RenewResult,
   type SettleInput,
   type SettlementResult,
+  type StoreGrowResult,
   type StoreReserveResult,
   type UsageObserver,
   type UsageRequest,
@@ -36,7 +39,11 @@ export interface CloudflareRecoveryReport {
 export type CloudflareStoreErrorCode =
   | 'not_found_or_expired'
   | 'settlement_conflict'
-  | 'actual_units_exceed_reserved';
+  | 'actual_units_exceed_reserved'
+  | 'growth_conflict'
+  | 'growth_stale_cursor'
+  | 'growth_budget_mismatch'
+  | 'growth_not_supported';
 
 export type CloudflareStoreEnvelope<T> =
   | { ok: true; result: T; recovery: CloudflareRecoveryReport }
@@ -54,6 +61,7 @@ export interface CloudflareReserveCommand {
   ttlMs: number;
   cleanupBatchSize: number;
   idempotencyTtlMs: number;
+  initialGrowthCursor: string;
 }
 
 export type CloudflareReserveReply =
@@ -67,6 +75,35 @@ export type CloudflareReserveReply =
       reason: 'quota_exceeded' | 'duplicate_operation';
       limitingBudgetId?: string;
       remaining?: number;
+    };
+
+export interface CloudflareGrowCommand {
+  reservationId: string;
+  incrementHash: string;
+  expectedGrowthCursor: string;
+  additionalUnits: number;
+  budgets: readonly CloudflareHashedBudget[];
+  fingerprint: string;
+  nextGrowthCursor: string;
+  idempotencyTtlMs: number;
+}
+
+export type CloudflareGrowReply =
+  | {
+      accepted: true;
+      replayed: boolean;
+      previousReservedUnits: number;
+      reservedUnits: number;
+      growthCursor: string;
+      remainingByBudget: readonly { id: string; remaining: number }[];
+    }
+  | {
+      accepted: false;
+      reason: 'quota_exceeded';
+      replayed: boolean;
+      growthCursor: string;
+      limitingBudgetId: string;
+      remaining: number;
     };
 
 export interface CloudflareMarkLiableCommand {
@@ -97,6 +134,7 @@ export interface CloudflareSettlementReply {
 /** Structural type for a Durable Object RPC stub. */
 export interface CloudflareUsageDurableObjectStub {
   reserve(command: CloudflareReserveCommand): Promise<CloudflareStoreEnvelope<CloudflareReserveReply>>;
+  grow?(command: CloudflareGrowCommand): Promise<CloudflareStoreEnvelope<CloudflareGrowReply>>;
   markLiable(
     command: CloudflareMarkLiableCommand,
   ): Promise<CloudflareStoreEnvelope<{ expiresAt: number }>>;
@@ -141,13 +179,18 @@ interface PreparedReserve {
   budgetById: Map<string, Budget>;
 }
 
+interface PreparedGrowth {
+  command: CloudflareGrowCommand;
+  budgetById: Map<string, Budget>;
+}
+
 const RESERVATION_ID_PATTERN = /^cf1\.[a-f0-9]{64}$/;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const DEFAULT_PATH = '/v1/usage-store';
 const MAX_GATEWAY_BODY_BYTES = 65_536;
 
 /** Worker-local UsageStore backed by a Durable Object namespace binding. */
-export class CloudflareUsageStore implements UsageStore {
+export class CloudflareUsageStore implements ProgressiveUsageStore {
   private readonly options: NormalizedCloudflareUsageStoreOptions;
 
   constructor(
@@ -168,6 +211,16 @@ export class CloudflareUsageStore implements UsageStore {
     this.emitRecovery(envelope.recovery);
     if (!envelope.ok) throw mapStoreError(envelope.error);
     return mapReserveReply(envelope.result, prepared, input.request, input.units);
+  }
+
+  async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
+    const prepared = await prepareGrowth(input, this.options.idempotencyTtlMs);
+    const stub = this.stub();
+    if (!stub.grow) throw new UsageStateError('Cloudflare Durable Object does not support progressive growth');
+    const envelope = await stub.grow(prepared.command);
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapGrowthReply(envelope.result, input, prepared);
   }
 
   async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
@@ -249,7 +302,7 @@ export class CloudflareUsageTransportError extends Error {
 }
 
 /** Node/edge remote UsageStore for a separately deployed Cloudflare gateway Worker. */
-export class RemoteCloudflareUsageStore implements UsageStore {
+export class RemoteCloudflareUsageStore implements ProgressiveUsageStore {
   private readonly endpoint: URL;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
@@ -290,11 +343,32 @@ export class RemoteCloudflareUsageStore implements UsageStore {
         units: prepared.command.units,
         budgets: prepared.command.budgets,
         ttlMs: prepared.command.ttlMs,
+        initialGrowthCursor: prepared.command.initialGrowthCursor,
       },
     });
     this.emitRecovery(envelope.recovery);
     if (!envelope.ok) throw mapStoreError(envelope.error);
     return mapReserveReply(envelope.result, prepared, input.request, input.units);
+  }
+
+  async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
+    const prepared = await prepareGrowth(input, 1);
+    const envelope = await this.post<CloudflareGrowReply>({
+      version: 1,
+      method: 'grow',
+      input: {
+        reservationId: prepared.command.reservationId,
+        incrementHash: prepared.command.incrementHash,
+        expectedGrowthCursor: prepared.command.expectedGrowthCursor,
+        additionalUnits: prepared.command.additionalUnits,
+        budgets: prepared.command.budgets,
+        fingerprint: prepared.command.fingerprint,
+        nextGrowthCursor: prepared.command.nextGrowthCursor,
+      },
+    });
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapGrowthReply(envelope.result, input, prepared);
   }
 
   async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
@@ -424,6 +498,20 @@ export type CloudflareHttpRequest =
         units: number;
         budgets: readonly CloudflareHashedBudget[];
         ttlMs: number;
+        initialGrowthCursor: string;
+      };
+    }
+  | {
+      version: 1;
+      method: 'grow';
+      input: {
+        reservationId: string;
+        incrementHash: string;
+        expectedGrowthCursor: string;
+        additionalUnits: number;
+        budgets: readonly CloudflareHashedBudget[];
+        fingerprint: string;
+        nextGrowthCursor: string;
       };
     }
   | { version: 1; method: 'mark_liable'; input: { reservationId: string } }
@@ -502,6 +590,12 @@ async function invokeGateway(
         cleanupBatchSize: options.cleanupBatchSize,
         idempotencyTtlMs: options.idempotencyTtlMs,
       });
+    case 'grow':
+      if (!stub.grow) return failGatewayGrowthUnsupported();
+      return stub.grow({
+        ...body.input,
+        idempotencyTtlMs: options.idempotencyTtlMs,
+      });
     case 'mark_liable':
       return stub.markLiable({
         reservationId: body.input.reservationId,
@@ -521,6 +615,16 @@ async function invokeGateway(
         idempotencyTtlMs: options.idempotencyTtlMs,
       });
   }
+}
+
+function failGatewayGrowthUnsupported(): CloudflareStoreEnvelope<never> {
+  return {
+    ok: false,
+    error: 'growth_not_supported',
+    recovery: {
+      aggregate: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
+    },
+  };
 }
 
 async function prepareReserve(
@@ -549,6 +653,7 @@ async function prepareReserve(
     budgets.map(async budget => ({ budget, id: await digest(budget.key) })),
   );
   const budgetById = new Map(budgetEntries.map(entry => [entry.id, entry.budget]));
+  const initialGrowthCursor = newGrowthCursor();
   return {
     reservationId,
     budgets,
@@ -560,7 +665,89 @@ async function prepareReserve(
       ttlMs: input.ttlMs,
       cleanupBatchSize: options.cleanupBatchSize,
       idempotencyTtlMs: options.idempotencyTtlMs,
+      initialGrowthCursor,
     },
+  };
+}
+
+async function prepareGrowth(
+  input: GrowReservationInput,
+  idempotencyTtlMs: number,
+): Promise<PreparedGrowth> {
+  assertReservationId(input.reservationId);
+  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+    throw new RangeError('incrementId must be a non-empty string');
+  }
+  if (
+    typeof input.expectedGrowthCursor !== 'string' ||
+    input.expectedGrowthCursor.length === 0
+  ) {
+    throw new RangeError('expectedGrowthCursor must be a non-empty string');
+  }
+  assertPositiveInteger(input.additionalUnits, 'additionalUnits');
+  assertPositiveInteger(idempotencyTtlMs, 'idempotencyTtlMs');
+  const budgets = canonicalizeBudgets(input.budgets);
+  const budgetEntries = await Promise.all(
+    budgets.map(async budget => ({ budget, id: await digest(budget.key) })),
+  );
+  const budgetById = new Map(budgetEntries.map(entry => [entry.id, entry.budget]));
+  const encodedBudgets = budgetEntries.map(entry => ({ id: entry.id, limit: entry.budget.limit }));
+  return {
+    budgetById,
+    command: {
+      reservationId: input.reservationId,
+      incrementHash: await digest(input.incrementId),
+      expectedGrowthCursor: input.expectedGrowthCursor,
+      additionalUnits: input.additionalUnits,
+      budgets: encodedBudgets,
+      fingerprint: await digest(
+        JSON.stringify([
+          input.additionalUnits,
+          encodedBudgets.map(budget => [budget.id, budget.limit]),
+        ]),
+      ),
+      nextGrowthCursor: newGrowthCursor(),
+      idempotencyTtlMs,
+    },
+  };
+}
+
+function mapGrowthReply(
+  reply: CloudflareGrowReply,
+  input: GrowReservationInput,
+  prepared: PreparedGrowth,
+): StoreGrowResult {
+  if (!reply.accepted) {
+    const budget = prepared.budgetById.get(reply.limitingBudgetId);
+    if (!budget) throw new UsageStateError('Cloudflare growth quota reply referenced an unknown budget');
+    return {
+      accepted: false,
+      reason: 'quota_exceeded',
+      replayed: reply.replayed,
+      reservationId: input.reservationId,
+      incrementId: input.incrementId,
+      growthCursor: reply.growthCursor,
+      limitingBudgetKey: budget.key,
+      remaining: reply.remaining,
+    };
+  }
+  const remainingByBudget = reply.remainingByBudget.map(balance => {
+    const budget = prepared.budgetById.get(balance.id);
+    if (!budget) throw new UsageStateError('Cloudflare growth reply referenced an unknown budget');
+    return { key: budget.key, remaining: balance.remaining };
+  });
+  if (remainingByBudget.length !== prepared.budgetById.size) {
+    throw new UsageStateError('Cloudflare growth reply omitted a budget balance');
+  }
+  return {
+    accepted: true,
+    replayed: reply.replayed,
+    reservationId: input.reservationId,
+    incrementId: input.incrementId,
+    previousReservedUnits: reply.previousReservedUnits,
+    reservedUnits: reply.reservedUnits,
+    growthCursor: reply.growthCursor,
+    remainingByBudget,
   };
 }
 
@@ -606,6 +793,7 @@ function mapReserveReply(
       budgetKeys: prepared.budgets.map(budget => budget.key),
       reservedUnits: units,
       expiresAt: reply.expiresAt,
+      growthCursor: prepared.command.initialGrowthCursor,
     },
     remainingByBudget,
   };
@@ -651,6 +839,14 @@ function mapStoreError(code: CloudflareStoreErrorCode): UsageStateError {
       return new UsageStateError('Reservation was already settled with a different result');
     case 'actual_units_exceed_reserved':
       return new UsageStateError('actualUnits cannot exceed reservedUnits');
+    case 'growth_conflict':
+      return new UsageStateError('Growth increment was already attempted with different parameters');
+    case 'growth_stale_cursor':
+      return new UsageStateError('Growth cursor is stale or conflicts with reservation state');
+    case 'growth_budget_mismatch':
+      return new UsageStateError('Growth budgets must exactly match the reservation budget set');
+    case 'growth_not_supported':
+      return new UsageStateError('Reservation does not support progressive growth');
     case 'not_found_or_expired':
       return new UsageStateError('Reservation not found or expired');
   }
@@ -722,6 +918,10 @@ function assertPositiveInteger(value: number, name: string): void {
   }
 }
 
+function newGrowthCursor(): string {
+  return `g1.${crypto.randomUUID()}`;
+}
+
 async function digest(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest('SHA-256', bytes);
@@ -768,6 +968,8 @@ function isHttpRequest(value: unknown): value is CloudflareHttpRequest {
         isReservationId(input.reservationId) &&
         isNonNegativeInteger(input.units) &&
         isPositiveInteger(input.ttlMs) &&
+        typeof input.initialGrowthCursor === 'string' &&
+        input.initialGrowthCursor.length > 0 &&
         Array.isArray(input.budgets) &&
         input.budgets.length > 0 &&
         input.budgets.every(
@@ -777,6 +979,28 @@ function isHttpRequest(value: unknown): value is CloudflareHttpRequest {
             HASH_PATTERN.test(budget.id) &&
             isNonNegativeInteger(budget.limit),
         )
+      );
+    case 'grow':
+      return (
+        isReservationId(input.reservationId) &&
+        typeof input.incrementHash === 'string' &&
+        HASH_PATTERN.test(input.incrementHash) &&
+        typeof input.expectedGrowthCursor === 'string' &&
+        input.expectedGrowthCursor.length > 0 &&
+        isPositiveInteger(input.additionalUnits) &&
+        Array.isArray(input.budgets) &&
+        input.budgets.length > 0 &&
+        input.budgets.every(
+          budget =>
+            isRecord(budget) &&
+            typeof budget.id === 'string' &&
+            HASH_PATTERN.test(budget.id) &&
+            isNonNegativeInteger(budget.limit),
+        ) &&
+        typeof input.fingerprint === 'string' &&
+        HASH_PATTERN.test(input.fingerprint) &&
+        typeof input.nextGrowthCursor === 'string' &&
+        input.nextGrowthCursor.length > 0
       );
     case 'mark_liable':
       return isReservationId(input.reservationId);
@@ -799,7 +1023,15 @@ function isEnvelope(value: unknown): value is CloudflareStoreEnvelope<unknown> {
   if (value.ok) return 'result' in value;
   return (
     typeof value.error === 'string' &&
-    ['not_found_or_expired', 'settlement_conflict', 'actual_units_exceed_reserved'].includes(value.error)
+    [
+      'not_found_or_expired',
+      'settlement_conflict',
+      'actual_units_exceed_reserved',
+      'growth_conflict',
+      'growth_stale_cursor',
+      'growth_budget_mismatch',
+      'growth_not_supported',
+    ].includes(value.error)
   );
 }
 

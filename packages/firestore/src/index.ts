@@ -1,14 +1,17 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   UsageStateError,
   type Budget,
   type BudgetRemaining,
+  type GrowReservationInput,
   type MarkLiableInput,
+  type ProgressiveUsageStore,
   type MarkLiableResult,
   type RenewInput,
   type RenewResult,
   type SettleInput,
   type SettlementResult,
+  type StoreGrowResult,
   type StoreReserveResult,
   type UsageRequest,
   type UsageStore,
@@ -120,6 +123,19 @@ export interface FirestoreRecoverySummary {
 
 type ReservationState = 'pending' | 'liable' | 'settled';
 
+interface StoredGrowthReplay {
+  incrementHash: string;
+  expectedGrowthCursor: string;
+  fingerprint: string;
+  nextGrowthCursor: string;
+  accepted: boolean;
+  previousReservedUnits?: number;
+  reservedUnits?: number;
+  remainingByBudgetIds?: Array<{ budgetId: string; remaining: number }>;
+  limitingBudgetId?: string;
+  remaining?: number;
+}
+
 interface StoredReservation {
   schemaVersion: 1;
   state: ReservationState;
@@ -128,6 +144,8 @@ interface StoredReservation {
   expiresAtMs: number;
   actualUnits?: number;
   outcomeHash?: string;
+  growthCursor?: string;
+  lastGrowth?: StoredGrowthReplay;
 }
 
 interface RecoveryResult {
@@ -162,7 +180,7 @@ const EXPIRED_LIABLE_OUTCOME = 'lease_expired_after_execution_started';
  * are SHA-256 hashed before becoming document IDs; hashing reduces accidental identifier
  * exposure but is not encryption.
  */
-export class FirestoreUsageStore implements UsageStore {
+export class FirestoreUsageStore implements ProgressiveUsageStore {
   private readonly prefix: string;
   private readonly idempotencyTtlMs: number;
   private readonly cleanupBatchSize: number;
@@ -210,6 +228,7 @@ export class FirestoreUsageStore implements UsageStore {
     const reservationId = reservationIdFor(input.request);
     const reservationRef = this.reservations().doc(reservationId);
     const currentBudgetIds = budgets.map(budget => digest(budget.key));
+    const initialGrowthCursor = newGrowthCursor();
 
     const transactionResult = await this.runTransaction<ReserveTransactionResult>(
       async transaction => {
@@ -284,6 +303,7 @@ export class FirestoreUsageStore implements UsageStore {
           budgetIds: currentBudgetIds,
           reservedUnits: input.units,
           expiresAtMs: expiresAt,
+          growthCursor: initialGrowthCursor,
         };
 
         const touchedBudgetIds = uniqueSorted([
@@ -312,6 +332,7 @@ export class FirestoreUsageStore implements UsageStore {
               budgetKeys: budgets.map(budget => budget.key),
               reservedUnits: input.units,
               expiresAt,
+              growthCursor: initialGrowthCursor,
             },
             remainingByBudget: remainingByBudget.map(balance => ({
               key: balance.key,
@@ -325,6 +346,186 @@ export class FirestoreUsageStore implements UsageStore {
 
     if (transactionResult.recovery) {
       this.emitRecovery(transactionResult.recovery, reservationId, now);
+    }
+    return transactionResult.result;
+  }
+
+  async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
+    assertReservationId(input.reservationId);
+    if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+      throw new RangeError('incrementId must be a non-empty string');
+    }
+    if (
+      typeof input.expectedGrowthCursor !== 'string' ||
+      input.expectedGrowthCursor.length === 0
+    ) {
+      throw new RangeError('expectedGrowthCursor must be a non-empty string');
+    }
+    assertPositiveInteger(input.additionalUnits, 'additionalUnits');
+    const budgets = canonicalizeBudgets(input.budgets);
+    const budgetEntries = budgets.map(budget => ({ budget, budgetId: digest(budget.key) }));
+    const currentBudgetIds = budgetEntries.map(entry => entry.budgetId);
+    const budgetById = new Map(budgetEntries.map(entry => [entry.budgetId, entry.budget] as const));
+    const incrementHash = digest(input.incrementId);
+    const fingerprint = digest(
+      JSON.stringify([
+        input.additionalUnits,
+        budgetEntries.map(entry => [entry.budgetId, entry.budget.limit]),
+      ]),
+    );
+    // Generated outside the callback so automatic Firestore transaction retries reuse one value.
+    const nextGrowthCursor = newGrowthCursor();
+    const now = this.nowMs();
+    const reference = this.reservations().doc(input.reservationId);
+
+    const transactionResult = await this.runTransaction<
+      | { ok: true; result: StoreGrowResult }
+      | {
+          ok: false;
+          reason: 'missing' | 'terminal' | 'conflict' | 'stale_cursor' | 'budget_mismatch' | 'not_supported';
+          recovery?: RecoveryResult;
+        }
+    >(async transaction => {
+      const snapshot = await transaction.get(reference);
+      const reservation = readReservation(snapshot);
+      if (!reservation) return { ok: false, reason: 'missing' };
+
+      if (this.isExpired(reservation, now)) {
+        const recovery = await recoverExpiredReservation(
+          transaction,
+          reference,
+          this.budgets(),
+          reservation,
+          now,
+          this.idempotencyTtlMs,
+        );
+        return { ok: false, reason: 'missing', recovery };
+      }
+      if (reservation.state === 'settled') return { ok: false, reason: 'terminal' };
+
+      const lastGrowth = reservation.lastGrowth;
+      if (lastGrowth?.incrementHash === incrementHash) {
+        if (
+          lastGrowth.expectedGrowthCursor !== input.expectedGrowthCursor ||
+          lastGrowth.fingerprint !== fingerprint
+        ) {
+          return { ok: false, reason: 'conflict' };
+        }
+        return {
+          ok: true,
+          result: growthResultFromStored(
+            input.reservationId,
+            input.incrementId,
+            lastGrowth,
+            budgetById,
+            true,
+          ),
+        };
+      }
+
+      if (!reservation.growthCursor) return { ok: false, reason: 'not_supported' };
+      if (reservation.growthCursor !== input.expectedGrowthCursor) {
+        return { ok: false, reason: 'stale_cursor' };
+      }
+      if (!sameStringArray(reservation.budgetIds, currentBudgetIds)) {
+        return { ok: false, reason: 'budget_mismatch' };
+      }
+
+      const usedById = await readBudgets(transaction, this.budgets(), currentBudgetIds);
+      const remainingByBudgetIds = budgetEntries.map(entry => ({
+        budgetId: entry.budgetId,
+        remaining: Math.max(0, entry.budget.limit - (usedById.get(entry.budgetId) ?? 0)),
+      }));
+      const limiting = remainingByBudgetIds.find(
+        balance => input.additionalUnits > balance.remaining,
+      );
+
+      if (limiting) {
+        const last: StoredGrowthReplay = {
+          incrementHash,
+          expectedGrowthCursor: input.expectedGrowthCursor,
+          fingerprint,
+          nextGrowthCursor,
+          accepted: false,
+          limitingBudgetId: limiting.budgetId,
+          remaining: limiting.remaining,
+        };
+        transaction.set(reference, {
+          ...reservation,
+          growthCursor: nextGrowthCursor,
+          lastGrowth: last,
+        } as unknown as Record<string, unknown>);
+        return {
+          ok: true,
+          result: growthResultFromStored(
+            input.reservationId,
+            input.incrementId,
+            last,
+            budgetById,
+            false,
+          ),
+        };
+      }
+
+      for (const budgetId of currentBudgetIds) {
+        usedById.set(
+          budgetId,
+          safeAdd(usedById.get(budgetId) ?? 0, input.additionalUnits, 'budget usage'),
+        );
+      }
+      writeUsedBudgets(transaction, this.budgets(), usedById, currentBudgetIds, now);
+
+      const previousReservedUnits = reservation.reservedUnits;
+      const reservedUnits = safeAdd(previousReservedUnits, input.additionalUnits, 'reservedUnits');
+      const acceptedBalances = remainingByBudgetIds.map(balance => ({
+        budgetId: balance.budgetId,
+        remaining: balance.remaining - input.additionalUnits,
+      }));
+      const last: StoredGrowthReplay = {
+        incrementHash,
+        expectedGrowthCursor: input.expectedGrowthCursor,
+        fingerprint,
+        nextGrowthCursor,
+        accepted: true,
+        previousReservedUnits,
+        reservedUnits,
+        remainingByBudgetIds: acceptedBalances,
+      };
+      transaction.set(reference, {
+        ...reservation,
+        reservedUnits,
+        growthCursor: nextGrowthCursor,
+        lastGrowth: last,
+      } as unknown as Record<string, unknown>);
+      return {
+        ok: true,
+        result: growthResultFromStored(
+          input.reservationId,
+          input.incrementId,
+          last,
+          budgetById,
+          false,
+        ),
+      };
+    });
+
+    if (!transactionResult.ok) {
+      if (transactionResult.recovery) {
+        this.emitRecovery(transactionResult.recovery, input.reservationId, now);
+      }
+      if (transactionResult.reason === 'conflict') {
+        throw new UsageStateError('Growth increment was already attempted with different parameters');
+      }
+      if (transactionResult.reason === 'stale_cursor') {
+        throw new UsageStateError('Growth cursor is stale or conflicts with reservation state');
+      }
+      if (transactionResult.reason === 'budget_mismatch') {
+        throw new UsageStateError('Growth budgets must exactly match the reservation budget set');
+      }
+      if (transactionResult.reason === 'not_supported') {
+        throw new UsageStateError('Reservation does not support progressive growth');
+      }
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
     }
     return transactionResult.result;
   }
@@ -436,14 +637,12 @@ export class FirestoreUsageStore implements UsageStore {
       }
 
       transaction.set(reference, {
-        schemaVersion: 1,
+        ...reservation,
         state: 'settled',
-        budgetIds: reservation.budgetIds,
-        reservedUnits: reservation.reservedUnits,
         expiresAtMs: safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry'),
         actualUnits: input.actualUnits,
         outcomeHash,
-      });
+      } as unknown as Record<string, unknown>);
 
       return {
         ok: true,
@@ -731,10 +930,8 @@ function settledFromExpiredLiable(
   idempotencyTtlMs: number,
 ): Record<string, unknown> {
   return {
-    schemaVersion: 1,
+    ...reservation,
     state: 'settled',
-    budgetIds: reservation.budgetIds,
-    reservedUnits: reservation.reservedUnits,
     expiresAtMs: safeAdd(now, idempotencyTtlMs, 'tombstone expiry'),
     actualUnits: reservation.reservedUnits,
     outcomeHash: digest(EXPIRED_LIABLE_OUTCOME),
@@ -832,6 +1029,15 @@ function readReservation(
     }
     result.outcomeHash = data.outcomeHash;
   }
+  if (data.growthCursor !== undefined) {
+    if (typeof data.growthCursor !== 'string' || data.growthCursor.length === 0) {
+      throw new UsageStateError('Firestore reservation document had an invalid growth cursor');
+    }
+    result.growthCursor = data.growthCursor;
+  }
+  if (data.lastGrowth !== undefined) {
+    result.lastGrowth = readStoredGrowthReplay(data.lastGrowth);
+  }
   if (state === 'settled' && (result.actualUnits === undefined || result.outcomeHash === undefined)) {
     throw new UsageStateError('Firestore settled reservation was incomplete');
   }
@@ -848,6 +1054,118 @@ function readBudgetUsed(
     throw new UsageStateError('Unsupported Firestore budget schema version');
   }
   return readSafeNonNegativeInteger(data.used, 'budget used');
+}
+
+function newGrowthCursor(): string {
+  return `g1.${randomUUID()}`;
+}
+
+function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function growthResultFromStored(
+  reservationId: string,
+  incrementId: string,
+  growth: StoredGrowthReplay,
+  budgetById: ReadonlyMap<string, Budget>,
+  replayed: boolean,
+): StoreGrowResult {
+  if (growth.accepted) {
+    if (
+      growth.previousReservedUnits === undefined ||
+      growth.reservedUnits === undefined ||
+      growth.remainingByBudgetIds === undefined
+    ) {
+      throw new UsageStateError('Firestore stored accepted growth result was incomplete');
+    }
+    return {
+      accepted: true,
+      replayed,
+      reservationId,
+      incrementId,
+      previousReservedUnits: growth.previousReservedUnits,
+      reservedUnits: growth.reservedUnits,
+      growthCursor: growth.nextGrowthCursor,
+      remainingByBudget: growth.remainingByBudgetIds.map(balance => {
+        const budget = budgetById.get(balance.budgetId);
+        if (!budget) throw new UsageStateError('Firestore growth replay referenced an unknown budget');
+        return { key: budget.key, remaining: balance.remaining };
+      }),
+    };
+  }
+  if (growth.limitingBudgetId === undefined || growth.remaining === undefined) {
+    throw new UsageStateError('Firestore stored denied growth result was incomplete');
+  }
+  const budget = budgetById.get(growth.limitingBudgetId);
+  if (!budget) throw new UsageStateError('Firestore growth denial referenced an unknown budget');
+  return {
+    accepted: false,
+    reason: 'quota_exceeded',
+    replayed,
+    reservationId,
+    incrementId,
+    growthCursor: growth.nextGrowthCursor,
+    limitingBudgetKey: budget.key,
+    remaining: growth.remaining,
+  };
+}
+
+function readStoredGrowthReplay(value: unknown): StoredGrowthReplay {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new UsageStateError('Firestore reservation document had invalid growth replay metadata');
+  }
+  const data = value as Record<string, unknown>;
+  for (const field of ['incrementHash', 'fingerprint'] as const) {
+    if (typeof data[field] !== 'string' || !HASH_PATTERN.test(data[field])) {
+      throw new UsageStateError(`Firestore growth replay had invalid ${field}`);
+    }
+  }
+  for (const field of ['expectedGrowthCursor', 'nextGrowthCursor'] as const) {
+    if (typeof data[field] !== 'string' || data[field].length === 0) {
+      throw new UsageStateError(`Firestore growth replay had invalid ${field}`);
+    }
+  }
+  if (typeof data.accepted !== 'boolean') {
+    throw new UsageStateError('Firestore growth replay had invalid accepted state');
+  }
+  const result: StoredGrowthReplay = {
+    incrementHash: data.incrementHash as string,
+    expectedGrowthCursor: data.expectedGrowthCursor as string,
+    fingerprint: data.fingerprint as string,
+    nextGrowthCursor: data.nextGrowthCursor as string,
+    accepted: data.accepted,
+  };
+  if (data.accepted) {
+    result.previousReservedUnits = readSafeNonNegativeInteger(
+      data.previousReservedUnits,
+      'growth previousReservedUnits',
+    );
+    result.reservedUnits = readSafeNonNegativeInteger(data.reservedUnits, 'growth reservedUnits');
+    if (!Array.isArray(data.remainingByBudgetIds)) {
+      throw new UsageStateError('Firestore accepted growth replay had invalid balances');
+    }
+    result.remainingByBudgetIds = data.remainingByBudgetIds.map(entry => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new UsageStateError('Firestore accepted growth replay had invalid balance');
+      }
+      const balance = entry as Record<string, unknown>;
+      if (typeof balance.budgetId !== 'string' || !HASH_PATTERN.test(balance.budgetId)) {
+        throw new UsageStateError('Firestore accepted growth replay had invalid budget ID');
+      }
+      return {
+        budgetId: balance.budgetId,
+        remaining: readSafeNonNegativeInteger(balance.remaining, 'growth remaining'),
+      };
+    });
+  } else {
+    if (typeof data.limitingBudgetId !== 'string' || !HASH_PATTERN.test(data.limitingBudgetId)) {
+      throw new UsageStateError('Firestore denied growth replay had invalid budget ID');
+    }
+    result.limitingBudgetId = data.limitingBudgetId;
+    result.remaining = readSafeNonNegativeInteger(data.remaining, 'growth remaining');
+  }
+  return result;
 }
 
 function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {

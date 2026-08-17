@@ -1,21 +1,24 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   UsageStateError,
   emitUsageEvent,
   type Budget,
   type BudgetRemaining,
+  type GrowReservationInput,
   type MarkLiableInput,
+  type ProgressiveUsageStore,
   type MarkLiableResult,
   type RenewInput,
   type RenewResult,
   type SettleInput,
   type SettlementResult,
+  type StoreGrowResult,
   type StoreReserveResult,
   type UsageObserver,
   type UsageRequest,
   type UsageStore,
 } from 'mcp-usage-control';
-import { MARK_LIABLE_SCRIPT, RENEW_SCRIPT, RESERVE_SCRIPT, SETTLE_SCRIPT } from './scripts.js';
+import { GROW_SCRIPT, MARK_LIABLE_SCRIPT, RENEW_SCRIPT, RESERVE_SCRIPT, SETTLE_SCRIPT } from './scripts.js';
 
 export interface RedisEvalClient {
   eval(
@@ -54,7 +57,7 @@ interface RedisRecoverySummary {
 
 const RESERVATION_ID_PATTERN = /^r2\.([a-f0-9]{64})$/;
 
-export class RedisUsageStore implements UsageStore {
+export class RedisUsageStore implements ProgressiveUsageStore {
   private readonly prefix: string;
   private readonly hashTag: string;
   private readonly cleanupBatchSize: number;
@@ -109,6 +112,7 @@ export class RedisUsageStore implements UsageStore {
       return { hash, limit: budget.limit };
     });
 
+    const initialGrowthCursor = newGrowthCursor();
     const parsed = parseReply(
       await this.client.eval(RESERVE_SCRIPT, {
         keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
@@ -120,6 +124,7 @@ export class RedisUsageStore implements UsageStore {
           String(this.cleanupBatchSize),
           String(this.idempotencyTtlMs),
           JSON.stringify(encodedBudgets),
+          initialGrowthCursor,
         ],
       }),
     );
@@ -162,6 +167,7 @@ export class RedisUsageStore implements UsageStore {
             budgetKeys: budgets.map(budget => budget.key),
             reservedUnits: input.units,
             expiresAt,
+            growthCursor: initialGrowthCursor,
           },
           remainingByBudget,
         };
@@ -186,6 +192,108 @@ export class RedisUsageStore implements UsageStore {
       default:
         throw new UsageStateError(`Unexpected Redis reserve reply: ${reply[0] ?? '<empty>'}`);
     }
+  }
+
+  async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
+    assertReservationId(input.reservationId);
+    if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+      throw new RangeError('incrementId must be a non-empty string');
+    }
+    if (
+      typeof input.expectedGrowthCursor !== 'string' ||
+      input.expectedGrowthCursor.length === 0
+    ) {
+      throw new RangeError('expectedGrowthCursor must be a non-empty string');
+    }
+    assertPositiveInteger(input.additionalUnits, 'additionalUnits');
+    const budgets = canonicalizeBudgets(input.budgets);
+    const budgetByHash = new Map<string, Budget>();
+    const encodedBudgets = budgets.map(budget => {
+      const hash = digest(budget.key);
+      budgetByHash.set(hash, budget);
+      return { hash, limit: budget.limit };
+    });
+    const incrementHash = digest(input.incrementId);
+    const fingerprint = digest(JSON.stringify([input.additionalUnits, encodedBudgets]));
+    const nextGrowthCursor = newGrowthCursor();
+    const keys = this.keys();
+
+    const reply = parseReply(
+      await this.client.eval(GROW_SCRIPT, {
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
+        arguments: [
+          input.reservationId,
+          incrementHash,
+          input.expectedGrowthCursor,
+          String(input.additionalUnits),
+          String(this.idempotencyTtlMs),
+          JSON.stringify(encodedBudgets),
+          fingerprint,
+          nextGrowthCursor,
+        ],
+      }),
+    );
+
+    if (reply[0] === 'accepted' || reply[0] === 'accepted_replay') {
+      const returnedCursor = reply[3];
+      const balancesRaw = reply[4];
+      if (!returnedCursor || balancesRaw === undefined) {
+        throw new UsageStateError('Redis growth reply was incomplete');
+      }
+      return {
+        accepted: true,
+        replayed: reply[0] === 'accepted_replay',
+        reservationId: input.reservationId,
+        incrementId: input.incrementId,
+        previousReservedUnits: parseInteger(reply[1], 'previousReservedUnits'),
+        reservedUnits: parseInteger(reply[2], 'reservedUnits'),
+        growthCursor: returnedCursor,
+        remainingByBudget: parseGrowthBalances(balancesRaw, budgetByHash),
+      };
+    }
+
+    if (reply[0] === 'quota_exceeded' || reply[0] === 'quota_replay') {
+      const returnedCursor = reply[1];
+      const limitingHash = reply[2];
+      if (!returnedCursor || !limitingHash) {
+        throw new UsageStateError('Redis growth quota reply was incomplete');
+      }
+      const limitingBudget = budgetByHash.get(limitingHash);
+      if (!limitingBudget) {
+        throw new UsageStateError('Redis growth quota reply referenced an unknown budget');
+      }
+      return {
+        accepted: false,
+        reason: 'quota_exceeded',
+        replayed: reply[0] === 'quota_replay',
+        reservationId: input.reservationId,
+        incrementId: input.incrementId,
+        growthCursor: returnedCursor,
+        limitingBudgetKey: limitingBudget.key,
+        remaining: parseInteger(reply[3], 'remaining'),
+      };
+    }
+
+    if (reply[0] === 'expired') {
+      this.emitDirectExpiry(reply, input.reservationId);
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    if (reply[0] === 'conflict') {
+      throw new UsageStateError('Growth increment was already attempted with different parameters');
+    }
+    if (reply[0] === 'stale_cursor') {
+      throw new UsageStateError('Growth cursor is stale or conflicts with reservation state');
+    }
+    if (reply[0] === 'budget_mismatch') {
+      throw new UsageStateError('Growth budgets must exactly match the reservation budget set');
+    }
+    if (reply[0] === 'not_supported') {
+      throw new UsageStateError('Reservation does not support progressive growth');
+    }
+    if (reply[0] === 'terminal' || reply[0] === 'not_found') {
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    throw new UsageStateError(`Unexpected Redis growth reply: ${reply[0] ?? '<empty>'}`);
   }
 
   async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
@@ -366,6 +474,42 @@ function validateRequestIdentity(request: UsageRequest): void {
   if (!request.operationId) throw new RangeError('operationId must be non-empty');
   if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
   if (!request.tool) throw new RangeError('tool must be non-empty');
+}
+
+function newGrowthCursor(): string {
+  return `g1.${randomUUID()}`;
+}
+
+function parseGrowthBalances(
+  raw: string,
+  budgetByHash: ReadonlyMap<string, Budget>,
+): BudgetRemaining[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new UsageStateError('Redis growth reply contained invalid budget balances');
+  }
+  if (!Array.isArray(parsed) || parsed.length !== budgetByHash.size) {
+    throw new UsageStateError('Redis growth reply omitted a budget balance');
+  }
+  const balances: BudgetRemaining[] = parsed.map(entry => {
+    if (!entry || typeof entry !== 'object') {
+      throw new UsageStateError('Redis growth reply contained an invalid budget balance');
+    }
+    const value = entry as { hash?: unknown; remaining?: unknown };
+    if (typeof value.hash !== 'string') {
+      throw new UsageStateError('Redis growth reply contained an invalid budget hash');
+    }
+    const budget = budgetByHash.get(value.hash);
+    if (!budget) throw new UsageStateError('Redis growth reply referenced an unknown budget');
+    if (typeof value.remaining !== 'number' || !Number.isSafeInteger(value.remaining)) {
+      throw new UsageStateError('Redis growth reply contained an invalid remaining balance');
+    }
+    return { key: budget.key, remaining: value.remaining };
+  });
+  balances.sort((a, b) => a.key.localeCompare(b.key));
+  return balances;
 }
 
 function digest(value: string): string {

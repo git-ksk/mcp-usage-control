@@ -4,15 +4,18 @@
 
 ## 現在のschema
 
-現在のschema versionは **1** です。
+現在のschema versionは **2** です。
 
-v1には次が含まれます。
+v2はv1 accounting layoutを維持し、progressive-growth metadata専用tableを1つ追加します。
 
 - `budgets`
 - `reservations`
+- `reservation_growth`（`reservation_id`、current `growth_cursor`、latest replay metadata）
 - `reservations_active_expiry`
 - `reservations_tombstone_expiry`
 - schema versionを1行で保持する内部metadata table `usage_control_schema`
+
+v1の`budgets` / `reservations` column layoutは変更しません。
 
 schema metadataはadapter内部状態です。application codeから変更しないでください。
 
@@ -20,11 +23,19 @@ schema metadataはadapter内部状態です。application codeから変更しな
 
 schema initializationは、public Durable Object runtimeがusage-control RPCを処理し始める前に、Durable Object storageの同期transaction内で実行します。
 
-fresh databaseではv1 table / indexを作成し、最後にschema version `1` を記録します。
+fresh databaseではv1 accounting table / indexを作成し、`reservation_growth`を追加してv2 layoutを検証後、schema version `2` を記録します。
 
-versioning導入前のv0.1で作成されたdatabaseでは、既存 `budgets` / `reservations` のcolumn layoutとaccounting constraintがv1と一致することを検証してからv1としてadoptします。既存のquota/accounting rowは書き換えません。v1 indexが欠けている場合は、quota balanceを変更しないため再作成できます。
+versioning導入前のdatabaseでは既存`budgets` / `reservations`がexact v1 accounting layoutであることをvalidate / adoptしてからdeterministicなv1 -> v2 additive migrationを行います。explicit v1 databaseもv1 validate後に同じmigrationを実行します。既存`budgets` / `reservations` accounting rowは書き換えず、`reservation_growth`とschema-version markerだけを追加します。v1 index欠損はquota balanceを変更しないため再作成できます。
 
 initializationはretry-safeです。途中で例外が発生した場合はschema transactionをrollbackし、Durable Objectはusage enforcementを開始しません。
+
+## v1 -> v2 progressive-growth migration
+
+v0.6 migrationは意図的にadditiveです。v1 accounting tableを変更せず`reservation_growth`だけを作成します。upgrade時点ですでに存在するreservationにはgrowth rowを作らないため、fixed reservationのままです。v0.6で新規admissionされたreservationだけ、reservationとatomicにgrowth rowを作成して`grow`へopt-inします。
+
+これにより、callerが一度も受け取っていないgrowth cursorを既存operationへretroactiveに発行しません。migrationはquota balance、liability state、expiry timestamp、settlement state、tombstoneを一切rewriteしません。
+
+schema version 2へmigration後は旧v1 binaryを同じdomainで起動できません。rollbackは`usage_control_schema.version`を手動で下げるのではなく、forward-fixまたは別domainで行います。
 
 ## Fail-closeする条件
 

@@ -243,6 +243,45 @@ describe('FirestoreUsageStore ambiguous commit acknowledgements', () => {
     ).resolves.toEqual({ reservationId: reserved.reservation.id, expiresAt: 2_200 });
   });
 
+  it('replays a committed growth after its acknowledgement is lost without double reserving', async () => {
+    const database = new AmbiguousAckFirestore();
+    const store = createStore(database);
+    const reserved = await store.reserve({
+      request: request('lost-growth-ack'),
+      units: 1,
+      budgets: [{ key: 'day:user-a', limit: 3 }],
+      ttlMs: 60_000,
+    });
+    if (!reserved.accepted || !reserved.reservation.growthCursor) {
+      throw new Error('expected growable reservation');
+    }
+    const input = {
+      reservationId: reserved.reservation.id,
+      incrementId: 'stable-growth-id',
+      expectedGrowthCursor: reserved.reservation.growthCursor,
+      additionalUnits: 1,
+      budgets: [{ key: 'day:user-a', limit: 3 }],
+    } as const;
+
+    database.failNextAcknowledgement();
+    await expect(store.growReservation(input)).rejects.toThrow(
+      'simulated ambiguous acknowledgement after commit',
+    );
+    expect(database.document('muc_reservations', reserved.reservation.id)).toMatchObject({
+      reservedUnits: 2,
+      lastGrowth: { accepted: true },
+    });
+
+    await expect(store.growReservation(input)).resolves.toMatchObject({
+      accepted: true,
+      replayed: true,
+      reservedUnits: 2,
+    });
+    await expect(
+      store.growReservation({ ...input, incrementId: 'fresh-id-after-ambiguous-commit' }),
+    ).rejects.toThrow(/cursor/i);
+  });
+
   it('reconciles a lost settlement acknowledgement only through identical replay', async () => {
     const database = new AmbiguousAckFirestore();
     const store = createStore(database);

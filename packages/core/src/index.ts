@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   emitUsageEvent,
   usageErrorName,
@@ -59,6 +60,8 @@ export interface ReservationRecord {
   budgetKeys: string[];
   reservedUnits: number;
   expiresAt: number;
+  /** Opaque replay fence present only on reservations created by growth-capable Stores. */
+  growthCursor?: string;
 }
 
 export type StoreReserveResult =
@@ -119,6 +122,47 @@ export interface UsageStore {
   settle(input: SettleInput): Promise<SettlementResult>;
 }
 
+export interface GrowReservationInput {
+  reservationId: string;
+  incrementId: string;
+  expectedGrowthCursor: string;
+  additionalUnits: number;
+  budgets: readonly Budget[];
+}
+
+export type StoreGrowResult =
+  | {
+      accepted: true;
+      replayed: boolean;
+      reservationId: string;
+      incrementId: string;
+      previousReservedUnits: number;
+      reservedUnits: number;
+      growthCursor: string;
+      remainingByBudget: BudgetRemaining[];
+    }
+  | {
+      accepted: false;
+      reason: 'quota_exceeded';
+      replayed: boolean;
+      reservationId: string;
+      incrementId: string;
+      growthCursor: string;
+      limitingBudgetKey: string;
+      remaining: number;
+    };
+
+/** Optional Store capability. Existing fixed-reservation UsageStore implementations remain valid. */
+export interface ProgressiveUsageStore extends UsageStore {
+  growReservation(input: GrowReservationInput): Promise<StoreGrowResult>;
+}
+
+export interface ReservationGrowthRequest {
+  incrementId: string;
+  additionalUnits: number;
+  budgets: readonly Budget[];
+}
+
 export type AdmissionResult =
   | { allowed: true; lease: UsageLease; remainingByBudget: BudgetRemaining[] }
   | {
@@ -160,16 +204,24 @@ export interface UsageLeaseResumeState {
   reservation: ReservationRecord;
   ttlMs: number;
   metadata?: UsageEventMetadata;
+  /** Retained only after an ambiguous growth call so the same attempt must be retried. */
+  unresolvedGrowth?: ReservationGrowthRequest;
 }
 
 export class UsageLease {
+  private unresolvedGrowth: ReservationGrowthRequest | undefined;
+
   constructor(
     private readonly store: UsageStore,
     public readonly reservation: ReservationRecord,
     public readonly ttlMs: number,
     private readonly observer?: UsageObserver,
     private readonly metadata?: UsageEventMetadata,
-  ) {}
+    unresolvedGrowth?: ReservationGrowthRequest,
+  ) {
+    this.unresolvedGrowth =
+      unresolvedGrowth === undefined ? undefined : canonicalizeGrowthRequest(unresolvedGrowth);
+  }
 
   get reservedUnits(): number {
     return this.reservation.reservedUnits;
@@ -181,7 +233,54 @@ export class UsageLease {
       reservation: cloneReservationRecord(this.reservation),
       ttlMs: this.ttlMs,
       ...(this.metadata === undefined ? {} : { metadata: { ...this.metadata } }),
+      ...(this.unresolvedGrowth === undefined
+        ? {}
+        : { unresolvedGrowth: cloneGrowthRequest(this.unresolvedGrowth) }),
     };
+  }
+
+  /**
+   * Increase capacity on the same logical reservation.
+   *
+   * A thrown Store/provider error is ambiguous. After one, this lease permits only an exact
+   * retry of the same increment until an authoritative accepted/denied result is returned.
+   */
+  async grow(input: ReservationGrowthRequest): Promise<StoreGrowResult> {
+    const request = canonicalizeGrowthRequest(input);
+    if (this.unresolvedGrowth && !sameGrowthRequest(this.unresolvedGrowth, request)) {
+      throw new UsageStateError(
+        'A reservation growth attempt is unresolved; retry the same incrementId and parameters',
+      );
+    }
+    if (!isProgressiveUsageStore(this.store)) {
+      throw new UsageStateError('UsageStore does not support progressive reservation growth');
+    }
+    const expectedGrowthCursor = this.reservation.growthCursor;
+    if (!expectedGrowthCursor) {
+      throw new UsageStateError('Reservation was not created with progressive growth support');
+    }
+
+    this.unresolvedGrowth = request;
+    try {
+      const result = await this.store.growReservation({
+        reservationId: this.reservation.id,
+        incrementId: request.incrementId,
+        expectedGrowthCursor,
+        additionalUnits: request.additionalUnits,
+        budgets: request.budgets,
+      });
+      this.reservation.growthCursor = result.growthCursor;
+      if (result.accepted) this.reservation.reservedUnits = result.reservedUnits;
+      this.unresolvedGrowth = undefined;
+      return result;
+    } catch (error) {
+      if (error instanceof UsageStateError) {
+        // Built-in Stores use UsageStateError only for authoritative state rejection.
+        // Transport/provider ambiguity keeps the attempt pinned for exact retry.
+        this.unresolvedGrowth = undefined;
+      }
+      throw error;
+    }
   }
 
   async markLiable(): Promise<MarkLiableResult> {
@@ -297,6 +396,7 @@ export class UsageControl {
       state.ttlMs,
       this.observer,
       state.metadata === undefined ? undefined : { ...state.metadata },
+      state.unresolvedGrowth,
     );
   }
 
@@ -445,9 +545,15 @@ interface InternalReservation extends ReservationRecord {
   actualUnits?: number;
   outcome?: string;
   tombstoneExpiresAt?: number;
+  lastGrowth?: {
+    incrementId: string;
+    expectedGrowthCursor: string;
+    fingerprint: string;
+    result: StoreGrowResult;
+  };
 }
 
-export class MemoryUsageStore implements UsageStore {
+export class MemoryUsageStore implements ProgressiveUsageStore {
   private readonly used = new Map<string, number>();
   private readonly reservations = new Map<string, InternalReservation>();
   private readonly operations = new Map<string, string>();
@@ -548,6 +654,7 @@ export class MemoryUsageStore implements UsageStore {
       budgetKeys: budgets.map(budget => budget.key),
       reservedUnits: input.units,
       expiresAt: now + input.ttlMs,
+      growthCursor: newGrowthCursor(),
       operationKey,
       state: 'pending',
     };
@@ -563,7 +670,7 @@ export class MemoryUsageStore implements UsageStore {
 
     return {
       accepted: true,
-      reservation,
+      reservation: cloneReservationRecord(reservation),
       remainingByBudget: remainingByBudget.map(balance => ({
         key: balance.key,
         remaining: balance.remaining - input.units,
@@ -580,6 +687,111 @@ export class MemoryUsageStore implements UsageStore {
     }
     reservation.state = 'liable';
     return { reservationId: reservation.id, expiresAt: reservation.expiresAt };
+  }
+
+  async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
+    validateGrowthInput(input);
+    const budgets = canonicalizeBudgets(input.budgets);
+    const fingerprint = growthFingerprint(input.additionalUnits, budgets);
+    const now = Date.now();
+    this.recoverExpired(now);
+
+    const reservation = this.reservations.get(input.reservationId);
+    if (!reservation) throw new UsageStateError('Reservation not found or expired');
+
+    if (reservation.state === 'settled') {
+      throw new UsageStateError('Cannot grow a settled or expired reservation');
+    }
+
+    const lastGrowth = reservation.lastGrowth;
+    if (lastGrowth?.incrementId === input.incrementId) {
+      if (
+        lastGrowth.expectedGrowthCursor !== input.expectedGrowthCursor ||
+        lastGrowth.fingerprint !== fingerprint
+      ) {
+        throw new UsageStateError('Growth increment was already attempted with different parameters');
+      }
+      return replayGrowthResult(lastGrowth.result);
+    }
+
+    if (!reservation.growthCursor) {
+      throw new UsageStateError('Reservation does not support progressive growth');
+    }
+    if (reservation.growthCursor !== input.expectedGrowthCursor) {
+      throw new UsageStateError('Growth cursor is stale or conflicts with reservation state');
+    }
+    if (!sameBudgetKeys(reservation.budgetKeys, budgets)) {
+      throw new UsageStateError('Growth budgets must exactly match the reservation budget set');
+    }
+
+    const remainingByBudget = budgets.map(budget => ({
+      key: budget.key,
+      remaining: Math.max(0, budget.limit - (this.used.get(budget.key) ?? 0)),
+    }));
+    const limiting = remainingByBudget.find(
+      balance => input.additionalUnits > balance.remaining,
+    );
+    const nextGrowthCursor = newGrowthCursor();
+
+    if (limiting) {
+      const result: StoreGrowResult = {
+        accepted: false,
+        reason: 'quota_exceeded',
+        replayed: false,
+        reservationId: reservation.id,
+        incrementId: input.incrementId,
+        growthCursor: nextGrowthCursor,
+        limitingBudgetKey: limiting.key,
+        remaining: limiting.remaining,
+      };
+      reservation.growthCursor = nextGrowthCursor;
+      reservation.lastGrowth = {
+        incrementId: input.incrementId,
+        expectedGrowthCursor: input.expectedGrowthCursor,
+        fingerprint,
+        result: cloneGrowthResult(result),
+      };
+      return result;
+    }
+
+    const previousReservedUnits = reservation.reservedUnits;
+    const reservedUnits = safeAdd(
+      previousReservedUnits,
+      input.additionalUnits,
+      'reservedUnits',
+    );
+    for (const budget of budgets) {
+      this.used.set(
+        budget.key,
+        safeAdd(
+          this.used.get(budget.key) ?? 0,
+          input.additionalUnits,
+          `usage (${budget.key})`,
+        ),
+      );
+    }
+    reservation.reservedUnits = reservedUnits;
+    reservation.growthCursor = nextGrowthCursor;
+    const result: StoreGrowResult = {
+      accepted: true,
+      replayed: false,
+      reservationId: reservation.id,
+      incrementId: input.incrementId,
+      previousReservedUnits,
+      reservedUnits,
+      growthCursor: nextGrowthCursor,
+      remainingByBudget: remainingByBudget.map(balance => ({
+        key: balance.key,
+        remaining: balance.remaining - input.additionalUnits,
+      })),
+    };
+    reservation.lastGrowth = {
+      incrementId: input.incrementId,
+      expectedGrowthCursor: input.expectedGrowthCursor,
+      fingerprint,
+      result: cloneGrowthResult(result),
+    };
+    return result;
   }
 
   async renew(input: RenewInput): Promise<RenewResult> {
@@ -772,6 +984,12 @@ function cloneReservationRecord(reservation: ReservationRecord): ReservationReco
   }
   assertNonNegativeInteger(reservation.reservedUnits, 'reservedUnits');
   assertPositiveInteger(reservation.expiresAt, 'expiresAt');
+  if (
+    reservation.growthCursor !== undefined &&
+    (typeof reservation.growthCursor !== 'string' || reservation.growthCursor.length === 0)
+  ) {
+    throw new UsageStateError('Resume growthCursor must be a non-empty string when present');
+  }
   return {
     id: reservation.id,
     operationId: reservation.operationId,
@@ -782,7 +1000,95 @@ function cloneReservationRecord(reservation: ReservationRecord): ReservationReco
     budgetKeys: [...reservation.budgetKeys],
     reservedUnits: reservation.reservedUnits,
     expiresAt: reservation.expiresAt,
+    ...(reservation.growthCursor === undefined
+      ? {}
+      : { growthCursor: reservation.growthCursor }),
   };
+}
+
+function isProgressiveUsageStore(store: UsageStore): store is ProgressiveUsageStore {
+  return typeof (store as Partial<ProgressiveUsageStore>).growReservation === 'function';
+}
+
+function canonicalizeGrowthRequest(input: ReservationGrowthRequest): ReservationGrowthRequest {
+  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+    throw new RangeError('incrementId must be a non-empty string');
+  }
+  assertPositiveInteger(input.additionalUnits, 'additionalUnits');
+  return {
+    incrementId: input.incrementId,
+    additionalUnits: input.additionalUnits,
+    budgets: canonicalizeBudgets(input.budgets),
+  };
+}
+
+function cloneGrowthRequest(input: ReservationGrowthRequest): ReservationGrowthRequest {
+  return {
+    incrementId: input.incrementId,
+    additionalUnits: input.additionalUnits,
+    budgets: input.budgets.map(budget => ({ ...budget })),
+  };
+}
+
+function sameGrowthRequest(
+  left: ReservationGrowthRequest,
+  right: ReservationGrowthRequest,
+): boolean {
+  return (
+    left.incrementId === right.incrementId &&
+    growthFingerprint(left.additionalUnits, left.budgets) ===
+      growthFingerprint(right.additionalUnits, right.budgets)
+  );
+}
+
+function validateGrowthInput(input: GrowReservationInput): void {
+  if (typeof input.reservationId !== 'string' || input.reservationId.length === 0) {
+    throw new RangeError('reservationId must be a non-empty string');
+  }
+  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+    throw new RangeError('incrementId must be a non-empty string');
+  }
+  if (typeof input.expectedGrowthCursor !== 'string' || input.expectedGrowthCursor.length === 0) {
+    throw new RangeError('expectedGrowthCursor must be a non-empty string');
+  }
+  assertPositiveInteger(input.additionalUnits, 'additionalUnits');
+}
+
+function growthFingerprint(additionalUnits: number, budgets: readonly Budget[]): string {
+  return JSON.stringify([additionalUnits, budgets.map(budget => [budget.key, budget.limit])]);
+}
+
+function sameBudgetKeys(reservationBudgetKeys: readonly string[], budgets: readonly Budget[]): boolean {
+  return (
+    reservationBudgetKeys.length === budgets.length &&
+    reservationBudgetKeys.every((key, index) => key === budgets[index]!.key)
+  );
+}
+
+function newGrowthCursor(): string {
+  return `g1.${randomUUID()}`;
+}
+
+function replayGrowthResult(result: StoreGrowResult): StoreGrowResult {
+  return { ...cloneGrowthResult(result), replayed: true };
+}
+
+function cloneGrowthResult(result: StoreGrowResult): StoreGrowResult {
+  if (result.accepted) {
+    return {
+      ...result,
+      remainingByBudget: result.remainingByBudget.map(balance => ({ ...balance })),
+    };
+  }
+  return { ...result };
+}
+
+function safeAdd(left: number, right: number, name: string): number {
+  const result = left + right;
+  if (!Number.isSafeInteger(result) || result < 0) {
+    throw new RangeError(`${name} exceeds safe integer range`);
+  }
+  return result;
 }
 
 function requestIdentity(request: UsageRequest): {

@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient } from 'redis';
-import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import {
+  assertUsageStoreConformance,
+  runProgressiveUsageStoreConformance,
+} from 'mcp-usage-control/conformance';
 import { RedisUsageStore } from './index.js';
 
 const redisUrl = process.env.REDIS_URL;
@@ -36,5 +39,23 @@ integration('RedisUsageStore portable conformance', () => {
 
     expect(report.passed).toBe(true);
     expect(report.cases.every(result => result.passed)).toBe(true);
+  });
+
+  it('passes the progressive reservation growth contract', async () => {
+    const report = await runProgressiveUsageStoreConformance({
+      createStore(scenario) {
+        return new RedisUsageStore(client, {
+          prefix: `${runId}-growth-${scenario}`,
+          hashTag: `${runId}-growth-${scenario}`,
+        });
+      },
+      async waitForLeaseExpiry(ttlMs) {
+        await new Promise(resolve => setTimeout(resolve, ttlMs + 80));
+      },
+      leaseTtlMs: 60,
+    });
+
+    expect(report.cases.filter(result => !result.passed)).toEqual([]);
+    expect(report.passed).toBe(true);
   });
 });

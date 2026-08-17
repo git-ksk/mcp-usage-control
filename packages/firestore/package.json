@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control-firestore",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Transactional Firestore usage store for mcp-usage-control.",
   "type": "module",
   "license": "Apache-2.0",

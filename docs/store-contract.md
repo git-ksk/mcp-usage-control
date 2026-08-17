@@ -335,3 +335,33 @@ The built-in stores combine the portable semantics with provider-specific tests/
 | `RedisMcpUsageFlowStore` | per-flow Redis Lua compare/delete | Redis expiry/server time | concurrent consume, mismatch preservation, lost-consume-ACK fail-closed tests; Redis HA remains deployment-specific |
 
 Passing built-in tests does not turn an underlying provider into a financial ledger. The project enforces usage admission; financial-grade durability remains a separate system boundary where required.
+
+## Optional progressive reservation growth contract (v0.6)
+
+A third-party Store may remain a fixed-reservation `UsageStore`. Progressive growth is an **optional** capability so existing Stores remain source-compatible:
+
+```ts
+interface ProgressiveUsageStore extends UsageStore {
+  growReservation(input: GrowReservationInput): Promise<StoreGrowResult>;
+}
+```
+
+A Store that implements this capability must also pass `runProgressiveUsageStoreConformance()` and provide backend-specific concurrency/acknowledgement-ambiguity evidence before claiming production-safe progressive growth.
+
+The normative rules are:
+
+- a reservation is growable only when the Store created it with an opaque `growthCursor`; older/fixed reservations remain readable but `grow` fails closed;
+- each attempt has a stable application-owned `incrementId`, `additionalUnits`, the complete original budget set with current limits, and the expected Store-issued cursor;
+- an accepted growth atomically increments **all** participating budgets and `reservedUnits`, or none do;
+- an authoritative quota denial changes no capacity but still records the attempt and rotates the cursor;
+- same increment + same prior cursor + same canonical parameters replays exactly without reserving again;
+- conflicting reuse of the same increment identity, or a different increment on a stale cursor, is rejected;
+- a pending reservation remains pending; a liable reservation remains liable; growth does not renew TTL;
+- expiry/recovery acts on the full grown total under the existing pending/liable rules;
+- settlement remains bounded by total successfully reserved capacity;
+- once settled or expired/recovered, every growth call is rejected, including replay;
+- Store/provider ambiguity never becomes permission to continue metered work.
+
+The caller must persist or deterministically reconstruct the same `incrementId` **before** sending a growth request if the logical operation must survive process loss. The cursor is a replay fence, not authentication.
+
+See [Progressive reservation growth](progressive-reservation-growth.md) and the [MCP progressive example](progressive-mcp-integration.md).

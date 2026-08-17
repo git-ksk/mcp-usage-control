@@ -6,25 +6,26 @@
 
 この文書だけでv1.0 tag、GitHub Release、npm publicationを実行しません。
 
-## Status update — v1前にv0.5
+## Status update — v0.6 progressive-growth判断
 
-直近の次source releaseは **v0.5.0** です。
+直近の次source releaseは **v0.6.0** です。v0.5.0はreleased stabilization baselineとして維持します。
 
 repositoryは一度、current fixed-reservation / scalar-unit modelをそのままv1へfreezeできる地点まで到達しました。この結論は現行modelの内部整合性を示すevidenceとして有効ですが、final v1 surfaceを確定する前にもう1回pre-1.0 stabilization releaseを挟みます。
 
-そのため、以前のreviewで「#83 / #84は確定post-v1」としたrelease-planning部分はcurrent planでsupersedeします。
+v0.6で#83の判断を明示確定します。
 
-- v0.5.0はbounded fixed-reservation modelを維持
-- v0.5.0は1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用
-- #83 progressive reservation growthはopenの **v1-scope candidate**
-- #84 heterogeneous multi-dimensional usageもopenの **v1-scope candidate**
-- safety guaranteeを十分なevidence付きで維持できない場合は、どちらもpost-v1へ残してよい
+- base bounded fixed-reservation `UsageStore` contractはsource-compatibleのまま維持
+- progressive reservation growthは`UsageLease.grow()` + optional `ProgressiveUsageStore`としてfuture v1へ **採用**
+- stable `incrementId` + Store-issued `growthCursor`でlost-ACK replay fenceを構成
+- original participating budget全体をatomicにgrowし、pending / liable semanticsを維持
+- settlement / expiry後はreplayを含む全growth callをreject
+- #84 heterogeneous multi-dimensional usageはv0.7.0の次decision target
 
 これはrelease planningの変更であり、完了済みcorrectness workを巻き戻すものではありません。
 
 ## 判定
 
-**v0.5.0 stabilization / source releaseへGO。**
+**v0.6.0 source-release preparationへGO。normal CI / package / provider integration gate通過が条件です。**
 
 解決済みcorrectness / evidence gate:
 
@@ -33,18 +34,19 @@ repositoryは一度、current fixed-reservation / scalar-unit modelをそのま�
 - #79 — Node.js 24 full compatibility-evidence matrix
 - #85 — existing accounting bucketに対するmutable quota-limit semantics
 
-これらの領域にv0.5.0を止める既知defectはありません。
+これらの領域にv0.6.0を止める既知defectはありません。
 
-**v1.0 readinessは意図的にprovisionalへ戻します。** v0.5運用後、#83 / #84と、stable API commitment後に追加しにくくなるlow-risk / high-value capabilityを明示再評価してfinal v1 scopeを決めます。
+**v1.0 readinessは引き続きprovisionalです。** #83は未決ではなく、proof済みoptional growth surfaceとしてfuture v1へ採用しました。#84以降は指定v0.x gateで判断します。
 
-## v0.5 accounting boundary
+## v0.6 accounting boundary
 
-v0.5.0はcurrent proof済みcontractを維持します。
+v0.6.0はv0.5のproof済みcontractを維持しつつ、optional progressive growthを追加します。
 
 - `UsagePolicy` quote -> atomic `UsageStore.reserve()`
 - all-or-nothing multi-budget admission
 - 1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用
-- metered work前にbounded fixed reservationを確保
+- base `UsageStore`ではmetered work前にbounded fixed reservationを確保
+- `ProgressiveUsageStore`ではsame reservationをstable increment identity + growth cursorでoptionalにgrow
 - `actualUnits <= reservedUnits`
 - replay identity `(tenantId, principal.id, tool, operationId)`
 - `markLiable()` によるexplicit `pending -> cost-liable`
@@ -63,19 +65,13 @@ second logical operationをaccounting-equivalentなtop-up workaroundとは扱い
 
 ## v1 scopeとして意図的に残す論点
 
-### #83 — progressive reservation growth
+### #83 — progressive reservation growth — v0.6で採用
 
-v1へ入れる場合、API freeze前に次をproofする必要があります。
+v0.6 proofにより、progressive growthはbase `UsageStore`をmandatoryに変更せず、optional Store extensionとしてfuture v1 surfaceへ採用する。proof対象はatomic all-budget growth、deterministic increment replay identity、lost-ACK fence、pending/liable inheritance、conservative expiry/recovery、terminal-state reject、total successfully reserved capacity以内のsettlement。
 
-- every incrementを全participating budgetへatomic admit、または一切applyしない
-- top-up attemptごとのdeterministic retry / idempotency identity
-- committed increment後のlost ACKでcapacityを二重追加しない
-- pending / cost-liable distinctionを維持
-- 1回以上のincrement後もexpiry / recoveryで正しいconservative chargeを維持
-- settlementがsuccessfully reserved totalを超えない
-- long-running / multi-round executionがcapacity獲得のためだけにsecond logical operationを作らない
+Memoryをreference proofとし、Redisは1本のLua transaction、Cloudflare Durable ObjectsはSQLite `transactionSync` + schema v2 additive growth metadata、Firestoreはnext cursorをcallback外で固定した1 transaction retryで実装する。portable progressive conformanceにprovider-specific ambiguity/concurrency testを重ねる。
 
-proofがv1前に間に合わなければ、v1はv0.5 fixed-reservation modelを維持して後からtop-upを追加できます。
+詳細は[Progressive reservation growth](progressive-reservation-growth.ja.md)と[Progressive MCP growth](progressive-mcp-integration.ja.md)を参照。
 
 ### #84 — heterogeneous multi-dimensional usage
 
@@ -158,44 +154,46 @@ cancellationは保守的です。cancel request / ACKだけではmetered cost 0�
 - production horizontal scaleでは必要なaccounting / flow stateをprovider-backed shared stateへ置く
 - Firestore lease-recovery support profileはbounded / synchronized host clockと適切な `expiryGraceMs` を要求
 
-## v0.5 release check
+## v0.6 release check
 
-v0.5.0 source tag / release前に:
+v0.6.0 source tag / releaseを作る前に:
 
-1. 5 packageを同時に `0.5.0` へversioning
-2. intended post-v0.4 changeを `0.5.0` changelog sectionへ移動
-3. Node 20 / 22 / 24 normal CI
-4. Redis / Cloudflare local-workerd / Firestore Emulator integration
-5. package tarball / content / version + clean-consumer verification
-6. README / roadmap / release docsがv0.5を直近release、v1を後続scope decisionとして説明していることを確認
-7. release commit green後だけv0.5.0 source tag / GitHub Release
-8. npm publicationは独立承認がない限り別工程
+1. 5 packageを同時に `0.6.0` へversioning
+2. Node 20 / 22 / 24 normal CI
+3. Redis progressive conformance / lost-ACK integration、Cloudflare local-workerd progressive conformance / lost-growth-ACK、Firestore Emulator progressive conformance
+4. package tarball / content / version + clean-consumer verification
+5. 英日growth / state-machine / MCP / migration docs確認
+6. required check green後にimplementation PR merge
+7. v0.6.0 source tag / GitHub Releaseは別途明示承認がある場合だけ作成
+8. npm publicationは独立承認がない限り実行しない
 
 ## 将来v1のrelease gate
 
 将来v1.0をreleaseするのは次を満たした後です。
 
-1. v0.5 stabilization / dogfoodで十分なoperational confidenceを得る
-2. #83 / #84と他のdeliberate v1-scope candidateを明示accept / defer
+1. pre-v1 v0.x ladderで十分なoperational confidenceを得る
+2. #83を含む各deliberate v1-scope candidateを指定gateで明示accept / defer
 3. long-lived public package / subpath / API nameを最終review
 4. 必要と判断したbreaking contract changeをv1 tag前に実施
 5. `1.0.0` でfull package / integration matrix green
 6. explicit v1 source-release authorization
 
-v0.5の直後に必ずv1へ進む必要も、future capabilityを全部v1前に完成させる必要もありません。stable boundaryは実需要とsafety evidenceに合わせます。
+v0.6の直後に必ずv1へ進む必要も、future capabilityを全部v1前に完成させる必要もありません。stable boundaryは実需要とsafety evidenceに合わせます。
 
 ## Release / npm separation
 
-GitHub source releaseとnpm publicationは別操作です。v0.5.0や将来v1.0のsource releaseがreadyでも、それだけでnpm publishしません。
+GitHub source releaseとnpm publicationは別操作です。v0.6.0や将来v1.0のsource releaseがreadyでも、それだけでnpm publishしません。
 
 ## 現在の結論
 
-**次source release: v0.5.0。**
+**次source release: v0.6.0。**
 
-**v0.5.0 readiness: normal release CI / packaging checkを条件にGO。**
+**v0.6.0 readiness: release preparation GO。normal CI / provider / package checks通過が条件。**
 
-**v1.0 scope / API freeze: 未確定。v0.5後に再評価。**
+**#83: optional progressive reservation growthとしてfuture v1 stable surfaceへ採用。**
 
-**#83 / #84: open v1-scope candidate。確定post-v1ではない。**
+**#84: v0.7.0の次v1-scope decision target。**
+
+**v1.0自体は新featureなしのstable promotion。**
 
 **npm publication: 引き続きdeferred / separate。**

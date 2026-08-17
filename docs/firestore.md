@@ -210,3 +210,13 @@ Even when Firestore is a good fit, load-test production-like traffic if shared b
 - Reads/writes at scale: https://firebase.google.com/docs/firestore/understand-reads-writes-scale
 
 See [API reference](api-reference.md) for options and [Architecture](architecture.md) for the full state machine.
+
+## Progressive reservation growth (v0.6)
+
+`FirestoreUsageStore` implements the optional progressive-growth contract with one Firestore transaction covering the reservation document and every participating budget document.
+
+The next growth cursor is generated **outside** the transaction callback. Firestore may retry that callback automatically; keeping the attempt identity/cursor fixed across those retries prevents an SDK retry from becoming a second logical increase. The transaction then enforces exact increment replay, stale-cursor rejection, exact original budget membership, all-or-nothing quota admission, and the existing pending/liable expiry rules.
+
+Storage compatibility is additive: v0.6 reservation documents may contain `growthCursor` and latest-growth replay metadata. Existing v0.5 documents remain valid fixed reservations and are not implicitly upgraded into growable reservations. No collection reset or accounting rewrite is required.
+
+The existing `expiryGraceMs` clock-skew contract also applies to growth. A reservation that is still inside the configured grace may grow; after authoritative expiry/recovery, every growth call fails closed. Tests cover grown pending release, liable retention, Firestore transaction retry behavior, and commit-after-ACK-loss replay with the same stable increment identity.

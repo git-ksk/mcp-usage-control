@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { Firestore } from '@google-cloud/firestore';
-import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import {
+  assertUsageStoreConformance,
+  runProgressiveUsageStoreConformance,
+} from 'mcp-usage-control/conformance';
 import { FirestoreUsageStore } from '../dist/index.js';
 
 const projectId = process.env.GCLOUD_PROJECT ?? 'demo-muc-firestore';
@@ -52,6 +55,23 @@ async function testPortableConformance() {
     },
     leaseTtlMs: 80,
     concurrency: 8,
+  });
+
+  assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
+}
+
+async function testProgressiveConformance() {
+  const report = await runProgressiveUsageStoreConformance({
+    createStore(scenario) {
+      return storeFor(`growth_${scenario.replaceAll('-', '_')}`, {
+        cleanupBatchSize: 16,
+        cleanupIntervalMs: 0,
+      });
+    },
+    async waitForLeaseExpiry(ttlMs) {
+      await sleep(ttlMs + 120);
+    },
+    leaseTtlMs: 80,
   });
 
   assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
@@ -206,6 +226,7 @@ async function testIdempotentSettlement() {
 
 const tests = [
   ['portable UsageStore conformance', testPortableConformance],
+  ['progressive UsageStore conformance', testProgressiveConformance],
   ['multi-budget atomicity', testMultiBudgetAtomicity],
   ['shared-budget concurrency', testSharedBudgetConcurrency],
   ['pending expiry recovery', testPendingExpiryRecovery],
