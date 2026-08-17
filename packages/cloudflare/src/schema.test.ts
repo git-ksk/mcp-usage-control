@@ -52,6 +52,13 @@ const RESERVATION_GROWTH_COLUMNS: Row[] = [
   { cid: 2, name: 'last_growth_json', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
 ];
 
+const RESERVATION_VECTOR_COLUMNS: Row[] = [
+  { cid: 0, name: 'reservation_id', type: 'TEXT', notnull: 0, dflt_value: null, pk: 1 },
+  { cid: 1, name: 'dimensions_json', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+  { cid: 2, name: 'actual_dimensions_json', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+  { cid: 3, name: 'last_vector_growth_json', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+];
+
 class Cursor<T extends Row> {
   constructor(private readonly rows: T[]) {}
   toArray(): T[] {
@@ -187,6 +194,16 @@ class FakeStorage {
       return new Cursor<T>([]);
     }
 
+    if (normalized.startsWith('create table if not exists reservation_vectors')) {
+      if (!this.tables.has('reservation_vectors')) {
+        this.tables.set('reservation_vectors', {
+          sql: query,
+          columns: RESERVATION_VECTOR_COLUMNS.map(row => ({ ...row })),
+        });
+      }
+      return new Cursor<T>([]);
+    }
+
     if (normalized.startsWith('create index if not exists reservations_active_expiry')) {
       if (!this.indexes.has('reservations_active_expiry')) {
         this.indexes.set('reservations_active_expiry', query);
@@ -255,7 +272,7 @@ function asStorage(fake: FakeStorage): Parameters<typeof initializeCloudflareUsa
 }
 
 describe('Cloudflare SQLite schema versioning', () => {
-  it('creates a fresh v2 database and is safe to run repeatedly', () => {
+  it('creates a fresh v3 database and is safe to run repeatedly', () => {
     const fake = new FakeStorage();
     const storage = asStorage(fake);
 
@@ -266,6 +283,7 @@ describe('Cloudflare SQLite schema versioning', () => {
     expect(fake.tables.has('budgets')).toBe(true);
     expect(fake.tables.has('reservations')).toBe(true);
     expect(fake.tables.has('reservation_growth')).toBe(true);
+    expect(fake.tables.has('reservation_vectors')).toBe(true);
     expect(fake.indexes.has('reservations_active_expiry')).toBe(true);
     expect(fake.indexes.has('reservations_tombstone_expiry')).toBe(true);
     expect(fake.accountingMutationCount).toBe(0);
@@ -280,18 +298,36 @@ describe('Cloudflare SQLite schema versioning', () => {
 
     expect(readCloudflareUsageSchemaVersion(storage)).toBe(CLOUDFLARE_USAGE_SCHEMA_VERSION);
     expect(fake.tables.has('reservation_growth')).toBe(true);
+    expect(fake.tables.has('reservation_vectors')).toBe(true);
     expect(fake.accountingMutationCount).toBe(0);
   });
 
-  it('migrates a database explicitly marked v1 to v2 without touching accounting rows', () => {
+  it('migrates a database explicitly marked v1 through v3 without touching accounting rows', () => {
     const fake = new FakeStorage();
     fake.seedLegacyV1();
     fake.schemaRows = [{ id: 1, version: 1 }];
 
     initializeCloudflareUsageSchema(asStorage(fake));
 
-    expect(readCloudflareUsageSchemaVersion(asStorage(fake))).toBe(2);
+    expect(readCloudflareUsageSchemaVersion(asStorage(fake))).toBe(3);
     expect(fake.tables.has('reservation_growth')).toBe(true);
+    expect(fake.tables.has('reservation_vectors')).toBe(true);
+    expect(fake.accountingMutationCount).toBe(0);
+  });
+
+  it('migrates an explicitly marked v2 database to v3 without touching accounting rows', () => {
+    const fake = new FakeStorage();
+    fake.seedLegacyV1();
+    fake.tables.set('reservation_growth', {
+      sql: 'CREATE TABLE reservation_growth (reservation_id TEXT PRIMARY KEY, growth_cursor TEXT NOT NULL, last_growth_json TEXT)',
+      columns: RESERVATION_GROWTH_COLUMNS.map(row => ({ ...row })),
+    });
+    fake.schemaRows = [{ id: 1, version: 2 }];
+
+    initializeCloudflareUsageSchema(asStorage(fake));
+
+    expect(readCloudflareUsageSchemaVersion(asStorage(fake))).toBe(3);
+    expect(fake.tables.has('reservation_vectors')).toBe(true);
     expect(fake.accountingMutationCount).toBe(0);
   });
 

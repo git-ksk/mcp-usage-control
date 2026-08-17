@@ -107,3 +107,9 @@ low-cardinalityな運用logには `projectUsageEvent()` を使えます。raw li
 - [Architecture](../../docs/architecture.ja.md)
 
 authentication、payment / billing、MCP SDK integration、provider-backed production storageはこのpackageの責務外です。
+
+## Atomic vector usage (v0.7)
+
+For one logical operation that consumes unlike units, use `VectorUsagePolicy` + `VectorUsageControl` with a Store that implements optional `VectorUsageStore`. Each dimension keeps its own units and hierarchical budgets; unlike units are never summed. Vector admission, progressive growth, expiry/recovery, and settlement are atomic across the complete dimension set.
+
+Store authors can validate the optional capability with `runVectorUsageStoreConformance()` from `mcp-usage-control/conformance`.

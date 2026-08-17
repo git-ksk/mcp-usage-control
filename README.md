@@ -66,11 +66,11 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.6.0` for the next GitHub/source release preparation. `v0.5.0` remains the latest released source baseline; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.7.0` for the next GitHub/source release preparation. `v0.6.0` is the latest released source baseline; npm registry publication remains intentionally deferred.
 
 ## v1 scope under consideration after v0.5
 
-The v1 API freeze is still not final. The v0.6 decision adopts failure-safe progressive reservation growth as an optional future-v1 capability while keeping the base fixed-reservation `UsageStore` contract compatible.
+The v1 API freeze is still not final. Following v0.6 progressive growth, v0.7 adopts atomic heterogeneous vector accounting as another optional future-v1 capability while keeping the base scalar `UsageStore` contract compatible.
 
 | Area | Current status | Boundary |
 | --- | --- | --- |
@@ -81,7 +81,7 @@ The v1 API freeze is still not final. The v0.6 decision adopts failure-safe prog
 | `protectMultiRoundTool()` | **strong v1 candidate** | Supported `input_required` multi-round accounting |
 | Shared/durable MRTR compare-and-consume | **current v1 direction** | Cross-instance resume without sticky MCP sessions |
 | Progressive reservation growth (#83) | **adopted in v0.6** | Optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic/lost-ACK/provider proof |
-| Heterogeneous multi-dimensional usage (#84) | **open v1-scope candidate** | v0.5 uses one scalar unit count; vector accounting needs atomic design proof |
+| Heterogeneous multi-dimensional usage (#84) | **adopted in v0.7** | Optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
 | First-class MCP Tasks wire/runtime adapter | **scope depends on upstream stabilization** | Accounting semantics are defined; stable adapter is not yet claimed |
 | New stateless MRTR claim mode | **deferred unless justified** | No demonstrated advantage over shared one-time claim |
 | Billing / financial ledger / workflow replay | **out of scope** | Remains outside usage enforcement |
@@ -321,7 +321,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.6.0` is the current source-release preparation target. #83 is adopted for the future v1 surface; later ladder decisions remain intentionally open. Tag/Release creation and npm publication remain separate operations.
+`v0.7.0` is the current source-release preparation target. #83 and #84 are adopted as optional future-v1 capabilities; #81 is the next v0.8 decision target. Tag/Release creation and npm publication remain separate operations.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 

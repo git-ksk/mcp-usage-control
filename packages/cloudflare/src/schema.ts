@@ -1,11 +1,12 @@
 import type { DurableObjectState, SqlStorageValue } from 'cloudflare:workers';
 
-export const CLOUDFLARE_USAGE_SCHEMA_VERSION = 2;
+export const CLOUDFLARE_USAGE_SCHEMA_VERSION = 3;
 
 const SCHEMA_TABLE = 'usage_control_schema';
 const BUDGETS_TABLE = 'budgets';
 const RESERVATIONS_TABLE = 'reservations';
 const RESERVATION_GROWTH_TABLE = 'reservation_growth';
+const RESERVATION_VECTORS_TABLE = 'reservation_vectors';
 
 const ACTIVE_EXPIRY_INDEX = 'reservations_active_expiry';
 const TOMBSTONE_EXPIRY_INDEX = 'reservations_tombstone_expiry';
@@ -62,6 +63,13 @@ const RESERVATION_GROWTH_COLUMNS: readonly ExpectedColumn[] = [
   { name: 'last_growth_json', type: 'TEXT', notNull: false, primaryKey: 0 },
 ];
 
+const RESERVATION_VECTOR_COLUMNS: readonly ExpectedColumn[] = [
+  { name: 'reservation_id', type: 'TEXT', notNull: false, primaryKey: 1 },
+  { name: 'dimensions_json', type: 'TEXT', notNull: true, primaryKey: 0 },
+  { name: 'actual_dimensions_json', type: 'TEXT', notNull: false, primaryKey: 0 },
+  { name: 'last_vector_growth_json', type: 'TEXT', notNull: false, primaryKey: 0 },
+];
+
 /**
  * Initializes or validates the Cloudflare SQLite schema as one synchronous
  * transaction. The first versioned release adopts the exact pre-versioning
@@ -75,11 +83,12 @@ export function initializeCloudflareUsageSchema(storage: DurableObjectStorage): 
     if (version === undefined) {
       adoptOrCreateV1(storage);
       migrateV1ToV2(storage);
+      migrateV2ToV3(storage);
       storage.sql.exec(
         `INSERT INTO ${SCHEMA_TABLE} (id, version) VALUES (1, ?)`,
         CLOUDFLARE_USAGE_SCHEMA_VERSION,
       );
-      validateV2(storage);
+      validateV3(storage);
       return;
     }
 
@@ -93,19 +102,21 @@ export function initializeCloudflareUsageSchema(storage: DurableObjectStorage): 
     if (version === 1) {
       validateV1(storage, { allowMissingIndexes: false });
       migrateV1ToV2(storage);
-      storage.sql.exec(`UPDATE ${SCHEMA_TABLE} SET version = ? WHERE id = 1`, 2);
-      validateV2(storage);
+      migrateV2ToV3(storage);
+      storage.sql.exec(`UPDATE ${SCHEMA_TABLE} SET version = ? WHERE id = 1`, 3);
+      validateV3(storage);
       return;
     }
 
-    if (version < CLOUDFLARE_USAGE_SCHEMA_VERSION) {
-      throw new Error(
-        `Unsupported older Cloudflare usage schema version ${version}; ` +
-          'no migration step is registered',
-      );
+    if (version === 2) {
+      validateV2(storage);
+      migrateV2ToV3(storage);
+      storage.sql.exec(`UPDATE ${SCHEMA_TABLE} SET version = ? WHERE id = 1`, 3);
+      validateV3(storage);
+      return;
     }
 
-    validateV2(storage);
+    validateV3(storage);
   });
 }
 
@@ -217,6 +228,26 @@ function validateV2(storage: DurableObjectStorage): void {
   validateColumns(storage, RESERVATION_GROWTH_TABLE, RESERVATION_GROWTH_COLUMNS);
 }
 
+function migrateV2ToV3(storage: DurableObjectStorage): void {
+  storage.sql.exec(`
+    CREATE TABLE IF NOT EXISTS ${RESERVATION_VECTORS_TABLE} (
+      reservation_id TEXT PRIMARY KEY,
+      dimensions_json TEXT NOT NULL,
+      actual_dimensions_json TEXT,
+      last_vector_growth_json TEXT
+    );
+  `);
+}
+
+function validateV3(storage: DurableObjectStorage): void {
+  validateV2(storage);
+  const objects = applicationTables(storage);
+  if (!objects.has(RESERVATION_VECTORS_TABLE)) {
+    throw new Error('Cloudflare usage schema v3 is missing reservation_vectors');
+  }
+  validateColumns(storage, RESERVATION_VECTORS_TABLE, RESERVATION_VECTOR_COLUMNS);
+}
+
 function validateV1(
   storage: DurableObjectStorage,
   options: { allowMissingIndexes: boolean },
@@ -262,10 +293,11 @@ function applicationTables(storage: DurableObjectStorage): Map<string, SchemaObj
   const rows = storage.sql
     .exec<SchemaObjectRow>(
       `SELECT name, type, sql FROM sqlite_master
-       WHERE type = 'table' AND name IN (?, ?, ?)`,
+       WHERE type = 'table' AND name IN (?, ?, ?, ?)`,
       BUDGETS_TABLE,
       RESERVATIONS_TABLE,
       RESERVATION_GROWTH_TABLE,
+      RESERVATION_VECTORS_TABLE,
     )
     .toArray();
   return new Map(rows.map(row => [String(row.name), row]));

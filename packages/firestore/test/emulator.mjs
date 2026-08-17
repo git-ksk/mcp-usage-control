@@ -4,6 +4,7 @@ import { Firestore } from '@google-cloud/firestore';
 import {
   assertUsageStoreConformance,
   runProgressiveUsageStoreConformance,
+  runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
 import { FirestoreUsageStore } from '../dist/index.js';
 
@@ -74,6 +75,23 @@ async function testProgressiveConformance() {
     leaseTtlMs: 80,
   });
 
+  assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
+}
+
+async function testVectorConformance() {
+  const report = await runVectorUsageStoreConformance({
+    createStore(scenario) {
+      return storeFor(`vector_${scenario.replaceAll('-', '_')}`, {
+        cleanupBatchSize: 16,
+        cleanupIntervalMs: 0,
+      });
+    },
+    async waitForLeaseExpiry(ttlMs) {
+      await sleep(ttlMs + 120);
+    },
+    leaseTtlMs: 80,
+    concurrency: 8,
+  });
   assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
 }
 
@@ -227,6 +245,7 @@ async function testIdempotentSettlement() {
 const tests = [
   ['portable UsageStore conformance', testPortableConformance],
   ['progressive UsageStore conformance', testProgressiveConformance],
+  ['vector UsageStore conformance', testVectorConformance],
   ['multi-budget atomicity', testMultiBudgetAtomicity],
   ['shared-budget concurrency', testSharedBudgetConcurrency],
   ['pending expiry recovery', testPendingExpiryRecovery],

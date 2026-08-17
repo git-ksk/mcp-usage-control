@@ -200,3 +200,9 @@ CIの実Redis 7 test:
 Growth metadataは既存reservation JSONへadditiveに`growthCursor`とlatest replay metadataを保存します。v0.5以前が書いたreservationにはgrowth cursorがないため、fixed-reservation contractのままread / settle可能ですがgrowできません。v0.6 upgradeでRedis key migration、balance rewrite、resetは不要です。
 
 実Redis CIではportable progressive Store conformanceとcommitted-growth ACK-loss caseを実行します。ambiguous ACK後はsame stable increment identityだけをretryし、fresh increment発行は禁止です。
+
+## Atomic heterogeneous vector usage (v0.7)
+
+`RedisUsageStore`はoptional `VectorUsageStore`も実装します。existing reservation JSONへ`mode: "vector"`、dimensionごとのreserved total、reservation-wide growth cursor、vector-growth replay metadataをadditive保存します。modeなしexisting recordはscalarのままで、Redis key / balance migrationは不要です。
+
+vector reserve / grow / settleは全participating dimension / budgetを1 Lua transactionで処理します。pending expiryは全dimensionをrelease、liable expiryは全dimensionをretainします。Real Redis CIではportable vector conformanceとcommitted vector growth ACK-loss replayも実行します。

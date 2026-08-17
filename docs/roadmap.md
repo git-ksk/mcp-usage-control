@@ -10,11 +10,11 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.5.0 is released** as the pre-v1 stabilization baseline. **v0.6.0 is the current completion target and #83 has passed its design/implementation proof gate for adoption.**
+**v0.6.0 is released** as the current pre-v1 stabilization baseline. **v0.7.0 is the current completion target and #84 has passed its design/implementation proof gate for adoption.**
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
-The base runtime keeps bounded fixed reservations and one scalar quoted/actual unit count across every budget participating in a reservation. v0.6 adds optional progressive growth on that same reservation for growth-capable Stores; heterogeneous multi-dimensional usage remains a later decision.
+The base runtime keeps the existing scalar reservation path unchanged. v0.6 adds optional progressive growth on scalar reservations, and v0.7 adds a separate optional atomic vector path for heterogeneous dimensions. Neither capability makes the base `UsageStore` contract mandatory for third-party Stores.
 
 ## What “v1 complete” means
 
@@ -38,7 +38,7 @@ Each release below is a **decision gate**. A target feature is not forced into v
 | Release | Primary scope | Preferred outcome | Release gate |
 | --- | --- | --- | --- |
 | **v0.6.0** | #83 progressive reservation growth | **Adopted** as an optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`, growth cursor + stable increment identity, atomic multi-budget proof, lost-ACK replay fence, provider conformance |
-| **v0.7.0** | #84 heterogeneous multi-dimensional usage | Include atomic vector/per-dimension accounting in v1 if it composes cleanly with the v0.6 decision | One logical replay identity, atomic admission/settlement across dimensions, deterministic retry/conflict semantics, Store conformance; otherwise explicitly exclude/defer |
+| **v0.7.0** | #84 heterogeneous multi-dimensional usage | **Adopted** as an optional v1 core/Store extension | Separate `VectorUsageControl` / `VectorUsageStore`, one logical replay identity, atomic per-dimension admission/growth/settlement, deterministic retry/conflict semantics, provider conformance |
 | **v0.8.0** | #81 operation reconciliation/status | Include a coherent read-only reconciliation capability and per-Store support matrix | No second reservation, authoritative/provable states only, explicit `unknown/indeterminate`, adapter-specific lost-ACK evidence; otherwise define and freeze the narrower supported boundary |
 | **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals | Include bounded non-authoritative production observability/tooling or canonical helpers | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement; documentation-only outcome is acceptable if a stateful API adds more risk than value |
 | **v0.10.0** | Final completion / distribution / API freeze | Close all remaining v1-scope decisions and prove the public distribution | #24 Cloudflare real-operation boundary, #6 first npm publication, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |
@@ -69,11 +69,11 @@ Those guarantees are implemented and proof-tested through Memory plus portable/p
 
 ### v0.7.0 — heterogeneous multi-dimensional usage (#84)
 
-This decision follows #83 because progressive growth and multiple dimensions need a coherent composition model.
+**Decision: adopt for the future v1 stable surface as an optional capability.** The scalar API remains unchanged; vector callers opt into `VectorUsageControl` / `VectorUsageStore`.
 
-The preferred v1 design supports one logical operation consuming different dimensions such as request count, model tokens, compute seconds, or provider work units while preserving one atomic admission/settlement domain for the required dimensions.
+One logical operation may reserve different dimensions such as request count, model tokens, compute seconds, or provider work units without converting them into one synthetic scalar. Admission, growth, recovery, and settlement remain one reservation-wide atomic domain.
 
-Independent reserve calls that can partially commit are not equivalent. If a provider-neutral vector model cannot be added safely and compatibly across supported Stores, v0.7 explicitly keeps scalar accounting as the v1 contract and closes the decision.
+The proof covers scalar/vector operation collision, all-or-nothing multi-dimension admission, per-dimension settlement bounds, one growth cursor across the vector, exact lost-ACK replay, authoritative denial without partial growth, pending/liable expiry, and growth/settlement races across Memory, Redis, Cloudflare Durable Objects, and Firestore. Existing scalar Store implementations remain source-compatible.
 
 ### v0.8.0 — operation reconciliation/status (#81)
 
@@ -115,7 +115,7 @@ It must resolve:
 | Issue | Target decision | Current direction |
 | --- | --- | --- |
 | #83 progressive reservation growth | **v0.6.0** | **Adopted**: optional progressive Store capability + `UsageLease.grow()` |
-| #84 heterogeneous multi-dimensional usage | **v0.7.0** | Prefer inclusion if atomic vector model composes safely with #83 |
+| #84 heterogeneous multi-dimensional usage | **v0.7.0** | **Adopted**: optional atomic vector Store capability + `VectorUsageControl` |
 | #81 operation reconciliation/status | **v0.8.0** | Prefer inclusion as read-only capability vocabulary + Store support matrix |
 | #76 operational usage snapshot | **v0.9.0** | Prefer bounded non-authoritative helper/pattern |
 | #82 threshold/exhaustion signals | **v0.9.0** | Prefer optional scoped helper/pattern built on #76 semantics |

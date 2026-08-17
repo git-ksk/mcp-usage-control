@@ -105,3 +105,7 @@ adapterはalarmをscheduleせず、Durable Objectを意図的に常駐させま�
 - [Observability](../../docs/observability.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 - [Security](../../SECURITY.ja.md)
+
+## Atomic vector usage (v0.7)
+
+`CloudflareUsageStore` and `RemoteCloudflareUsageStore` implement optional `VectorUsageStore`. Schema v3 adds the `reservation_vectors` sidecar without rewriting v1/v2 scalar accounting rows. Durable Object `transactionSync` keeps all vector dimensions atomic; workerd integration covers vector conformance and remote committed-growth acknowledgement-loss replay.

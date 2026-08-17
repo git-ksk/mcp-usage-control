@@ -15,6 +15,18 @@ import {
   type StoreReserveResult,
   type UsageRequest,
   type UsageStore,
+  type UsageDimension,
+  type UsageDimensionActual,
+  type UsageDimensionGrowth,
+  type UsageDimensionReserved,
+  type VectorBudgetRemaining,
+  type VectorGrowReservationInput,
+  type VectorReserveInput,
+  type VectorSettleInput,
+  type VectorSettlementResult,
+  type VectorUsageStore,
+  type StoreVectorGrowResult,
+  type StoreVectorReserveResult,
 } from 'mcp-usage-control';
 
 /**
@@ -78,15 +90,26 @@ export interface FirestoreLike {
   ): Promise<T>;
 }
 
-export interface FirestoreRecoveryEvent {
-  type: 'reservation.recovered';
-  timestamp: number;
-  store: 'firestore';
-  recovery: 'pending_released' | 'liable_retained';
-  reservationId: string;
-  reservedUnits: number;
-  count: 1;
-}
+export type FirestoreRecoveryEvent =
+  | {
+      type: 'reservation.recovered';
+      timestamp: number;
+      store: 'firestore';
+      recovery: 'pending_released' | 'liable_retained';
+      reservationId: string;
+      reservedUnits: number;
+      count: 1;
+    }
+  | {
+      type: 'vector.reservation.recovered';
+      timestamp: number;
+      store: 'firestore';
+      recovery: 'pending_released' | 'liable_retained';
+      reservationId: string;
+      dimensionCount: number;
+      budgetCount: number;
+      count: 1;
+    };
 
 export interface FirestoreRecoveryObserver {
   onEvent(event: FirestoreRecoveryEvent): void | Promise<void>;
@@ -118,6 +141,8 @@ export interface FirestoreRecoverySummary {
   pendingUnits: number;
   liableCount: number;
   liableUnits: number;
+  vectorPendingCount: number;
+  vectorLiableCount: number;
   tombstonesDeleted: number;
 }
 
@@ -136,6 +161,30 @@ interface StoredGrowthReplay {
   remaining?: number;
 }
 
+interface StoredVectorDimension {
+  dimensionHash: string;
+  budgetIds: string[];
+  reservedUnits: number;
+}
+
+interface StoredVectorGrowthReplay {
+  incrementHash: string;
+  expectedGrowthCursor: string;
+  fingerprint: string;
+  nextGrowthCursor: string;
+  accepted: boolean;
+  previousReservedByDimensions?: Array<{ dimensionHash: string; reservedUnits: number }>;
+  reservedByDimensions?: Array<{ dimensionHash: string; reservedUnits: number }>;
+  remainingByBudgetIds?: Array<{
+    dimensionHash: string;
+    budgetId: string;
+    remaining: number;
+  }>;
+  limitingDimensionHash?: string;
+  limitingBudgetId?: string;
+  remaining?: number;
+}
+
 interface StoredReservation {
   schemaVersion: 1;
   state: ReservationState;
@@ -146,11 +195,16 @@ interface StoredReservation {
   outcomeHash?: string;
   growthCursor?: string;
   lastGrowth?: StoredGrowthReplay;
+  mode?: 'vector';
+  dimensions?: StoredVectorDimension[];
+  actualByDimensions?: Array<{ dimensionHash: string; actualUnits: number }>;
+  lastVectorGrowth?: StoredVectorGrowthReplay;
 }
 
 interface RecoveryResult {
   kind: 'none' | 'pending_released' | 'liable_retained' | 'tombstone_deleted';
   reservedUnits: number;
+  vector?: { dimensionCount: number; budgetCount: number };
 }
 
 interface ReserveTransactionResult {
@@ -180,7 +234,7 @@ const EXPIRED_LIABLE_OUTCOME = 'lease_expired_after_execution_started';
  * are SHA-256 hashed before becoming document IDs; hashing reduces accidental identifier
  * exposure but is not encryption.
  */
-export class FirestoreUsageStore implements ProgressiveUsageStore {
+export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageStore {
   private readonly prefix: string;
   private readonly idempotencyTtlMs: number;
   private readonly cleanupBatchSize: number;
@@ -234,7 +288,7 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
       async transaction => {
         const existingSnapshot = await transaction.get(reservationRef);
         const existing = readReservation(existingSnapshot);
-        const existingBudgetIds = existing?.budgetIds ?? [];
+        const existingBudgetIds = existing ? reservationBudgetIds(existing) : [];
         const allBudgetIds = uniqueSorted([...currentBudgetIds, ...existingBudgetIds]);
         const usedById = await readBudgets(transaction, this.budgets(), allBudgetIds);
 
@@ -350,6 +404,170 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
     return transactionResult.result;
   }
 
+  async reserveVector(input: VectorReserveInput): Promise<StoreVectorReserveResult> {
+    assertPositiveInteger(input.ttlMs, 'ttlMs');
+    validateRequestIdentity(input.request);
+    const dimensions = canonicalizeUsageDimensions(input.dimensions);
+    const entries = dimensions.map(dimension => ({
+      dimension,
+      dimensionHash: digest(dimension.key),
+      budgets: dimension.budgets.map(budget => ({ budget, budgetId: digest(budget.key) })),
+    }));
+    const currentBudgetIds = entries.flatMap(entry => entry.budgets.map(budget => budget.budgetId));
+    const now = this.nowMs();
+    await this.maybeCleanup(now);
+    const reservationId = reservationIdFor(input.request);
+    const reservationRef = this.reservations().doc(reservationId);
+    const initialGrowthCursor = newGrowthCursor();
+
+    const transactionResult = await this.runTransaction<{
+      result: StoreVectorReserveResult;
+      recovery?: RecoveryResult;
+    }>(async transaction => {
+      const existingSnapshot = await transaction.get(reservationRef);
+      const existing = readReservation(existingSnapshot);
+      const existingBudgetIds = existing ? reservationBudgetIds(existing) : [];
+      const allBudgetIds = uniqueSorted([...currentBudgetIds, ...existingBudgetIds]);
+      const usedById = await readBudgets(transaction, this.budgets(), allBudgetIds);
+
+      let recovery: RecoveryResult | undefined;
+      if (existing) {
+        if (!this.isExpired(existing, now)) {
+          return { result: { accepted: false, reason: 'duplicate_operation' } };
+        }
+        recovery = recoverStoredReservation(existing, usedById);
+        if (recovery.kind === 'liable_retained') {
+          transaction.set(
+            reservationRef,
+            settledFromExpiredLiable(existing, now, this.idempotencyTtlMs),
+          );
+          return {
+            result: { accepted: false, reason: 'duplicate_operation' },
+            recovery,
+          };
+        }
+      }
+
+      const balances: VectorBudgetRemaining[] = [];
+      let limiting:
+        | { dimensionKey: string; budgetKey: string; remaining: number }
+        | undefined;
+      for (const entry of entries) {
+        for (const budgetEntry of entry.budgets) {
+          const remaining = Math.max(
+            0,
+            budgetEntry.budget.limit - (usedById.get(budgetEntry.budgetId) ?? 0),
+          );
+          balances.push({
+            dimensionKey: entry.dimension.key,
+            budgetKey: budgetEntry.budget.key,
+            remaining,
+          });
+          if (!limiting && entry.dimension.units > remaining) {
+            limiting = {
+              dimensionKey: entry.dimension.key,
+              budgetKey: budgetEntry.budget.key,
+              remaining,
+            };
+          }
+        }
+      }
+
+      if (limiting) {
+        if (recovery?.kind === 'pending_released') {
+          writeUsedBudgets(
+            transaction,
+            this.budgets(),
+            usedById,
+            existingBudgetIds,
+            now,
+          );
+          transaction.delete(reservationRef);
+        } else if (recovery?.kind === 'tombstone_deleted') {
+          transaction.delete(reservationRef);
+        }
+        return {
+          result: {
+            accepted: false,
+            reason: 'quota_exceeded',
+            limitingDimensionKey: limiting.dimensionKey,
+            limitingBudgetKey: limiting.budgetKey,
+            remaining: limiting.remaining,
+          },
+          ...(recovery === undefined ? {} : { recovery }),
+        };
+      }
+
+      for (const entry of entries) {
+        for (const budgetEntry of entry.budgets) {
+          usedById.set(
+            budgetEntry.budgetId,
+            safeAdd(
+              usedById.get(budgetEntry.budgetId) ?? 0,
+              entry.dimension.units,
+              'vector budget usage',
+            ),
+          );
+        }
+      }
+      const expiresAt = safeAdd(now, input.ttlMs, 'reservation expiry');
+      const stored: StoredReservation = {
+        schemaVersion: 1,
+        mode: 'vector',
+        state: 'pending',
+        budgetIds: [],
+        reservedUnits: 0,
+        dimensions: entries.map(entry => ({
+          dimensionHash: entry.dimensionHash,
+          budgetIds: entry.budgets.map(budget => budget.budgetId),
+          reservedUnits: entry.dimension.units,
+        })),
+        expiresAtMs: expiresAt,
+        growthCursor: initialGrowthCursor,
+      };
+      const touchedBudgetIds = uniqueSorted([
+        ...currentBudgetIds,
+        ...(recovery?.kind === 'pending_released' ? existingBudgetIds : []),
+      ]);
+      writeUsedBudgets(transaction, this.budgets(), usedById, touchedBudgetIds, now);
+      transaction.set(reservationRef, stored as unknown as Record<string, unknown>);
+      return {
+        result: {
+          accepted: true,
+          reservation: {
+            id: reservationId,
+            operationId: input.request.operationId,
+            principalId: input.request.principal.id,
+            ...(input.request.principal.tenantId === undefined
+              ? {}
+              : { tenantId: input.request.principal.tenantId }),
+            ...(input.request.principal.plan === undefined
+              ? {}
+              : { plan: input.request.principal.plan }),
+            tool: input.request.tool,
+            dimensions: dimensions.map(dimension => ({
+              key: dimension.key,
+              budgetKeys: dimension.budgets.map(budget => budget.key),
+              reservedUnits: dimension.units,
+            })),
+            expiresAt,
+            growthCursor: initialGrowthCursor,
+          },
+          remainingByBudget: balances.map(balance => {
+            const units = dimensions.find(dimension => dimension.key === balance.dimensionKey)!.units;
+            return { ...balance, remaining: balance.remaining - units };
+          }),
+        },
+        ...(recovery === undefined ? {} : { recovery }),
+      };
+    });
+
+    if (transactionResult.recovery) {
+      this.emitRecovery(transactionResult.recovery, reservationId, now);
+    }
+    return transactionResult.result;
+  }
+
   async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
     assertReservationId(input.reservationId);
     if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
@@ -382,7 +600,7 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
       | { ok: true; result: StoreGrowResult }
       | {
           ok: false;
-          reason: 'missing' | 'terminal' | 'conflict' | 'stale_cursor' | 'budget_mismatch' | 'not_supported';
+          reason: 'missing' | 'terminal' | 'conflict' | 'stale_cursor' | 'budget_mismatch' | 'not_supported' | 'mode_mismatch';
           recovery?: RecoveryResult;
         }
     >(async transaction => {
@@ -402,6 +620,7 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
         return { ok: false, reason: 'missing', recovery };
       }
       if (reservation.state === 'settled') return { ok: false, reason: 'terminal' };
+      if (isVectorReservation(reservation)) return { ok: false, reason: 'mode_mismatch' };
 
       const lastGrowth = reservation.lastGrowth;
       if (lastGrowth?.incrementHash === incrementHash) {
@@ -525,6 +744,248 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
       if (transactionResult.reason === 'not_supported') {
         throw new UsageStateError('Reservation does not support progressive growth');
       }
+      if (transactionResult.reason === 'mode_mismatch') {
+        throw new UsageStateError('Scalar growth cannot target a vector reservation');
+      }
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    return transactionResult.result;
+  }
+
+  async growVectorReservation(input: VectorGrowReservationInput): Promise<StoreVectorGrowResult> {
+    assertReservationId(input.reservationId);
+    if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+      throw new RangeError('incrementId must be a non-empty string');
+    }
+    if (typeof input.expectedGrowthCursor !== 'string' || input.expectedGrowthCursor.length === 0) {
+      throw new RangeError('expectedGrowthCursor must be a non-empty string');
+    }
+    const dimensions = canonicalizeGrowthDimensions(input.dimensions);
+    const entries = dimensions.map(dimension => ({
+      dimension,
+      dimensionHash: digest(dimension.key),
+      budgets: dimension.budgets.map(budget => ({ budget, budgetId: digest(budget.key) })),
+    }));
+    const currentBudgetIds = entries.flatMap(entry => entry.budgets.map(budget => budget.budgetId));
+    const dimensionByHash = new Map(entries.map(entry => [entry.dimensionHash, entry.dimension] as const));
+    const budgetById = new Map(
+      entries.flatMap(entry => entry.budgets.map(budget => [budget.budgetId, budget.budget] as const)),
+    );
+    const incrementHash = digest(input.incrementId);
+    const fingerprint = digest(
+      JSON.stringify(
+        entries.map(entry => [
+          entry.dimensionHash,
+          entry.dimension.additionalUnits,
+          entry.budgets.map(budget => [budget.budgetId, budget.budget.limit]),
+        ]),
+      ),
+    );
+    const nextGrowthCursor = newGrowthCursor();
+    const now = this.nowMs();
+    const reference = this.reservations().doc(input.reservationId);
+
+    const transactionResult = await this.runTransaction<
+      | { ok: true; result: StoreVectorGrowResult }
+      | {
+          ok: false;
+          reason:
+            | 'missing'
+            | 'terminal'
+            | 'conflict'
+            | 'stale_cursor'
+            | 'dimension_mismatch'
+            | 'not_supported'
+            | 'mode_mismatch';
+          recovery?: RecoveryResult;
+        }
+    >(async transaction => {
+      const snapshot = await transaction.get(reference);
+      const reservation = readReservation(snapshot);
+      if (!reservation) return { ok: false, reason: 'missing' };
+      if (this.isExpired(reservation, now)) {
+        const recovery = await recoverExpiredReservation(
+          transaction,
+          reference,
+          this.budgets(),
+          reservation,
+          now,
+          this.idempotencyTtlMs,
+        );
+        return { ok: false, reason: 'missing', recovery };
+      }
+      if (reservation.state === 'settled') return { ok: false, reason: 'terminal' };
+      if (!isVectorReservation(reservation)) return { ok: false, reason: 'mode_mismatch' };
+
+      const lastGrowth = reservation.lastVectorGrowth;
+      if (lastGrowth?.incrementHash === incrementHash) {
+        if (
+          lastGrowth.expectedGrowthCursor !== input.expectedGrowthCursor ||
+          lastGrowth.fingerprint !== fingerprint
+        ) {
+          return { ok: false, reason: 'conflict' };
+        }
+        return {
+          ok: true,
+          result: vectorGrowthResultFromStored(
+            input.reservationId,
+            input.incrementId,
+            lastGrowth,
+            dimensionByHash,
+            budgetById,
+            true,
+          ),
+        };
+      }
+
+      if (!reservation.growthCursor) return { ok: false, reason: 'not_supported' };
+      if (reservation.growthCursor !== input.expectedGrowthCursor) {
+        return { ok: false, reason: 'stale_cursor' };
+      }
+      if (!sameStoredVectorGrowthTopology(reservation.dimensions!, entries)) {
+        return { ok: false, reason: 'dimension_mismatch' };
+      }
+
+      const usedById = await readBudgets(transaction, this.budgets(), currentBudgetIds);
+      const remainingByBudgetIds: NonNullable<StoredVectorGrowthReplay['remainingByBudgetIds']> = [];
+      let limiting:
+        | { dimensionHash: string; budgetId: string; remaining: number }
+        | undefined;
+      for (const entry of entries) {
+        for (const budgetEntry of entry.budgets) {
+          const remaining = Math.max(
+            0,
+            budgetEntry.budget.limit - (usedById.get(budgetEntry.budgetId) ?? 0),
+          );
+          remainingByBudgetIds.push({
+            dimensionHash: entry.dimensionHash,
+            budgetId: budgetEntry.budgetId,
+            remaining,
+          });
+          if (!limiting && entry.dimension.additionalUnits > remaining) {
+            limiting = {
+              dimensionHash: entry.dimensionHash,
+              budgetId: budgetEntry.budgetId,
+              remaining,
+            };
+          }
+        }
+      }
+
+      if (limiting) {
+        const last: StoredVectorGrowthReplay = {
+          incrementHash,
+          expectedGrowthCursor: input.expectedGrowthCursor,
+          fingerprint,
+          nextGrowthCursor,
+          accepted: false,
+          limitingDimensionHash: limiting.dimensionHash,
+          limitingBudgetId: limiting.budgetId,
+          remaining: limiting.remaining,
+        };
+        transaction.set(reference, {
+          ...reservation,
+          growthCursor: nextGrowthCursor,
+          lastVectorGrowth: last,
+        } as unknown as Record<string, unknown>);
+        return {
+          ok: true,
+          result: vectorGrowthResultFromStored(
+            input.reservationId,
+            input.incrementId,
+            last,
+            dimensionByHash,
+            budgetById,
+            false,
+          ),
+        };
+      }
+
+      const previousReservedByDimensions = reservation.dimensions!.map(dimension => ({
+        dimensionHash: dimension.dimensionHash,
+        reservedUnits: dimension.reservedUnits,
+      }));
+      const entryByHash = new Map(entries.map(entry => [entry.dimensionHash, entry] as const));
+      const nextDimensions = reservation.dimensions!.map(dimension => {
+        const entry = entryByHash.get(dimension.dimensionHash)!;
+        for (const budgetEntry of entry.budgets) {
+          usedById.set(
+            budgetEntry.budgetId,
+            safeAdd(
+              usedById.get(budgetEntry.budgetId) ?? 0,
+              entry.dimension.additionalUnits,
+              'vector budget usage',
+            ),
+          );
+        }
+        return {
+          ...dimension,
+          reservedUnits: safeAdd(
+            dimension.reservedUnits,
+            entry.dimension.additionalUnits,
+            'vector reservedUnits',
+          ),
+        };
+      });
+      const reservedByDimensions = nextDimensions.map(dimension => ({
+        dimensionHash: dimension.dimensionHash,
+        reservedUnits: dimension.reservedUnits,
+      }));
+      const adjustedRemaining = remainingByBudgetIds.map(balance => ({
+        ...balance,
+        remaining:
+          balance.remaining -
+          entryByHash.get(balance.dimensionHash)!.dimension.additionalUnits,
+      }));
+      const last: StoredVectorGrowthReplay = {
+        incrementHash,
+        expectedGrowthCursor: input.expectedGrowthCursor,
+        fingerprint,
+        nextGrowthCursor,
+        accepted: true,
+        previousReservedByDimensions,
+        reservedByDimensions,
+        remainingByBudgetIds: adjustedRemaining,
+      };
+      writeUsedBudgets(transaction, this.budgets(), usedById, currentBudgetIds, now);
+      transaction.set(reference, {
+        ...reservation,
+        dimensions: nextDimensions,
+        growthCursor: nextGrowthCursor,
+        lastVectorGrowth: last,
+      } as unknown as Record<string, unknown>);
+      return {
+        ok: true,
+        result: vectorGrowthResultFromStored(
+          input.reservationId,
+          input.incrementId,
+          last,
+          dimensionByHash,
+          budgetById,
+          false,
+        ),
+      };
+    });
+
+    if (!transactionResult.ok) {
+      if (transactionResult.recovery) {
+        this.emitRecovery(transactionResult.recovery, input.reservationId, now);
+      }
+      if (transactionResult.reason === 'conflict') {
+        throw new UsageStateError('Vector growth increment was already attempted with different parameters');
+      }
+      if (transactionResult.reason === 'stale_cursor') {
+        throw new UsageStateError('Vector growth cursor is stale or conflicts with reservation state');
+      }
+      if (transactionResult.reason === 'dimension_mismatch') {
+        throw new UsageStateError('Vector growth dimensions and budgets must match the reservation');
+      }
+      if (transactionResult.reason === 'not_supported') {
+        throw new UsageStateError('Vector reservation does not support progressive growth');
+      }
+      if (transactionResult.reason === 'mode_mismatch') {
+        throw new UsageStateError('Vector growth cannot target a scalar reservation');
+      }
       throw new UsageStateError('Reservation not found, expired, or no longer active');
     }
     return transactionResult.result;
@@ -576,7 +1037,7 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
       | { ok: true; settlement: SettlementResult }
       | {
           ok: false;
-          reason: 'missing' | 'invalid_units' | 'conflict';
+          reason: 'missing' | 'invalid_units' | 'conflict' | 'mode_mismatch';
           recovery?: RecoveryResult;
         }
     >(async transaction => {
@@ -594,6 +1055,10 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
           this.idempotencyTtlMs,
         );
         return { ok: false, reason: 'missing', recovery };
+      }
+
+      if (isVectorReservation(reservation)) {
+        return { ok: false, reason: 'mode_mismatch' };
       }
 
       if (reservation.state === 'settled') {
@@ -666,9 +1131,124 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
       if (transactionResult.reason === 'conflict') {
         throw new UsageStateError('Reservation was already settled with a different result');
       }
+      if (transactionResult.reason === 'mode_mismatch') {
+        throw new UsageStateError('Scalar settlement cannot target a vector reservation');
+      }
       throw new UsageStateError('Reservation not found or expired');
     }
 
+    return transactionResult.settlement;
+  }
+
+  async settleVector(input: VectorSettleInput): Promise<VectorSettlementResult> {
+    assertReservationId(input.reservationId);
+    const actuals = canonicalizeActualDimensions(input.actualByDimension);
+    const encodedActuals = actuals.map(actual => ({
+      dimensionHash: digest(actual.key),
+      actualUnits: actual.actualUnits,
+    }));
+    const keyByHash = new Map(encodedActuals.map((actual, index) => [actual.dimensionHash, actuals[index]!.key] as const));
+    const outcomeHash = digest(input.outcome);
+    const now = this.nowMs();
+    const reference = this.reservations().doc(input.reservationId);
+
+    const transactionResult = await this.runTransaction<
+      | { ok: true; settlement: VectorSettlementResult }
+      | {
+          ok: false;
+          reason: 'missing' | 'invalid_units' | 'conflict' | 'dimension_mismatch' | 'mode_mismatch';
+          recovery?: RecoveryResult;
+        }
+    >(async transaction => {
+      const snapshot = await transaction.get(reference);
+      const reservation = readReservation(snapshot);
+      if (!reservation) return { ok: false, reason: 'missing' };
+      if (this.isExpired(reservation, now)) {
+        const recovery = await recoverExpiredReservation(
+          transaction,
+          reference,
+          this.budgets(),
+          reservation,
+          now,
+          this.idempotencyTtlMs,
+        );
+        return { ok: false, reason: 'missing', recovery };
+      }
+      if (!isVectorReservation(reservation)) return { ok: false, reason: 'mode_mismatch' };
+      if (!sameVectorActualTopology(reservation.dimensions!, encodedActuals)) {
+        return { ok: false, reason: 'dimension_mismatch' };
+      }
+
+      if (reservation.state === 'settled') {
+        if (
+          reservation.outcomeHash !== outcomeHash ||
+          !sameStoredVectorActuals(reservation.actualByDimensions, encodedActuals)
+        ) {
+          return { ok: false, reason: 'conflict' };
+        }
+        return {
+          ok: true,
+          settlement: vectorSettlementFromStored(
+            input.reservationId,
+            reservation,
+            encodedActuals,
+            keyByHash,
+            input.outcome,
+          ),
+        };
+      }
+
+      for (let index = 0; index < reservation.dimensions!.length; index += 1) {
+        if (encodedActuals[index]!.actualUnits > reservation.dimensions![index]!.reservedUnits) {
+          return { ok: false, reason: 'invalid_units' };
+        }
+      }
+      const budgetIds = reservationBudgetIds(reservation);
+      const usedById = await readBudgets(transaction, this.budgets(), budgetIds);
+      for (let index = 0; index < reservation.dimensions!.length; index += 1) {
+        const dimension = reservation.dimensions![index]!;
+        const released = dimension.reservedUnits - encodedActuals[index]!.actualUnits;
+        if (released > 0) releaseAcrossBudgets(usedById, dimension.budgetIds, released);
+      }
+      writeUsedBudgets(transaction, this.budgets(), usedById, budgetIds, now);
+      const settledReservation: StoredReservation = {
+        ...reservation,
+        state: 'settled',
+        expiresAtMs: safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry'),
+        actualByDimensions: encodedActuals,
+        outcomeHash,
+      };
+      transaction.set(reference, settledReservation as unknown as Record<string, unknown>);
+      return {
+        ok: true,
+        settlement: vectorSettlementFromStored(
+          input.reservationId,
+          settledReservation,
+          encodedActuals,
+          keyByHash,
+          input.outcome,
+        ),
+      };
+    });
+
+    if (!transactionResult.ok) {
+      if (transactionResult.recovery) {
+        this.emitRecovery(transactionResult.recovery, input.reservationId, now);
+      }
+      if (transactionResult.reason === 'invalid_units') {
+        throw new UsageStateError('actualUnits cannot exceed reservedUnits for a vector dimension');
+      }
+      if (transactionResult.reason === 'conflict') {
+        throw new UsageStateError('Vector reservation was already settled with a different result');
+      }
+      if (transactionResult.reason === 'dimension_mismatch') {
+        throw new UsageStateError('Vector settlement dimensions must exactly match the reservation');
+      }
+      if (transactionResult.reason === 'mode_mismatch') {
+        throw new UsageStateError('Vector settlement cannot target a scalar reservation');
+      }
+      throw new UsageStateError('Reservation not found or expired');
+    }
     return transactionResult.settlement;
   }
 
@@ -693,18 +1273,26 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
       pendingUnits: 0,
       liableCount: 0,
       liableUnits: 0,
+      vectorPendingCount: 0,
+      vectorLiableCount: 0,
       tombstonesDeleted: 0,
     };
 
     for (const document of snapshot.docs) {
       const recovery = await this.recoverReservation(document.ref.id, now);
       if (recovery.kind === 'pending_released') {
-        summary.pendingCount += 1;
-        summary.pendingUnits += recovery.reservedUnits;
+        if (recovery.vector) summary.vectorPendingCount += 1;
+        else {
+          summary.pendingCount += 1;
+          summary.pendingUnits += recovery.reservedUnits;
+        }
         this.emitRecovery(recovery, document.ref.id, now);
       } else if (recovery.kind === 'liable_retained') {
-        summary.liableCount += 1;
-        summary.liableUnits += recovery.reservedUnits;
+        if (recovery.vector) summary.vectorLiableCount += 1;
+        else {
+          summary.liableCount += 1;
+          summary.liableUnits += recovery.reservedUnits;
+        }
         this.emitRecovery(recovery, document.ref.id, now);
       } else if (recovery.kind === 'tombstone_deleted') {
         summary.tombstonesDeleted += 1;
@@ -809,6 +1397,19 @@ export class FirestoreUsageStore implements ProgressiveUsageStore {
     ) {
       return;
     }
+    if (recovery.vector) {
+      emitFirestoreRecovery(this.observer, {
+        type: 'vector.reservation.recovered',
+        timestamp: now,
+        store: 'firestore',
+        recovery: recovery.kind,
+        reservationId,
+        dimensionCount: recovery.vector.dimensionCount,
+        budgetCount: recovery.vector.budgetCount,
+        count: 1,
+      });
+      return;
+    }
     emitFirestoreRecovery(this.observer, {
       type: 'reservation.recovered',
       timestamp: now,
@@ -867,39 +1468,22 @@ async function recoverExpiredReservation(
   idempotencyTtlMs: number,
 ): Promise<RecoveryResult> {
   if (reservation.state === 'pending') {
-    const usedById = await readBudgets(
-      transaction,
-      budgetCollection,
-      reservation.budgetIds,
-    );
-    releaseAcrossBudgets(usedById, reservation.budgetIds, reservation.reservedUnits);
-    writeUsedBudgets(
-      transaction,
-      budgetCollection,
-      usedById,
-      reservation.budgetIds,
-      now,
-    );
+    const budgetIds = reservationBudgetIds(reservation);
+    const usedById = await readBudgets(transaction, budgetCollection, budgetIds);
+    releaseReservationAcrossBudgets(usedById, reservation);
+    writeUsedBudgets(transaction, budgetCollection, usedById, budgetIds, now);
     transaction.delete(reservationRef);
-    return {
-      kind: 'pending_released',
-      reservedUnits: reservation.reservedUnits,
-    };
+    return recoveryResult('pending_released', reservation);
   }
 
   if (reservation.state === 'liable') {
-    // Full reservation remains charged. No budget read/write is necessary.
     transaction.set(
       reservationRef,
       settledFromExpiredLiable(reservation, now, idempotencyTtlMs),
     );
-    return {
-      kind: 'liable_retained',
-      reservedUnits: reservation.reservedUnits,
-    };
+    return recoveryResult('liable_retained', reservation);
   }
 
-  // A settled tombstone no longer owns releasable capacity.
   transaction.delete(reservationRef);
   return { kind: 'tombstone_deleted', reservedUnits: 0 };
 }
@@ -909,17 +1493,11 @@ function recoverStoredReservation(
   usedById: Map<string, number>,
 ): RecoveryResult {
   if (reservation.state === 'pending') {
-    releaseAcrossBudgets(usedById, reservation.budgetIds, reservation.reservedUnits);
-    return {
-      kind: 'pending_released',
-      reservedUnits: reservation.reservedUnits,
-    };
+    releaseReservationAcrossBudgets(usedById, reservation);
+    return recoveryResult('pending_released', reservation);
   }
   if (reservation.state === 'liable') {
-    return {
-      kind: 'liable_retained',
-      reservedUnits: reservation.reservedUnits,
-    };
+    return recoveryResult('liable_retained', reservation);
   }
   return { kind: 'tombstone_deleted', reservedUnits: 0 };
 }
@@ -929,13 +1507,63 @@ function settledFromExpiredLiable(
   now: number,
   idempotencyTtlMs: number,
 ): Record<string, unknown> {
-  return {
+  const base = {
     ...reservation,
     state: 'settled',
     expiresAtMs: safeAdd(now, idempotencyTtlMs, 'tombstone expiry'),
-    actualUnits: reservation.reservedUnits,
     outcomeHash: digest(EXPIRED_LIABLE_OUTCOME),
   };
+  if (isVectorReservation(reservation)) {
+    return {
+      ...base,
+      actualByDimensions: reservation.dimensions!.map(dimension => ({
+        dimensionHash: dimension.dimensionHash,
+        actualUnits: dimension.reservedUnits,
+      })),
+    };
+  }
+  return { ...base, actualUnits: reservation.reservedUnits };
+}
+
+function isVectorReservation(reservation: StoredReservation): boolean {
+  return reservation.mode === 'vector';
+}
+
+function reservationBudgetIds(reservation: StoredReservation): string[] {
+  if (!isVectorReservation(reservation)) return [...reservation.budgetIds];
+  return uniqueSorted(
+    reservation.dimensions!.flatMap(dimension => dimension.budgetIds),
+  );
+}
+
+function releaseReservationAcrossBudgets(
+  usedById: Map<string, number>,
+  reservation: StoredReservation,
+): void {
+  if (!isVectorReservation(reservation)) {
+    releaseAcrossBudgets(usedById, reservation.budgetIds, reservation.reservedUnits);
+    return;
+  }
+  for (const dimension of reservation.dimensions!) {
+    releaseAcrossBudgets(usedById, dimension.budgetIds, dimension.reservedUnits);
+  }
+}
+
+function recoveryResult(
+  kind: 'pending_released' | 'liable_retained',
+  reservation: StoredReservation,
+): RecoveryResult {
+  if (isVectorReservation(reservation)) {
+    return {
+      kind,
+      reservedUnits: 0,
+      vector: {
+        dimensionCount: reservation.dimensions!.length,
+        budgetCount: reservationBudgetIds(reservation).length,
+      },
+    };
+  }
+  return { kind, reservedUnits: reservation.reservedUnits };
 }
 
 async function readBudgets(
@@ -1000,6 +1628,9 @@ function readReservation(
   if (state !== 'pending' && state !== 'liable' && state !== 'settled') {
     throw new UsageStateError('Firestore reservation document had an invalid state');
   }
+  if (data.mode !== undefined && data.mode !== 'vector') {
+    throw new UsageStateError('Firestore reservation document had an invalid mode');
+  }
   const budgetIds = data.budgetIds;
   if (
     !Array.isArray(budgetIds) ||
@@ -1020,6 +1651,13 @@ function readReservation(
     reservedUnits,
     expiresAtMs,
   };
+  if (data.mode === 'vector') {
+    result.mode = 'vector';
+    result.dimensions = readStoredVectorDimensions(data.dimensions);
+    if (budgetIds.length !== 0 || reservedUnits !== 0) {
+      throw new UsageStateError('Firestore vector reservation had non-empty scalar accounting fields');
+    }
+  }
   if (data.actualUnits !== undefined) {
     result.actualUnits = readSafeNonNegativeInteger(data.actualUnits, 'actualUnits');
   }
@@ -1035,13 +1673,102 @@ function readReservation(
     }
     result.growthCursor = data.growthCursor;
   }
-  if (data.lastGrowth !== undefined) {
-    result.lastGrowth = readStoredGrowthReplay(data.lastGrowth);
+  if (data.lastGrowth !== undefined) result.lastGrowth = readStoredGrowthReplay(data.lastGrowth);
+  if (data.actualByDimensions !== undefined) {
+    result.actualByDimensions = readStoredVectorActuals(data.actualByDimensions);
   }
-  if (state === 'settled' && (result.actualUnits === undefined || result.outcomeHash === undefined)) {
-    throw new UsageStateError('Firestore settled reservation was incomplete');
+  if (data.lastVectorGrowth !== undefined) {
+    result.lastVectorGrowth = readStoredVectorGrowthReplay(data.lastVectorGrowth);
+  }
+
+  if (isVectorReservation(result)) {
+    if (result.actualUnits !== undefined || result.lastGrowth !== undefined) {
+      throw new UsageStateError('Firestore vector reservation contained scalar lifecycle metadata');
+    }
+    if (
+      result.actualByDimensions !== undefined &&
+      !sameVectorActualTopology(result.dimensions!, result.actualByDimensions)
+    ) {
+      throw new UsageStateError('Firestore vector reservation had invalid actual dimensions');
+    }
+    if (state === 'settled' && (!result.actualByDimensions || !result.outcomeHash)) {
+      throw new UsageStateError('Firestore settled vector reservation was incomplete');
+    }
+  } else {
+    if (result.dimensions || result.actualByDimensions || result.lastVectorGrowth) {
+      throw new UsageStateError('Firestore scalar reservation contained vector metadata');
+    }
+    if (state === 'settled' && (result.actualUnits === undefined || result.outcomeHash === undefined)) {
+      throw new UsageStateError('Firestore settled reservation was incomplete');
+    }
   }
   return result;
+}
+
+function readStoredVectorDimensions(value: unknown): StoredVectorDimension[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new UsageStateError('Firestore vector reservation had invalid dimensions');
+  }
+  const dimensions = value.map(item => {
+    if (!item || typeof item !== 'object') {
+      throw new UsageStateError('Firestore vector reservation had invalid dimension data');
+    }
+    const data = item as Record<string, unknown>;
+    if (typeof data.dimensionHash !== 'string' || !HASH_PATTERN.test(data.dimensionHash)) {
+      throw new UsageStateError('Firestore vector reservation had invalid dimension hash');
+    }
+    if (
+      !Array.isArray(data.budgetIds) ||
+      data.budgetIds.length === 0 ||
+      !data.budgetIds.every(id => typeof id === 'string' && HASH_PATTERN.test(id))
+    ) {
+      throw new UsageStateError('Firestore vector reservation had invalid dimension budget IDs');
+    }
+    const budgetIds = [...data.budgetIds] as string[];
+    if (new Set(budgetIds).size !== budgetIds.length) {
+      throw new UsageStateError('Firestore vector reservation had duplicate dimension budget IDs');
+    }
+    return {
+      dimensionHash: data.dimensionHash,
+      budgetIds,
+      reservedUnits: readSafeNonNegativeInteger(data.reservedUnits, 'vector reservedUnits'),
+    };
+  });
+  if (new Set(dimensions.map(item => item.dimensionHash)).size !== dimensions.length) {
+    throw new UsageStateError('Firestore vector reservation had duplicate dimensions');
+  }
+  const allBudgetIds = dimensions.flatMap(item => item.budgetIds);
+  if (new Set(allBudgetIds).size !== allBudgetIds.length) {
+    throw new UsageStateError('Firestore budget ID appeared in multiple vector dimensions');
+  }
+  return dimensions;
+}
+
+function readStoredVectorActuals(value: unknown): Array<{ dimensionHash: string; actualUnits: number }> {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new UsageStateError('Firestore vector actual dimensions were invalid');
+  }
+  return value.map(item => {
+    if (!item || typeof item !== 'object') throw new UsageStateError('Firestore vector actual entry was invalid');
+    const data = item as Record<string, unknown>;
+    if (typeof data.dimensionHash !== 'string' || !HASH_PATTERN.test(data.dimensionHash)) {
+      throw new UsageStateError('Firestore vector actual entry had invalid dimension hash');
+    }
+    return {
+      dimensionHash: data.dimensionHash,
+      actualUnits: readSafeNonNegativeInteger(data.actualUnits, 'vector actualUnits'),
+    };
+  });
+}
+
+function sameVectorActualTopology(
+  dimensions: readonly StoredVectorDimension[],
+  actuals: readonly { dimensionHash: string }[],
+): boolean {
+  return (
+    dimensions.length === actuals.length &&
+    dimensions.every((dimension, index) => dimension.dimensionHash === actuals[index]!.dimensionHash)
+  );
 }
 
 function readBudgetUsed(
@@ -1166,6 +1893,307 @@ function readStoredGrowthReplay(value: unknown): StoredGrowthReplay {
     result.remaining = readSafeNonNegativeInteger(data.remaining, 'growth remaining');
   }
   return result;
+}
+
+function sameStoredVectorGrowthTopology(
+  stored: readonly StoredVectorDimension[],
+  current: readonly {
+    dimensionHash: string;
+    budgets: readonly { budgetId: string }[];
+  }[],
+): boolean {
+  return (
+    stored.length === current.length &&
+    stored.every((dimension, index) => {
+      const candidate = current[index];
+      return (
+        candidate !== undefined &&
+        dimension.dimensionHash === candidate.dimensionHash &&
+        sameStringArray(
+          dimension.budgetIds,
+          candidate.budgets.map(budget => budget.budgetId),
+        )
+      );
+    })
+  );
+}
+
+function vectorGrowthResultFromStored(
+  reservationId: string,
+  incrementId: string,
+  growth: StoredVectorGrowthReplay,
+  dimensionByHash: ReadonlyMap<string, { key: string }>,
+  budgetById: ReadonlyMap<string, Budget>,
+  replayed: boolean,
+): StoreVectorGrowResult {
+  if (growth.accepted) {
+    if (
+      !growth.previousReservedByDimensions ||
+      !growth.reservedByDimensions ||
+      !growth.remainingByBudgetIds
+    ) {
+      throw new UsageStateError('Firestore stored accepted vector growth result was incomplete');
+    }
+    return {
+      accepted: true,
+      replayed,
+      reservationId,
+      incrementId,
+      growthCursor: growth.nextGrowthCursor,
+      previousReservedByDimension: mapStoredVectorReserved(
+        growth.previousReservedByDimensions,
+        dimensionByHash,
+      ),
+      reservedByDimension: mapStoredVectorReserved(
+        growth.reservedByDimensions,
+        dimensionByHash,
+      ),
+      remainingByBudget: growth.remainingByBudgetIds.map(balance => {
+        const dimension = dimensionByHash.get(balance.dimensionHash);
+        const budget = budgetById.get(balance.budgetId);
+        if (!dimension || !budget) {
+          throw new UsageStateError('Firestore vector growth replay referenced unknown identifiers');
+        }
+        return {
+          dimensionKey: dimension.key,
+          budgetKey: budget.key,
+          remaining: balance.remaining,
+        };
+      }),
+    };
+  }
+  if (
+    !growth.limitingDimensionHash ||
+    !growth.limitingBudgetId ||
+    growth.remaining === undefined
+  ) {
+    throw new UsageStateError('Firestore stored denied vector growth result was incomplete');
+  }
+  const dimension = dimensionByHash.get(growth.limitingDimensionHash);
+  const budget = budgetById.get(growth.limitingBudgetId);
+  if (!dimension || !budget) {
+    throw new UsageStateError('Firestore vector growth denial referenced unknown identifiers');
+  }
+  return {
+    accepted: false,
+    reason: 'quota_exceeded',
+    replayed,
+    reservationId,
+    incrementId,
+    growthCursor: growth.nextGrowthCursor,
+    limitingDimensionKey: dimension.key,
+    limitingBudgetKey: budget.key,
+    remaining: growth.remaining,
+  };
+}
+
+function mapStoredVectorReserved(
+  values: readonly { dimensionHash: string; reservedUnits: number }[],
+  dimensionByHash: ReadonlyMap<string, { key: string }>,
+): UsageDimensionReserved[] {
+  return values.map(value => {
+    const dimension = dimensionByHash.get(value.dimensionHash);
+    if (!dimension) {
+      throw new UsageStateError('Firestore vector growth replay referenced an unknown dimension');
+    }
+    return { key: dimension.key, reservedUnits: value.reservedUnits };
+  });
+}
+
+function sameStoredVectorActuals(
+  left: readonly { dimensionHash: string; actualUnits: number }[] | undefined,
+  right: readonly { dimensionHash: string; actualUnits: number }[],
+): boolean {
+  return (
+    left !== undefined &&
+    left.length === right.length &&
+    left.every(
+      (value, index) =>
+        value.dimensionHash === right[index]!.dimensionHash &&
+        value.actualUnits === right[index]!.actualUnits,
+    )
+  );
+}
+
+function vectorSettlementFromStored(
+  reservationId: string,
+  reservation: StoredReservation,
+  actuals: readonly { dimensionHash: string; actualUnits: number }[],
+  keyByHash: ReadonlyMap<string, string>,
+  outcome: string,
+): VectorSettlementResult {
+  if (!isVectorReservation(reservation)) {
+    throw new UsageStateError('Expected vector reservation');
+  }
+  return {
+    reservationId,
+    dimensions: reservation.dimensions!.map((dimension, index) => {
+      const key = keyByHash.get(dimension.dimensionHash);
+      if (!key) throw new UsageStateError('Firestore vector settlement referenced an unknown dimension');
+      const actualUnits = actuals[index]!.actualUnits;
+      return {
+        key,
+        reservedUnits: dimension.reservedUnits,
+        actualUnits,
+        releasedUnits: dimension.reservedUnits - actualUnits,
+      };
+    }),
+    outcome,
+  };
+}
+
+function readStoredVectorGrowthReplay(value: unknown): StoredVectorGrowthReplay {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new UsageStateError('Firestore reservation document had invalid vector growth replay metadata');
+  }
+  const data = value as Record<string, unknown>;
+  for (const field of ['incrementHash', 'fingerprint'] as const) {
+    if (typeof data[field] !== 'string' || !HASH_PATTERN.test(data[field])) {
+      throw new UsageStateError(`Firestore vector growth replay had invalid ${field}`);
+    }
+  }
+  for (const field of ['expectedGrowthCursor', 'nextGrowthCursor'] as const) {
+    if (typeof data[field] !== 'string' || data[field].length === 0) {
+      throw new UsageStateError(`Firestore vector growth replay had invalid ${field}`);
+    }
+  }
+  if (typeof data.accepted !== 'boolean') {
+    throw new UsageStateError('Firestore vector growth replay had invalid accepted state');
+  }
+  const result: StoredVectorGrowthReplay = {
+    incrementHash: data.incrementHash as string,
+    expectedGrowthCursor: data.expectedGrowthCursor as string,
+    fingerprint: data.fingerprint as string,
+    nextGrowthCursor: data.nextGrowthCursor as string,
+    accepted: data.accepted,
+  };
+  if (data.accepted) {
+    result.previousReservedByDimensions = readStoredVectorReservedReplay(
+      data.previousReservedByDimensions,
+      'previous vector reservation',
+    );
+    result.reservedByDimensions = readStoredVectorReservedReplay(
+      data.reservedByDimensions,
+      'vector reservation',
+    );
+    if (!Array.isArray(data.remainingByBudgetIds)) {
+      throw new UsageStateError('Firestore accepted vector growth replay had invalid balances');
+    }
+    result.remainingByBudgetIds = data.remainingByBudgetIds.map(entry => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new UsageStateError('Firestore accepted vector growth replay had invalid balance');
+      }
+      const balance = entry as Record<string, unknown>;
+      if (
+        typeof balance.dimensionHash !== 'string' || !HASH_PATTERN.test(balance.dimensionHash) ||
+        typeof balance.budgetId !== 'string' || !HASH_PATTERN.test(balance.budgetId)
+      ) {
+        throw new UsageStateError('Firestore accepted vector growth replay had invalid identifiers');
+      }
+      return {
+        dimensionHash: balance.dimensionHash,
+        budgetId: balance.budgetId,
+        remaining: readSafeNonNegativeInteger(balance.remaining, 'vector growth remaining'),
+      };
+    });
+  } else {
+    if (
+      typeof data.limitingDimensionHash !== 'string' || !HASH_PATTERN.test(data.limitingDimensionHash) ||
+      typeof data.limitingBudgetId !== 'string' || !HASH_PATTERN.test(data.limitingBudgetId)
+    ) {
+      throw new UsageStateError('Firestore denied vector growth replay had invalid identifiers');
+    }
+    result.limitingDimensionHash = data.limitingDimensionHash;
+    result.limitingBudgetId = data.limitingBudgetId;
+    result.remaining = readSafeNonNegativeInteger(data.remaining, 'vector growth remaining');
+  }
+  return result;
+}
+
+function readStoredVectorReservedReplay(
+  value: unknown,
+  context: string,
+): Array<{ dimensionHash: string; reservedUnits: number }> {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new UsageStateError(`Firestore ${context} replay was invalid`);
+  }
+  return value.map(entry => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new UsageStateError(`Firestore ${context} replay entry was invalid`);
+    }
+    const data = entry as Record<string, unknown>;
+    if (typeof data.dimensionHash !== 'string' || !HASH_PATTERN.test(data.dimensionHash)) {
+      throw new UsageStateError(`Firestore ${context} replay had invalid dimension hash`);
+    }
+    return {
+      dimensionHash: data.dimensionHash,
+      reservedUnits: readSafeNonNegativeInteger(data.reservedUnits, `${context} reservedUnits`),
+    };
+  });
+}
+
+function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
+  if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
+  const normalized = dimensions.map(dimension => {
+    if (!dimension.key) throw new RangeError('dimension.key must be non-empty');
+    assertNonNegativeInteger(dimension.units, `dimension.units (${dimension.key})`);
+    return { key: dimension.key, units: dimension.units, budgets: canonicalizeBudgets(dimension.budgets) };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  validateVectorTopology(normalized);
+  return normalized;
+}
+
+function canonicalizeGrowthDimensions(dimensions: readonly UsageDimensionGrowth[]): UsageDimensionGrowth[] {
+  if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
+  const normalized = dimensions.map(dimension => {
+    if (!dimension.key) throw new RangeError('dimension.key must be non-empty');
+    assertNonNegativeInteger(dimension.additionalUnits, `dimension.additionalUnits (${dimension.key})`);
+    return {
+      key: dimension.key,
+      additionalUnits: dimension.additionalUnits,
+      budgets: canonicalizeBudgets(dimension.budgets),
+    };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  validateVectorTopology(normalized);
+  if (!normalized.some(dimension => dimension.additionalUnits > 0)) {
+    throw new RangeError('vector growth must add units to at least one dimension');
+  }
+  return normalized;
+}
+
+function canonicalizeActualDimensions(actuals: readonly UsageDimensionActual[]): UsageDimensionActual[] {
+  if (actuals.length === 0) throw new RangeError('actualByDimension must contain at least one dimension');
+  const normalized = actuals.map(actual => {
+    if (!actual.key) throw new RangeError('actual dimension key must be non-empty');
+    assertNonNegativeInteger(actual.actualUnits, `actualUnits (${actual.key})`);
+    return { key: actual.key, actualUnits: actual.actualUnits };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  for (let index = 1; index < normalized.length; index += 1) {
+    if (normalized[index - 1]!.key === normalized[index]!.key) {
+      throw new RangeError(`duplicate dimension key: ${normalized[index]!.key}`);
+    }
+  }
+  return normalized;
+}
+
+function validateVectorTopology(
+  dimensions: readonly { key: string; budgets: readonly Budget[] }[],
+): void {
+  const dimensionsSeen = new Set<string>();
+  const budgetsSeen = new Set<string>();
+  for (const dimension of dimensions) {
+    if (dimensionsSeen.has(dimension.key)) throw new RangeError(`duplicate dimension key: ${dimension.key}`);
+    dimensionsSeen.add(dimension.key);
+    for (const budget of dimension.budgets) {
+      if (budgetsSeen.has(budget.key)) {
+        throw new RangeError(`budget key cannot appear in multiple vector dimensions: ${budget.key}`);
+      }
+      budgetsSeen.add(budget.key);
+    }
+  }
 }
 
 function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {

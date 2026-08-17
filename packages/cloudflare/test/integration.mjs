@@ -279,6 +279,80 @@ await assert.rejects(
   'a fresh increment on the stale pre-ACK cursor must fail closed',
 );
 
+// Lost vector growth ACK is resolved only by replaying the same vector increment.
+const vectorFixture = await store.reserveVector({
+  request: makeRequest('lost-vector-growth-ack'),
+  dimensions: [
+    {
+      key: 'requests',
+      units: 1,
+      budgets: [{ key: `${nonce}:vector-requests`, limit: 2 }],
+    },
+    {
+      key: 'tokens',
+      units: 5,
+      budgets: [{ key: `${nonce}:vector-tokens`, limit: 20 }],
+    },
+  ],
+  ttlMs: 2_000,
+});
+assert.equal(vectorFixture.accepted, true);
+if (!vectorFixture.accepted || !vectorFixture.reservation.growthCursor) {
+  throw new Error('expected growable vector fixture');
+}
+const vectorGrowthInput = {
+  reservationId: vectorFixture.reservation.id,
+  incrementId: `${nonce}-stable-vector-growth-increment`,
+  expectedGrowthCursor: vectorFixture.reservation.growthCursor,
+  dimensions: [
+    {
+      key: 'requests',
+      additionalUnits: 0,
+      budgets: [{ key: `${nonce}:vector-requests`, limit: 2 }],
+    },
+    {
+      key: 'tokens',
+      additionalUnits: 3,
+      budgets: [{ key: `${nonce}:vector-tokens`, limit: 20 }],
+    },
+  ],
+};
+let loseNextVectorGrowthAck = true;
+const lostVectorGrowthAckStore = new RemoteCloudflareUsageStore({
+  endpoint,
+  headers: authHeaders,
+  fetch: async (input, init) => {
+    const parsed = JSON.parse(String(init?.body ?? '{}'));
+    const response = await fetch(input, init);
+    if (parsed.method === 'grow_vector' && loseNextVectorGrowthAck) {
+      loseNextVectorGrowthAck = false;
+      await response.text();
+      throw new Error('simulated lost vector growth acknowledgement');
+    }
+    return response;
+  },
+});
+await assert.rejects(
+  () => lostVectorGrowthAckStore.growVectorReservation(vectorGrowthInput),
+  error => error instanceof CloudflareUsageTransportError && error.code === 'network',
+);
+const vectorGrowthReplay = await store.growVectorReservation(vectorGrowthInput);
+assert.equal(vectorGrowthReplay.accepted, true);
+assert.equal(vectorGrowthReplay.replayed, true);
+assert.deepEqual(vectorGrowthReplay.reservedByDimension, [
+  { key: 'requests', reservedUnits: 1 },
+  { key: 'tokens', reservedUnits: 8 },
+]);
+await assert.rejects(
+  () =>
+    store.growVectorReservation({
+      ...vectorGrowthInput,
+      incrementId: `${nonce}-fresh-vector-growth-after-lost-ack`,
+    }),
+  /cursor/i,
+  'a fresh vector increment on the stale pre-ACK cursor must fail closed',
+);
+
 // Lost settlement ACK can be reconciled by replaying the identical settlement.
 const settleFixture = await reserve(store, 'lost-settle-ack', 'lost-settle-budget', 1, 1_000);
 assert.equal(settleFixture.accepted, true);

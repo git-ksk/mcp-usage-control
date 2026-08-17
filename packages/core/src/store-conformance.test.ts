@@ -3,6 +3,7 @@ import { MemoryUsageStore } from './index.js';
 import {
   assertUsageStoreConformance,
   runProgressiveUsageStoreConformance,
+  runVectorUsageStoreConformance,
   runUsageStoreConformance,
 } from './store-conformance.js';
 
@@ -33,6 +34,23 @@ describe('UsageStore conformance kit', () => {
     vi.setSystemTime(new Date('2026-08-17T00:00:00Z'));
 
     const report = await runProgressiveUsageStoreConformance({
+      createStore() {
+        return new MemoryUsageStore();
+      },
+      async waitForLeaseExpiry(ttlMs) {
+        await vi.advanceTimersByTimeAsync(ttlMs + 1);
+      },
+    });
+
+    expect(report.passed).toBe(true);
+    expect(report.cases.every(result => result.passed)).toBe(true);
+  });
+
+  it('accepts the MemoryUsageStore atomic vector contract', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-17T00:00:00Z'));
+
+    const report = await runVectorUsageStoreConformance({
       createStore() {
         return new MemoryUsageStore();
       },

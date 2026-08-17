@@ -180,6 +180,8 @@ jobs:
           grep -qx 'package/dist/store-conformance.d.ts' <<<"$core_listing"
           grep -qx 'package/dist/progressive-store-conformance.js' <<<"$core_listing"
           grep -qx 'package/dist/progressive-store-conformance.d.ts' <<<"$core_listing"
+          grep -qx 'package/dist/vector-store-conformance.js' <<<"$core_listing"
+          grep -qx 'package/dist/vector-store-conformance.d.ts' <<<"$core_listing"
           mcp_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-mcp-${version}.tgz")"
           grep -qx 'package/dist/flow-store-conformance.js' <<<"$mcp_listing"
           grep -qx 'package/dist/flow-store-conformance.d.ts' <<<"$mcp_listing"
@@ -218,7 +220,11 @@ jobs:
             --ignore-scripts
           node --input-type=module <<'NODE'
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
-          import { assertUsageStoreConformance, runProgressiveUsageStoreConformance } from 'mcp-usage-control/conformance';
+          import {
+            assertUsageStoreConformance,
+            runProgressiveUsageStoreConformance,
+            runVectorUsageStoreConformance,
+          } from 'mcp-usage-control/conformance';
           import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
           import { protectTool } from 'mcp-usage-control-mcp';
           import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';

@@ -348,3 +348,13 @@ normative rule:
 process lossから同じlogical operationを復旧する必要がある場合、callerはgrowth送信**前**に同じ`incrementId`を永続化するかdeterministicに再構成できるようにする。cursorはreplay fenceでありauthenticationではない。
 
 詳細は[Progressive reservation growth](progressive-reservation-growth.ja.md)と[MCP progressive example](progressive-mcp-integration.ja.md)を参照。
+
+## Optional atomic vector capability (v0.7)
+
+`VectorUsageStore` はrequests / tokensなど異なるdimensionを1 logical operationで扱うoptional extensionです。scalar `UsageStore` contractは変更しません。
+
+vector Storeは`reserveVector()` / `growVectorReservation()` / recovery / `settleVector()`でrequired dimension全体を1 atomic transaction domainに維持します。異なるunitは加算しません。scalar / vector reservationは同じoperation-idempotency domainを共有します。
+
+vector growthはv0.6 stable increment / cursor contractをvector全体へcomposeします。ACK loss後のexact retryはauthoritative resultをreplayし、quota denialはcapacityを消費せずcursorをrotateし、stale cursor上のfresh incrementはfail closedです。settlementは全dimensionをexactly once報告し、dimensionごとのtotal successfully reserved capacity以内に制限します。
+
+Store compatibilityをclaimする前に`mcp-usage-control/conformance`の`runVectorUsageStoreConformance()`を実行してください。詳細は[Atomic heterogeneous usage vector](vector-usage.ja.md)を参照。

@@ -17,8 +17,30 @@ import {
   type UsageObserver,
   type UsageRequest,
   type UsageStore,
+  type UsageDimension,
+  type UsageDimensionActual,
+  type UsageDimensionGrowth,
+  type UsageDimensionReserved,
+  type VectorBudgetRemaining,
+  type VectorGrowReservationInput,
+  type VectorReservationDimension,
+  type VectorSettleInput,
+  type VectorSettlementResult,
+  type VectorUsageStore,
+  type StoreVectorGrowResult,
+  type StoreVectorReserveResult,
+  type VectorReserveInput,
 } from 'mcp-usage-control';
-import { GROW_SCRIPT, MARK_LIABLE_SCRIPT, RENEW_SCRIPT, RESERVE_SCRIPT, SETTLE_SCRIPT } from './scripts.js';
+import {
+  GROW_SCRIPT,
+  GROW_VECTOR_SCRIPT,
+  MARK_LIABLE_SCRIPT,
+  RENEW_SCRIPT,
+  RESERVE_SCRIPT,
+  RESERVE_VECTOR_SCRIPT,
+  SETTLE_SCRIPT,
+  SETTLE_VECTOR_SCRIPT,
+} from './scripts.js';
 
 export interface RedisEvalClient {
   eval(
@@ -53,11 +75,13 @@ interface RedisRecoverySummary {
   pendingUnits: number;
   liableCount: number;
   liableUnits: number;
+  vectorPendingCount: number;
+  vectorLiableCount: number;
 }
 
 const RESERVATION_ID_PATTERN = /^r2\.([a-f0-9]{64})$/;
 
-export class RedisUsageStore implements ProgressiveUsageStore {
+export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore {
   private readonly prefix: string;
   private readonly hashTag: string;
   private readonly cleanupBatchSize: number;
@@ -194,6 +218,229 @@ export class RedisUsageStore implements ProgressiveUsageStore {
     }
   }
 
+  async reserveVector(input: VectorReserveInput): Promise<StoreVectorReserveResult> {
+    assertPositiveInteger(input.ttlMs, 'ttlMs');
+    validateRequestIdentity(input.request);
+    const dimensions = canonicalizeUsageDimensions(input.dimensions);
+    const operationKey = digest(
+      JSON.stringify([
+        input.request.principal.tenantId ?? null,
+        input.request.principal.id,
+        input.request.tool,
+        input.request.operationId,
+      ]),
+    );
+    const reservationId = `r2.${operationKey}`;
+    const maps = vectorMaps(dimensions);
+    const encoded = dimensions.map(dimension => ({
+      hash: digest(dimension.key),
+      units: dimension.units,
+      budgets: dimension.budgets.map(budget => ({ hash: digest(budget.key), limit: budget.limit })),
+    }));
+    const initialGrowthCursor = newGrowthCursor();
+    const keys = this.keys();
+    const parsed = parseReply(
+      await this.client.eval(RESERVE_VECTOR_SCRIPT, {
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
+        arguments: [
+          String(input.ttlMs),
+          reservationId,
+          operationKey,
+          String(this.cleanupBatchSize),
+          String(this.idempotencyTtlMs),
+          JSON.stringify(encoded),
+          initialGrowthCursor,
+        ],
+      }),
+    );
+    const { payload: reply, recovery } = extractRecovery(parsed);
+    this.emitRecoverySummary(recovery);
+    if (reply[0] === 'accepted') {
+      const expiresAt = parseInteger(reply[1], 'expiresAt');
+      const balances = parseVectorBalances(reply[2], maps);
+      return {
+        accepted: true,
+        reservation: {
+          id: reservationId,
+          operationId: input.request.operationId,
+          principalId: input.request.principal.id,
+          ...(input.request.principal.tenantId === undefined
+            ? {}
+            : { tenantId: input.request.principal.tenantId }),
+          ...(input.request.principal.plan === undefined ? {} : { plan: input.request.principal.plan }),
+          tool: input.request.tool,
+          dimensions: dimensions.map(dimension => ({
+            key: dimension.key,
+            budgetKeys: dimension.budgets.map(budget => budget.key),
+            reservedUnits: dimension.units,
+          })),
+          expiresAt,
+          growthCursor: initialGrowthCursor,
+        },
+        remainingByBudget: balances,
+      };
+    }
+    if (reply[0] === 'quota_exceeded') {
+      const dimension = reply[1] ? maps.dimensionByHash.get(reply[1]) : undefined;
+      const budget = reply[2] ? maps.budgetByHash.get(reply[2]) : undefined;
+      if (!dimension || !budget || reply[3] === undefined) {
+        throw new UsageStateError('Redis vector quota reply was incomplete');
+      }
+      return {
+        accepted: false,
+        reason: 'quota_exceeded',
+        limitingDimensionKey: dimension.key,
+        limitingBudgetKey: budget.key,
+        remaining: parseInteger(reply[3], 'remaining'),
+      };
+    }
+    if (reply[0] === 'duplicate_operation') {
+      return { accepted: false, reason: 'duplicate_operation' };
+    }
+    throw new UsageStateError(`Unexpected Redis vector reserve reply: ${reply[0] ?? '<empty>'}`);
+  }
+
+  async growVectorReservation(input: VectorGrowReservationInput): Promise<StoreVectorGrowResult> {
+    assertReservationId(input.reservationId);
+    if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+      throw new RangeError('incrementId must be a non-empty string');
+    }
+    if (typeof input.expectedGrowthCursor !== 'string' || input.expectedGrowthCursor.length === 0) {
+      throw new RangeError('expectedGrowthCursor must be a non-empty string');
+    }
+    const dimensions = canonicalizeGrowthDimensions(input.dimensions);
+    const maps = vectorGrowthMaps(dimensions);
+    const encoded = dimensions.map(dimension => ({
+      hash: digest(dimension.key),
+      additionalUnits: dimension.additionalUnits,
+      budgets: dimension.budgets.map(budget => ({ hash: digest(budget.key), limit: budget.limit })),
+    }));
+    const incrementHash = digest(input.incrementId);
+    const fingerprint = digest(JSON.stringify(encoded));
+    const nextGrowthCursor = newGrowthCursor();
+    const keys = this.keys();
+    const reply = parseReply(
+      await this.client.eval(GROW_VECTOR_SCRIPT, {
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
+        arguments: [
+          input.reservationId,
+          incrementHash,
+          input.expectedGrowthCursor,
+          String(this.idempotencyTtlMs),
+          JSON.stringify(encoded),
+          fingerprint,
+          nextGrowthCursor,
+        ],
+      }),
+    );
+    if (reply[0] === 'accepted' || reply[0] === 'accepted_replay') {
+      const cursor = reply[1];
+      if (!cursor) throw new UsageStateError('Redis vector growth reply omitted growth cursor');
+      return {
+        accepted: true,
+        replayed: reply[0] === 'accepted_replay',
+        reservationId: input.reservationId,
+        incrementId: input.incrementId,
+        growthCursor: cursor,
+        previousReservedByDimension: parseVectorReserved(reply[2], maps.dimensionByHash),
+        reservedByDimension: parseVectorReserved(reply[3], maps.dimensionByHash),
+        remainingByBudget: parseVectorBalances(reply[4], maps),
+      };
+    }
+    if (reply[0] === 'quota_exceeded' || reply[0] === 'quota_replay') {
+      const cursor = reply[1];
+      const dimension = reply[2] ? maps.dimensionByHash.get(reply[2]) : undefined;
+      const budget = reply[3] ? maps.budgetByHash.get(reply[3]) : undefined;
+      if (!cursor || !dimension || !budget || reply[4] === undefined) {
+        throw new UsageStateError('Redis vector growth quota reply was incomplete');
+      }
+      return {
+        accepted: false,
+        reason: 'quota_exceeded',
+        replayed: reply[0] === 'quota_replay',
+        reservationId: input.reservationId,
+        incrementId: input.incrementId,
+        growthCursor: cursor,
+        limitingDimensionKey: dimension.key,
+        limitingBudgetKey: budget.key,
+        remaining: parseInteger(reply[4], 'remaining'),
+      };
+    }
+    if (reply[0] === 'expired_vector') {
+      this.emitDirectExpiry(reply, input.reservationId);
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    if (reply[0] === 'conflict') {
+      throw new UsageStateError('Vector growth increment was already attempted with different parameters');
+    }
+    if (reply[0] === 'stale_cursor') {
+      throw new UsageStateError('Vector growth cursor is stale or conflicts with reservation state');
+    }
+    if (reply[0] === 'dimension_mismatch') {
+      throw new UsageStateError('Vector growth dimensions and budgets must match the reservation');
+    }
+    if (reply[0] === 'not_supported') {
+      throw new UsageStateError('Vector reservation does not support progressive growth');
+    }
+    if (reply[0] === 'mode_mismatch') {
+      throw new UsageStateError('Vector growth cannot target a scalar reservation');
+    }
+    if (reply[0] === 'terminal' || reply[0] === 'not_found') {
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    throw new UsageStateError(`Unexpected Redis vector growth reply: ${reply[0] ?? '<empty>'}`);
+  }
+
+  async settleVector(input: VectorSettleInput): Promise<VectorSettlementResult> {
+    assertReservationId(input.reservationId);
+    const actuals = canonicalizeActualDimensions(input.actualByDimension);
+    const dimensionByHash = new Map<string, { key: string }>();
+    const encoded = actuals.map(actual => {
+      const hash = digest(actual.key);
+      dimensionByHash.set(hash, { key: actual.key });
+      return { hash, actualUnits: actual.actualUnits };
+    });
+    const keys = this.keys();
+    const reply = parseReply(
+      await this.client.eval(SETTLE_VECTOR_SCRIPT, {
+        keys: [keys.used, keys.leases, keys.reservations, keys.operations, keys.tombstones],
+        arguments: [
+          input.reservationId,
+          JSON.stringify(encoded),
+          input.outcome,
+          String(this.idempotencyTtlMs),
+        ],
+      }),
+    );
+    if (reply[0] === 'settled' || reply[0] === 'idempotent') {
+      return {
+        reservationId: input.reservationId,
+        dimensions: parseVectorSettlement(reply[1], dimensionByHash),
+        outcome: input.outcome,
+      };
+    }
+    if (reply[0] === 'conflict') {
+      throw new UsageStateError('Vector reservation was already settled with a different result');
+    }
+    if (reply[0] === 'invalid_units') {
+      throw new UsageStateError('actualUnits cannot exceed reservedUnits for a vector dimension');
+    }
+    if (reply[0] === 'dimension_mismatch') {
+      throw new UsageStateError('Vector settlement dimensions must exactly match the reservation');
+    }
+    if (reply[0] === 'mode_mismatch') {
+      throw new UsageStateError('Vector settlement cannot target a scalar reservation');
+    }
+    if (reply[0] === 'expired_vector') {
+      this.emitDirectExpiry(reply, input.reservationId);
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    if (reply[0] === 'not_found' || reply[0] === 'not_pending') {
+      throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    throw new UsageStateError(`Unexpected Redis vector settle reply: ${reply[0] ?? '<empty>'}`);
+  }
+
   async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
     assertReservationId(input.reservationId);
     if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
@@ -274,7 +521,7 @@ export class RedisUsageStore implements ProgressiveUsageStore {
       };
     }
 
-    if (reply[0] === 'expired') {
+    if (reply[0] === 'expired' || reply[0] === 'expired_vector') {
       this.emitDirectExpiry(reply, input.reservationId);
       throw new UsageStateError('Reservation not found, expired, or no longer active');
     }
@@ -289,6 +536,9 @@ export class RedisUsageStore implements ProgressiveUsageStore {
     }
     if (reply[0] === 'not_supported') {
       throw new UsageStateError('Reservation does not support progressive growth');
+    }
+    if (reply[0] === 'mode_mismatch') {
+      throw new UsageStateError('Scalar growth cannot target a vector reservation');
     }
     if (reply[0] === 'terminal' || reply[0] === 'not_found') {
       throw new UsageStateError('Reservation not found, expired, or no longer active');
@@ -312,7 +562,7 @@ export class RedisUsageStore implements ProgressiveUsageStore {
         expiresAt: parseInteger(reply[1], 'expiresAt'),
       };
     }
-    if (reply[0] === 'expired') {
+    if (reply[0] === 'expired' || reply[0] === 'expired_vector') {
       this.emitDirectExpiry(reply, input.reservationId);
       throw new UsageStateError('Active reservation not found or expired');
     }
@@ -341,7 +591,7 @@ export class RedisUsageStore implements ProgressiveUsageStore {
       };
     }
 
-    if (reply[0] === 'expired') {
+    if (reply[0] === 'expired' || reply[0] === 'expired_vector') {
       this.emitDirectExpiry(reply, input.reservationId);
       throw new UsageStateError('Active reservation not found or expired');
     }
@@ -385,9 +635,12 @@ export class RedisUsageStore implements ProgressiveUsageStore {
     if (reply[0] === 'invalid_units') {
       throw new UsageStateError('actualUnits cannot exceed reservedUnits');
     }
-    if (reply[0] === 'expired') {
+    if (reply[0] === 'expired' || reply[0] === 'expired_vector') {
       this.emitDirectExpiry(reply, input.reservationId);
       throw new UsageStateError('Reservation not found, expired, or no longer active');
+    }
+    if (reply[0] === 'mode_mismatch') {
+      throw new UsageStateError('Scalar settlement cannot target a vector reservation');
     }
     if (reply[0] === 'not_found' || reply[0] === 'not_pending') {
       throw new UsageStateError('Reservation not found, expired, or no longer active');
@@ -417,12 +670,43 @@ export class RedisUsageStore implements ProgressiveUsageStore {
         count: recovery.liableCount,
       });
     }
+    if (recovery.vectorPendingCount > 0) {
+      emitUsageEvent(this.observer, {
+        type: 'vector.reservation.recovered',
+        timestamp: Date.now(),
+        store: 'redis',
+        recovery: 'pending_released',
+        count: recovery.vectorPendingCount,
+      });
+    }
+    if (recovery.vectorLiableCount > 0) {
+      emitUsageEvent(this.observer, {
+        type: 'vector.reservation.recovered',
+        timestamp: Date.now(),
+        store: 'redis',
+        recovery: 'liable_retained',
+        count: recovery.vectorLiableCount,
+      });
+    }
   }
 
   private emitDirectExpiry(reply: string[], reservationId: string): void {
     const state = reply[1];
-    const reservedUnits = parseInteger(reply[2], 'expired reservedUnits');
     if (state !== 'pending' && state !== 'liable') return;
+    if (reply[0] === 'expired_vector') {
+      emitUsageEvent(this.observer, {
+        type: 'vector.reservation.recovered',
+        timestamp: Date.now(),
+        store: 'redis',
+        recovery: state === 'pending' ? 'pending_released' : 'liable_retained',
+        reservationId,
+        dimensionCount: parseInteger(reply[2], 'expired dimension count'),
+        budgetCount: parseInteger(reply[3], 'expired budget count'),
+        count: 1,
+      });
+      return;
+    }
+    const reservedUnits = parseInteger(reply[2], 'expired reservedUnits');
     emitUsageEvent(this.observer, {
       type: 'reservation.recovered',
       timestamp: Date.now(),
@@ -468,6 +752,205 @@ function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
     }
   }
   return normalized;
+}
+
+function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
+  if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
+  const normalized = dimensions.map(dimension => {
+    if (typeof dimension.key !== 'string' || dimension.key.length === 0) {
+      throw new RangeError('dimension.key must be a non-empty string');
+    }
+    assertNonNegativeInteger(dimension.units, `dimension.units (${dimension.key})`);
+    return { key: dimension.key, units: dimension.units, budgets: canonicalizeBudgets(dimension.budgets) };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  validateVectorTopology(normalized);
+  return normalized;
+}
+
+function canonicalizeGrowthDimensions(
+  dimensions: readonly UsageDimensionGrowth[],
+): UsageDimensionGrowth[] {
+  if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
+  const normalized = dimensions.map(dimension => {
+    if (typeof dimension.key !== 'string' || dimension.key.length === 0) {
+      throw new RangeError('dimension.key must be a non-empty string');
+    }
+    assertNonNegativeInteger(
+      dimension.additionalUnits,
+      `dimension.additionalUnits (${dimension.key})`,
+    );
+    return {
+      key: dimension.key,
+      additionalUnits: dimension.additionalUnits,
+      budgets: canonicalizeBudgets(dimension.budgets),
+    };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  validateVectorTopology(normalized);
+  if (!normalized.some(dimension => dimension.additionalUnits > 0)) {
+    throw new RangeError('vector growth must add units to at least one dimension');
+  }
+  return normalized;
+}
+
+function canonicalizeActualDimensions(
+  actuals: readonly UsageDimensionActual[],
+): UsageDimensionActual[] {
+  if (actuals.length === 0) throw new RangeError('actualByDimension must contain at least one dimension');
+  const normalized = actuals.map(actual => {
+    if (typeof actual.key !== 'string' || actual.key.length === 0) {
+      throw new RangeError('actual dimension key must be a non-empty string');
+    }
+    assertNonNegativeInteger(actual.actualUnits, `actualUnits (${actual.key})`);
+    return { key: actual.key, actualUnits: actual.actualUnits };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  for (let index = 1; index < normalized.length; index += 1) {
+    if (normalized[index - 1]!.key === normalized[index]!.key) {
+      throw new RangeError(`duplicate dimension key: ${normalized[index]!.key}`);
+    }
+  }
+  return normalized;
+}
+
+function validateVectorTopology(
+  dimensions: readonly { key: string; budgets: readonly Budget[] }[],
+): void {
+  const dimensionKeys = new Set<string>();
+  const budgetKeys = new Set<string>();
+  for (const dimension of dimensions) {
+    if (dimensionKeys.has(dimension.key)) throw new RangeError(`duplicate dimension key: ${dimension.key}`);
+    dimensionKeys.add(dimension.key);
+    for (const budget of dimension.budgets) {
+      if (budgetKeys.has(budget.key)) {
+        throw new RangeError(`budget key cannot appear in multiple vector dimensions: ${budget.key}`);
+      }
+      budgetKeys.add(budget.key);
+    }
+  }
+}
+
+type VectorMaps = {
+  dimensionByHash: Map<string, { key: string }>;
+  budgetByHash: Map<string, { key: string }>;
+  budgetCount: number;
+};
+
+function vectorMaps(dimensions: readonly UsageDimension[]): VectorMaps {
+  const dimensionByHash = new Map<string, { key: string }>();
+  const budgetByHash = new Map<string, { key: string }>();
+  let budgetCount = 0;
+  for (const dimension of dimensions) {
+    dimensionByHash.set(digest(dimension.key), { key: dimension.key });
+    for (const budget of dimension.budgets) {
+      budgetByHash.set(digest(budget.key), { key: budget.key });
+      budgetCount += 1;
+    }
+  }
+  return { dimensionByHash, budgetByHash, budgetCount };
+}
+
+function vectorGrowthMaps(dimensions: readonly UsageDimensionGrowth[]): VectorMaps {
+  const dimensionByHash = new Map<string, { key: string }>();
+  const budgetByHash = new Map<string, { key: string }>();
+  let budgetCount = 0;
+  for (const dimension of dimensions) {
+    dimensionByHash.set(digest(dimension.key), { key: dimension.key });
+    for (const budget of dimension.budgets) {
+      budgetByHash.set(digest(budget.key), { key: budget.key });
+      budgetCount += 1;
+    }
+  }
+  return { dimensionByHash, budgetByHash, budgetCount };
+}
+
+function parseJsonArray(raw: string | undefined, context: string): unknown[] {
+  if (raw === undefined) throw new UsageStateError(`${context} was missing`);
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new UsageStateError(`${context} contained invalid JSON`);
+  }
+  if (!Array.isArray(value)) throw new UsageStateError(`${context} must be an array`);
+  return value;
+}
+
+function parseVectorBalances(raw: string | undefined, maps: VectorMaps): VectorBudgetRemaining[] {
+  const entries = parseJsonArray(raw, 'Redis vector balance reply');
+  if (entries.length !== maps.budgetCount) {
+    throw new UsageStateError('Redis vector balance reply omitted a budget');
+  }
+  const result = entries.map(entry => {
+    if (!entry || typeof entry !== 'object') throw new UsageStateError('Redis vector balance entry was invalid');
+    const value = entry as { dimensionHash?: unknown; budgetHash?: unknown; remaining?: unknown };
+    const dimension = typeof value.dimensionHash === 'string' ? maps.dimensionByHash.get(value.dimensionHash) : undefined;
+    const budget = typeof value.budgetHash === 'string' ? maps.budgetByHash.get(value.budgetHash) : undefined;
+    if (!dimension || !budget || typeof value.remaining !== 'number' || !Number.isSafeInteger(value.remaining)) {
+      throw new UsageStateError('Redis vector balance reply referenced an unknown dimension or budget');
+    }
+    return { dimensionKey: dimension.key, budgetKey: budget.key, remaining: value.remaining };
+  });
+  result.sort((a, b) => a.dimensionKey.localeCompare(b.dimensionKey) || a.budgetKey.localeCompare(b.budgetKey));
+  return result;
+}
+
+function parseVectorReserved(
+  raw: string | undefined,
+  dimensionByHash: ReadonlyMap<string, { key: string }>,
+): UsageDimensionReserved[] {
+  const entries = parseJsonArray(raw, 'Redis vector reserved reply');
+  if (entries.length !== dimensionByHash.size) {
+    throw new UsageStateError('Redis vector reserved reply omitted a dimension');
+  }
+  const result = entries.map(entry => {
+    if (!entry || typeof entry !== 'object') throw new UsageStateError('Redis vector reserved entry was invalid');
+    const value = entry as { hash?: unknown; reservedUnits?: unknown };
+    const dimension = typeof value.hash === 'string' ? dimensionByHash.get(value.hash) : undefined;
+    if (!dimension || typeof value.reservedUnits !== 'number' || !Number.isSafeInteger(value.reservedUnits)) {
+      throw new UsageStateError('Redis vector reserved reply referenced an unknown dimension');
+    }
+    return { key: dimension.key, reservedUnits: value.reservedUnits };
+  });
+  result.sort((a, b) => a.key.localeCompare(b.key));
+  return result;
+}
+
+function parseVectorSettlement(
+  raw: string | undefined,
+  dimensionByHash: ReadonlyMap<string, { key: string }>,
+): VectorSettlementResult['dimensions'] {
+  const entries = parseJsonArray(raw, 'Redis vector settlement reply');
+  if (entries.length !== dimensionByHash.size) {
+    throw new UsageStateError('Redis vector settlement reply omitted a dimension');
+  }
+  const result = entries.map(entry => {
+    if (!entry || typeof entry !== 'object') throw new UsageStateError('Redis vector settlement entry was invalid');
+    const value = entry as {
+      hash?: unknown;
+      reservedUnits?: unknown;
+      actualUnits?: unknown;
+      releasedUnits?: unknown;
+    };
+    const dimension = typeof value.hash === 'string' ? dimensionByHash.get(value.hash) : undefined;
+    if (
+      !dimension ||
+      typeof value.reservedUnits !== 'number' || !Number.isSafeInteger(value.reservedUnits) ||
+      typeof value.actualUnits !== 'number' || !Number.isSafeInteger(value.actualUnits) ||
+      typeof value.releasedUnits !== 'number' || !Number.isSafeInteger(value.releasedUnits)
+    ) {
+      throw new UsageStateError('Redis vector settlement reply referenced an unknown dimension');
+    }
+    return {
+      key: dimension.key,
+      reservedUnits: value.reservedUnits,
+      actualUnits: value.actualUnits,
+      releasedUnits: value.releasedUnits,
+    };
+  });
+  result.sort((a, b) => a.key.localeCompare(b.key));
+  return result;
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
@@ -534,10 +1017,17 @@ function extractRecovery(reply: string[]): {
   if (marker < 0) {
     return {
       payload: reply,
-      recovery: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
+      recovery: {
+        pendingCount: 0,
+        pendingUnits: 0,
+        liableCount: 0,
+        liableUnits: 0,
+        vectorPendingCount: 0,
+        vectorLiableCount: 0,
+      },
     };
   }
-  if (reply.length !== marker + 5) {
+  if (reply.length !== marker + 7) {
     throw new UsageStateError('Redis reserve reply contained an invalid recovery summary');
   }
   return {
@@ -547,6 +1037,8 @@ function extractRecovery(reply: string[]): {
       pendingUnits: parseInteger(reply[marker + 2], 'recovered pending units'),
       liableCount: parseInteger(reply[marker + 3], 'recovered liable count'),
       liableUnits: parseInteger(reply[marker + 4], 'recovered liable units'),
+      vectorPendingCount: parseInteger(reply[marker + 5], 'recovered vector pending count'),
+      vectorLiableCount: parseInteger(reply[marker + 6], 'recovered vector liable count'),
     },
   };
 }

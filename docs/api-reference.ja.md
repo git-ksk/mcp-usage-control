@@ -603,3 +603,13 @@ Storeは`ProgressiveUsageStore.growReservation()`でopt-inする。base `UsageSt
 public conformance subpathはgrowth supportをclaimするStore向けに`runProgressiveUsageStoreConformance()`もexportする。
 
 詳細は[Progressive reservation growth](progressive-reservation-growth.ja.md)を参照。
+
+## Vector usage API (v0.7)
+
+`VectorUsagePolicy` は1 scalar `units`ではなくcanonical dimension vectorを返します。configured Storeがoptional `VectorUsageStore`を実装する場合、`VectorUsageControl.reserve()`は`VectorUsageLease`を返します。
+
+`VectorUsageLease`は`reservedByDimension`、`markLiable()`、`renew()`、`grow()`、`settle()`、`toResumeState()`を提供します。`grow()`はstable `incrementId` 1個とcomplete dimension/budget topologyを受け取り、`settle()`は全dimensionを`{ key, actualUnits }`としてexactly once受け取ります。
+
+`VectorUsageStore`はshared lifecycleを`UsageStore`から継承しつつ、`reserveVector()` / `growVectorReservation()` / `settleVector()`を追加します。既存third-party scalar Storeにこれらの実装は必須ではありません。
+
+public `runVectorUsageStoreConformance()`はatomic admission、replay/cursor、expiry、settlement bound、scalar/vector operation collision、growth/settlement raceを検証します。詳細は[Atomic heterogeneous usage vector](vector-usage.ja.md)を参照。

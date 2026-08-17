@@ -1,4 +1,5 @@
 export * from './progressive-store-conformance.js';
+export * from './vector-store-conformance.js';
 import type { Budget, StoreReserveResult, UsageRequest, UsageStore } from './index.js';
 
 type MaybePromise<T> = T | Promise<T>;

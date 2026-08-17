@@ -195,3 +195,9 @@ Coverage includes:
 - remote gateway authentication/credential rotation is application responsibility;
 - this enforcement state is not a financial-grade accounting ledger;
 - MCP multi-round `input_required` remains outside v0.1 `protectTool()` support.
+
+## Atomic heterogeneous vector usage (v0.7 / schema v3)
+
+`CloudflareUsageStore` and `RemoteCloudflareUsageStore` implement optional `VectorUsageStore`. The base `reservations` row remains the shared operation/lifecycle identity, while schema v3 stores vector-only metadata in the additive `reservation_vectors` sidecar table. Existing v1/v2 scalar accounting rows are not rewritten.
+
+Durable Object `transactionSync` covers all vector dimension/budget changes plus reservation/vector metadata. Vector HTTP methods are additive protocol-v1 methods (`reserve_vector`, `grow_vector`, `settle_vector`); existing scalar callers remain compatible. Local workerd CI runs portable vector conformance and remote committed-vector-growth acknowledgement-loss replay.

@@ -200,3 +200,9 @@ CI uses real Redis 7 for:
 Growth metadata is stored additively inside the existing reservation JSON (`growthCursor` plus latest replay metadata). A reservation written by v0.5 or earlier has no growth cursor: it remains readable/settleable under the fixed-reservation contract but cannot be grown. No Redis key migration, balance rewrite, or reset is required when upgrading to v0.6.
 
 Real-Redis CI runs the portable progressive Store conformance plus a committed-growth acknowledgement-loss case. The retry must use the same stable increment identity; issuing a fresh increment after an ambiguous ACK is forbidden.
+
+## Atomic heterogeneous vector usage (v0.7)
+
+`RedisUsageStore` also implements optional `VectorUsageStore`. Vector reservations add `mode: "vector"`, per-dimension reserved totals, one reservation-wide growth cursor, and vector-growth replay metadata to the existing reservation JSON. Existing mode-less records remain scalar; no Redis key or balance migration is required.
+
+Vector reserve/grow/settle run as single Lua transactions across all participating dimensions and budgets. Pending expiry releases every dimension; liable expiry retains every dimension. Real-Redis CI runs portable vector conformance plus committed-vector-growth acknowledgement-loss replay.

@@ -129,3 +129,7 @@ resume tokenはone-timeです。同じtokenのconcurrent/repeated resumeは1 cal
 - [Architecture](../../docs/architecture.ja.md)
 
 trustedなprincipal / tenant derivation、authentication / authorization、retry-stable logical operation ID、horizontal scale時のdurable flow storage、lease loss後のprovider-specific fencingはapplication側の責務です。
+
+## Vector workloads (v0.7)
+
+`protectTool()` remains the bounded scalar convenience wrapper. Heterogeneous request/token/compute workloads should use the explicit `VectorUsageControl` / `VectorUsageLease` lifecycle from `mcp-usage-control` so every required dimension is reserved, grown, and settled atomically before metered work proceeds.

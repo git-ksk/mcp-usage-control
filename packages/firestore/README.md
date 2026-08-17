@@ -71,3 +71,7 @@ See the public guides and reference:
 - [Use from source / local tarballs](../../docs/using-from-source.md)
 - [Source / local tarballから使う](../../docs/using-from-source.ja.md)
 - [Release policy](../../docs/releasing.md)
+
+## Atomic vector usage (v0.7)
+
+`FirestoreUsageStore` implements optional `VectorUsageStore`. Vector metadata uses additive optional reservation-document fields, so existing scalar documents remain valid without rewrite. Admission/growth/settlement use one Firestore transaction and emulator tests cover portable vector conformance plus committed-growth acknowledgement loss.

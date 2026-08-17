@@ -6,89 +6,74 @@ This document records the evidence accumulated toward a future v1.0. It is a **r
 
 No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
-## Status update — v0.6 progressive-growth decision
+## Status update — v0.7 atomic-vector decision
 
-The immediate next source release is **v0.6.0**. v0.5.0 remains the released stabilization baseline.
+The immediate next source release preparation target is **v0.7.0**. `v0.6.0` is the latest released source baseline.
 
-The repository previously reached a point where the current fixed-reservation / scalar-unit model could have been frozen for v1. That conclusion remains evidence that the existing model is internally coherent, but the project is intentionally taking one more pre-1.0 stabilization release before committing to the final v1 surface.
+The v0.7 decision for #84 is explicit:
 
-The v0.6 decision for #83 is now explicit:
-
-- the bounded fixed-reservation `UsageStore` contract remains valid and source-compatible;
-- progressive reservation growth is adopted as an **optional** future-v1 capability through `UsageLease.grow()` + `ProgressiveUsageStore`;
-- stable `incrementId` + Store-issued `growthCursor` provides the lost-ACK replay fence;
-- growth is atomic across all original participating budgets, preserves pending/liable semantics, and remains bounded by total successfully reserved capacity at settlement;
-- settled/expired reservations reject every growth call, including replay;
-- #84 heterogeneous multi-dimensional usage remains the next open v1-scope candidate for v0.7.0.
-
-This is a release-planning change, not a rollback of the correctness work already completed.
+- existing scalar `UsageStore` / `UsageControl` semantics remain source-compatible and unchanged;
+- heterogeneous usage is adopted as an **optional** future-v1 capability through `VectorUsageControl`, `VectorUsageLease`, and `VectorUsageStore`;
+- unlike units are never summed into one synthetic scalar;
+- every required dimension/budget for one logical operation admits, grows, recovers, and settles in one authoritative Store transaction domain;
+- scalar and vector reservations share one operation-idempotency domain;
+- one Store-issued vector growth cursor composes v0.6 stable-increment/lost-ACK semantics across all dimensions;
+- pending expiry releases every dimension, liable expiry conservatively retains every dimension, and terminal vectors reject growth replay;
+- Redis, Cloudflare Durable Objects, and Firestore have provider-specific committed-vector-growth acknowledgement-loss proof in addition to portable vector conformance.
 
 ## Verdict
 
-**GO for v0.6.0 source-release preparation, subject to the normal CI/package/provider-integration gate.**
+**GO for v0.7.0 source-release preparation, subject to the normal CI/package/provider-integration gate.**
 
-The identified correctness/evidence gates are resolved:
+The previously resolved v0.5/v0.6 correctness gates remain carried forward, and #84 now has a provider-neutral contract plus built-in Store proof.
 
-- #77 — Firestore ambiguous-commit / acknowledgement-loss semantics;
-- #78 — Firestore bounded cross-instance clock-skew safety;
-- #79 — Node.js 24 full compatibility-evidence matrix;
-- #85 — mutable quota-limit semantics for an existing accounting bucket.
+**v1.0 readiness remains intentionally provisional.** #83 progressive growth and #84 atomic heterogeneous vector accounting are adopted as optional future-v1 capabilities. #81 operation reconciliation/status is the next feature decision gate in v0.8.0.
 
-No known defect in those areas requires holding v0.5.0.
+## v0.7 accounting boundary
 
-**v1.0 readiness remains intentionally provisional.** #83 is no longer unresolved: its proven optional growth surface is adopted for future v1. #84 and the later completion-ladder decisions remain open until their designated v0.x gates.
+The project now has two compatible application paths:
 
-## v0.6 accounting boundary
+- **scalar path** — `UsagePolicy` -> `UsageControl` -> `UsageStore`, with optional `ProgressiveUsageStore` growth;
+- **vector path** — `VectorUsagePolicy` -> `VectorUsageControl` -> optional `VectorUsageStore`.
 
-v0.5.0 preserves the currently proven contract:
+Stable invariants across both paths:
 
-- `UsagePolicy` quote followed by atomic `UsageStore.reserve()`;
-- all-or-nothing multi-budget admission;
-- one scalar quoted/actual unit count applied to every budget participating in one reservation;
-- a bounded fixed reservation established before metered work for base `UsageStore` implementations;
-- optional progressive capacity growth on the **same** reservation for `ProgressiveUsageStore` implementations, with stable increment identity + opaque growth cursor replay fencing;
-- `actualUnits <= reservedUnits`, where `reservedUnits` includes only successfully committed growth;
-- replay identity `(tenantId, principal.id, tool, operationId)`;
-- explicit `pending -> cost-liable` transition via `markLiable()`;
-- renewable leases;
-- conservative expiry after liability;
-- identical settlement replay and conflicting-settlement rejection;
-- fail-closed storage semantics;
-- same-key mutable effective limits that preserve authoritative reserved/consumed usage;
-- Memory, Redis, Cloudflare Durable Objects, and Firestore Stores under their documented deployment constraints;
-- single-round and supported multi-round MCP TypeScript SDK v2 accounting paths;
-- shared/durable one-time multi-round flow claims without sticky MCP session affinity;
-- provider-neutral observability that cannot change enforcement outcomes;
-- portable `UsageStore` / `McpUsageFlowStore` conformance runners.
+- one logical operation keeps one replay identity `(tenantId, principal.id, tool, operationId)`;
+- every budget/dimension required for one admission commits atomically or none commit;
+- metered work is preceded by explicit liability;
+- renewal changes lease duration only;
+- ambiguous state-changing results fail closed and require exact replay/reconciliation;
+- pending expiry may release capacity; liable unknown usage is conservative;
+- settlement is bounded by successfully reserved capacity;
+- business result replay remains application-owned.
 
-A second logical operation is not treated as an accounting-equivalent top-up workaround. Independent per-dimension reserve calls are not treated as equivalent when all dimensions must admit atomically.
+Vector-specific invariants:
 
-## v1 scope questions intentionally left open
+- each dimension has its own units and budget topology;
+- a budget key cannot belong to multiple dimensions in one vector;
+- settlement reports every dimension exactly once and releases unused units only from that dimension's budgets;
+- vector growth uses one stable `incrementId` and one reservation-wide opaque cursor while retaining the complete topology;
+- independent per-dimension reserve calls are never presented as an atomic vector equivalent.
+
+## v1 scope decisions
 
 ### #83 — progressive reservation growth — ADOPTED in v0.6
 
-The v0.6 proof adopts progressive growth into the future v1 surface as an optional Store extension rather than a mandatory change to `UsageStore`. The proven contract covers atomic all-budget growth, deterministic increment replay identity, lost-ACK fencing, pending/liable inheritance, conservative expiry/recovery, terminal-state rejection, and settlement bounded by total successfully reserved capacity.
-
-Memory provides the reference proof; Redis uses one Lua transaction, Cloudflare Durable Objects use one SQLite `transactionSync` domain plus schema-v2 additive growth metadata, and Firestore uses one retried transaction with the next cursor fixed outside the callback. Portable progressive conformance is supplemented by provider-specific ambiguity/concurrency tests.
+Progressive scalar growth remains an optional Store extension. The proof covers atomic all-budget growth, deterministic increment replay identity, lost-ACK fencing, pending/liable inheritance, conservative expiry/recovery, terminal-state rejection, and settlement bounded by total successfully reserved capacity.
 
 See [Progressive reservation growth](progressive-reservation-growth.md) and [Progressive MCP growth](progressive-mcp-integration.md).
 
-### #84 — heterogeneous multi-dimensional usage
+### #84 — heterogeneous multi-dimensional usage — ADOPTED in v0.7
 
-The feature can enter v1 if the design proves, before API freeze:
+The v0.7 proof adopts an optional vector surface rather than changing the scalar contract. It covers all-or-nothing dimension admission, one logical replay identity, hierarchical budgets inside dimensions, atomic per-dimension settlement, progressive vector growth/replay, pending/liable recovery, scalar/vector operation collision, and provider-neutral Store conformance.
 
-- all required dimensions admit atomically or none commit;
-- one logical operation keeps one replay identity;
-- hierarchical budgets inside one dimension compose cleanly;
-- settlement/replay/expiry/lost-ACK semantics remain deterministic;
-- the representation stays provider-neutral and does not turn usage enforcement into billing/pricing logic;
-- built-in and third-party Store conformance can express the required transaction shape.
+Memory is the reference implementation. Redis uses one Lua transaction with additive vector JSON metadata; Firestore uses one retried transaction with additive optional reservation fields; Cloudflare Durable Objects use SQLite `transactionSync` plus schema-v3 `reservation_vectors` sidecar metadata. Existing scalar provider data remains readable without migration/rewrite.
 
-If a safe vector model is not ready, v1 may retain the v0.5 scalar model and introduce a later compatible or major-version extension as appropriate.
+See [Atomic heterogeneous usage vectors](vector-usage.md) and [Vector MCP integration](vector-mcp-integration.md).
 
 ### Other open capabilities
 
-Issues #76, #81, and #82 are not automatically excluded from v1 merely because earlier planning called them post-v1. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
+#81 is the next v0.8 decision target. #76 and #82 remain later completion-ladder decisions. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
 
 First-class MCP Tasks integration likewise remains dependent on the upstream TypeScript protocol surface; the accounting lifecycle itself is already defined and proof-tested.
 
@@ -154,17 +139,17 @@ See [Mutable quota limits](mutable-quota-limits.md).
 - production horizontal scale requires shared provider-backed accounting/flow state where appropriate;
 - Firestore's supported lease-recovery profile requires bounded/synchronized host clocks and correctly sized `expiryGraceMs`.
 
-## v0.6 release checks
+## v0.7 release checks
 
-Before creating any v0.6.0 source tag/release:
+Before creating any v0.7.0 source tag/release:
 
-1. version all five packages together to `0.6.0`;
+1. version all five packages together to `0.7.0`;
 2. run Node 20/22/24 normal CI;
-3. run Redis progressive conformance/lost-ACK integration, Cloudflare local workerd progressive conformance/lost-growth-ACK integration, and Firestore Emulator progressive conformance;
-4. run package tarball/content/version and clean-consumer verification;
-5. verify English/Japanese growth/state-machine/MCP/migration documentation;
+3. run Redis scalar/progressive/vector conformance + lost-ACK integration, Cloudflare local workerd scalar/progressive/vector conformance + remote lost-vector-growth-ACK integration, and Firestore Emulator scalar/progressive/vector conformance;
+4. run package tarball/content/version and clean-consumer verification, including the public vector conformance export;
+5. verify English/Japanese vector/state-machine/MCP/provider-migration documentation;
 6. merge the implementation PR only after required checks are green;
-7. create the v0.6.0 tag/GitHub Release only with separate explicit authorization;
+7. create the v0.7.0 tag/GitHub Release only with separate explicit authorization;
 8. keep npm publication separate unless independently authorized.
 
 ## Future v1 release gate
@@ -186,14 +171,16 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 ## Current decision
 
-**Next source release: v0.6.0.**
+**Next source release preparation target: v0.7.0.**
 
-**v0.6.0 readiness: GO for release preparation, subject to normal CI/provider/package checks.**
+**v0.7.0 readiness: GO for release preparation, subject to normal CI/provider/package checks.**
 
-**#83: ADOPTED for the future v1 stable surface as optional progressive reservation growth.**
+**#83: ADOPTED for future v1 as optional progressive reservation growth.**
 
-**#84: next v1-scope decision target in v0.7.0.**
+**#84: ADOPTED for future v1 as optional atomic heterogeneous vector usage.**
 
-**v1.0 itself remains a later stable promotion with no new feature.**
+**#81: next feature decision target in v0.8.0.**
 
-**npm publication: still deferred and separate.**
+**v1.0 remains a later stable promotion with no new feature.**
+
+**npm publication remains deferred and separate.**

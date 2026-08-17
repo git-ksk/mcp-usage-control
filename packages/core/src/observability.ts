@@ -41,6 +41,29 @@ export type UsageEvent =
       })
   | (UsageEventBase &
       RequestIdentityFields & {
+        type: 'vector.reserve.accepted';
+        reservationId: string;
+        dimensions: readonly {
+          key: string;
+          reservedUnits: number;
+          budgetKeys: readonly string[];
+        }[];
+        remainingByBudget: readonly {
+          dimensionKey: string;
+          budgetKey: string;
+          remaining: number;
+        }[];
+      })
+  | (UsageEventBase &
+      RequestIdentityFields & {
+        type: 'vector.reserve.denied';
+        reason: string;
+        limitingDimensionKey?: string;
+        limitingBudgetKey?: string;
+        remaining?: number;
+      })
+  | (UsageEventBase &
+      RequestIdentityFields & {
         type: 'settlement.completed';
         reservationId: string;
         budgetKeys: readonly string[];
@@ -49,6 +72,30 @@ export type UsageEvent =
         releasedUnits: number;
         outcome: string;
       })
+  | (UsageEventBase &
+      RequestIdentityFields & {
+        type: 'vector.settlement.completed';
+        reservationId: string;
+        dimensions: readonly {
+          key: string;
+          reservedUnits: number;
+          actualUnits: number;
+          releasedUnits: number;
+        }[];
+        outcome: string;
+      })
+  | (UsageEventBase & {
+      type: 'vector.reservation.recovered';
+      store: 'memory' | 'redis' | 'cloudflare';
+      recovery: 'pending_released' | 'liable_retained';
+      reservationId?: string;
+      principalId?: string;
+      tenantId?: string;
+      tool?: string;
+      dimensionCount?: number;
+      budgetCount?: number;
+      count: number;
+    })
   | (UsageEventBase & {
       type: 'reservation.recovered';
       store: 'memory' | 'redis' | 'cloudflare';
@@ -110,6 +157,7 @@ export interface UsageLogRecord {
   remainingMin?: number;
   remainingMax?: number;
   count?: number;
+  dimensionCount?: number;
   /** Explicit opt-in only; callers remain responsible for metadata privacy/cardinality. */
   metadata?: UsageEventMetadata;
 }
@@ -157,6 +205,30 @@ export function projectUsageEvent(
     };
   }
 
+  if (event.type === 'vector.reserve.accepted') {
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'reserve',
+      result: 'success',
+      dimensionCount: event.dimensions.length,
+      budgetCount: event.remainingByBudget.length,
+      ...metadata,
+    };
+  }
+
+  if (event.type === 'vector.reserve.denied') {
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'reserve',
+      result: 'denied',
+      denialReason: normalizeDenialReason(event.reason),
+      ...(event.remaining === undefined ? {} : { remaining: event.remaining }),
+      ...metadata,
+    };
+  }
+
   if (event.type === 'settlement.completed') {
     return {
       timestamp: event.timestamp,
@@ -166,6 +238,32 @@ export function projectUsageEvent(
       reservedUnits: event.reservedUnits,
       actualUnits: event.actualUnits,
       releasedUnits: event.releasedUnits,
+      ...metadata,
+    };
+  }
+
+  if (event.type === 'vector.settlement.completed') {
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'settle',
+      result: 'success',
+      dimensionCount: event.dimensions.length,
+      ...metadata,
+    };
+  }
+
+  if (event.type === 'vector.reservation.recovered') {
+    return {
+      timestamp: event.timestamp,
+      eventType: event.type,
+      phase: 'recovery',
+      result: 'recovery',
+      store: event.store,
+      recovery: event.recovery,
+      ...(event.dimensionCount === undefined ? {} : { dimensionCount: event.dimensionCount }),
+      ...(event.budgetCount === undefined ? {} : { budgetCount: event.budgetCount }),
+      count: event.count,
       ...metadata,
     };
   }
