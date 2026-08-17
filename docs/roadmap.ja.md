@@ -10,11 +10,11 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 ## 現在のbaseline
 
-**v0.5.0はpre-v1 stabilization baselineとしてrelease済み**です。
+**v0.5.0はpre-v1 stabilization baselineとしてrelease済み**です。**v0.6.0がcurrent completion targetで、#83はdesign / implementation proof gateを通過し採用判断となりました。**
 
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 
-current runtimeは引き続きbounded fixed reservationと、1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用するmodelです。これはv0.5 semanticsであり、取り消せないv1 freezeではありません。
+base runtimeはbounded fixed reservationと、1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用するmodelを維持します。v0.6ではgrowth-capable Storeに限りsame reservationのoptional progressive growthを追加し、heterogeneous multi-dimensional usageは後続decisionです。
 
 ## 「v1完成」の定義
 
@@ -37,7 +37,7 @@ v1.0前に次を完了します。
 
 | Release | 主対象 | preferred outcome | release gate |
 | --- | --- | --- | --- |
-| **v0.6.0** | #83 progressive reservation growth | failure-safe reservation top-upをv1へ含める | atomic multi-budget growth、retry identity、lost-ACK safety、liable / expiry semantics、settlement bound、Store / concurrency proof。成立しなければv1から明示defer / exclude |
+| **v0.6.0** | #83 progressive reservation growth | **採用**: optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`、growth cursor + stable increment identity、atomic multi-budget / lost-ACK / provider conformance proof |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | v0.6 decisionと安全にcomposeできるならatomic vector / per-dimension accountingをv1へ含める | one logical replay identity、dimension全体のatomic admission / settlement、deterministic retry / conflict、Store conformance。成立しなければ明示defer / exclude |
 | **v0.8.0** | #81 operation reconciliation / status | read-only reconciliation capability + Store support matrixをv1へ含める | second reservation禁止、prove可能なauthoritative stateのみ、`unknown/indeterminate`明示、adapter別lost-ACK evidence。共通化できなければnarrower boundaryをfreeze |
 | **v0.9.0** | #76 operational snapshot + #82 threshold / exhaustion | bounded non-authoritative production observability / helper / canonical patternをv1へ含める | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離。stateful APIが重いならdocs / patternで完了可 |
@@ -49,6 +49,8 @@ SemVer上 `0.10.0` は通常の有効versionです。`0.9.0` の次が必ず `1.
 ## 各decision target
 
 ### v0.6.0 — progressive reservation growth (#83)
+
+**判断: future v1 stable surfaceへ採用。** base `UsageStore`はfixed-reservation互換のまま維持し、growthは強いtransaction contractを証明できるStoreだけがopt-inするoptional extensionとする。
 
 current bounded-reservation modelは正しい一方、streaming / iterative / long-running metered workではadmission時に現実的なsafe maximumを決めづらい場合があります。
 
@@ -112,7 +114,7 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 
 | Issue | target decision | current direction |
 | --- | --- | --- |
-| #83 progressive reservation growth | **v0.6.0** | atomic top-up proofが成立すれば採用優先 |
+| #83 progressive reservation growth | **v0.6.0** | **採用**: optional progressive Store capability + `UsageLease.grow()` |
 | #84 heterogeneous multi-dimensional usage | **v0.7.0** | #83と安全にcomposeするatomic vector modelをproofできれば採用優先 |
 | #81 operation reconciliation / status | **v0.8.0** | read-only capability vocabulary + Store support matrixを採用優先 |
 | #76 operational usage snapshot | **v0.9.0** | bounded non-authoritative helper / patternを採用優先 |
@@ -147,7 +149,10 @@ multi-roundはshared / durable one-time compare-and-consumeをcurrent direction�
 portable conformanceは引き続きbehavioral baselineです。
 
 ```ts
-import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import {
+  assertUsageStoreConformance,
+  runProgressiveUsageStoreConformance,
+} from 'mcp-usage-control/conformance';
 import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
 ```
 

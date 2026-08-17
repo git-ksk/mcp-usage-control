@@ -4,15 +4,18 @@
 
 ## Current schema
 
-The current schema version is **1**.
+The current schema version is **2**.
 
-Version 1 contains:
+Version 2 keeps the v1 accounting layout and adds one separate progressive-growth metadata table:
 
 - `budgets`
 - `reservations`
+- `reservation_growth` (`reservation_id`, current `growth_cursor`, latest replay metadata)
 - `reservations_active_expiry`
 - `reservations_tombstone_expiry`
 - `usage_control_schema`, a single-row metadata table containing the schema version
+
+The v1 `budgets` and `reservations` column layouts are unchanged.
 
 The schema metadata is internal adapter state. Do not modify it from application code.
 
@@ -20,11 +23,19 @@ The schema metadata is internal adapter state. Do not modify it from application
 
 Schema initialization runs synchronously inside a Durable Object storage transaction before the public Durable Object runtime starts serving usage-control RPC operations.
 
-For a fresh database, the adapter creates the v1 tables and indexes and then writes schema version `1`.
+For a fresh database, the adapter creates the v1 accounting tables/indexes, adds `reservation_growth`, validates the resulting v2 layout, and then writes schema version `2`.
 
-For a database created by the pre-versioning v0.1 implementation, the adapter validates the existing `budgets` and `reservations` column layout and accounting constraints before adopting it as schema v1. Existing accounting rows are not rewritten. Missing v1 indexes may be recreated because they do not change quota balances.
+For a pre-versioning database, the adapter first validates/adopts the exact v1 accounting layout and then performs the deterministic v1 -> v2 additive migration. For an explicitly marked v1 database, it validates v1 before the same migration. Existing `budgets` / `reservations` accounting rows are not rewritten; only `reservation_growth` and the schema-version marker are added. Missing v1 indexes may still be recreated because they do not change quota balances.
 
 Initialization is safe to retry. If initialization throws, the schema transaction is rolled back and the Durable Object does not proceed with usage enforcement.
+
+## v1 -> v2 progressive-growth migration
+
+The v0.6 migration is intentionally additive. It creates `reservation_growth` without changing the v1 accounting tables. Reservations that already exist at upgrade time have no corresponding growth row and therefore remain fixed reservations. New v0.6 reservations create their growth row atomically with admission and can opt into `grow`.
+
+This avoids retroactively inventing a growth cursor for an operation whose caller never received one. No quota balance, liability state, expiry timestamp, settlement state, or tombstone is rewritten by the migration.
+
+An older v1 binary does not understand schema version 2 and must not be used after a domain has migrated. Rollback is therefore a forward-fix/new-domain operation rather than manually lowering `usage_control_schema.version`.
 
 ## Fail-closed cases
 

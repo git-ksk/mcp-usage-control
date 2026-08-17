@@ -46,6 +46,12 @@ const RESERVATION_COLUMNS: Row[] = [
   { cid: 8, name: 'budget_ids_json', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
 ];
 
+const RESERVATION_GROWTH_COLUMNS: Row[] = [
+  { cid: 0, name: 'reservation_id', type: 'TEXT', notnull: 0, dflt_value: null, pk: 1 },
+  { cid: 1, name: 'growth_cursor', type: 'TEXT', notnull: 1, dflt_value: null, pk: 0 },
+  { cid: 2, name: 'last_growth_json', type: 'TEXT', notnull: 0, dflt_value: null, pk: 0 },
+];
+
 class Cursor<T extends Row> {
   constructor(private readonly rows: T[]) {}
   toArray(): T[] {
@@ -138,6 +144,11 @@ class FakeStorage {
       return new Cursor<T>([]);
     }
 
+    if (normalized.startsWith('update usage_control_schema set version = ? where id = 1')) {
+      this.schemaRows = [{ id: 1, version: Number(bindings[0]) }];
+      return new Cursor<T>([]);
+    }
+
     if (
       normalized.startsWith("select name, type, sql from sqlite_master where type = 'table' and name in")
     ) {
@@ -163,6 +174,16 @@ class FakeStorage {
         sql: query,
         columns: RESERVATION_COLUMNS.map(row => ({ ...row })),
       });
+      return new Cursor<T>([]);
+    }
+
+    if (normalized.startsWith('create table if not exists reservation_growth')) {
+      if (!this.tables.has('reservation_growth')) {
+        this.tables.set('reservation_growth', {
+          sql: query,
+          columns: RESERVATION_GROWTH_COLUMNS.map(row => ({ ...row })),
+        });
+      }
       return new Cursor<T>([]);
     }
 
@@ -234,7 +255,7 @@ function asStorage(fake: FakeStorage): Parameters<typeof initializeCloudflareUsa
 }
 
 describe('Cloudflare SQLite schema versioning', () => {
-  it('creates a fresh v1 database and is safe to run repeatedly', () => {
+  it('creates a fresh v2 database and is safe to run repeatedly', () => {
     const fake = new FakeStorage();
     const storage = asStorage(fake);
 
@@ -244,19 +265,33 @@ describe('Cloudflare SQLite schema versioning', () => {
     expect(readCloudflareUsageSchemaVersion(storage)).toBe(CLOUDFLARE_USAGE_SCHEMA_VERSION);
     expect(fake.tables.has('budgets')).toBe(true);
     expect(fake.tables.has('reservations')).toBe(true);
+    expect(fake.tables.has('reservation_growth')).toBe(true);
     expect(fake.indexes.has('reservations_active_expiry')).toBe(true);
     expect(fake.indexes.has('reservations_tombstone_expiry')).toBe(true);
     expect(fake.accountingMutationCount).toBe(0);
   });
 
-  it('adopts the exact pre-versioning v1 layout without mutating accounting rows', () => {
+  it('adopts and migrates the exact pre-versioning v1 layout without mutating accounting rows', () => {
     const fake = new FakeStorage();
     fake.seedLegacyV1();
     const storage = asStorage(fake);
 
     initializeCloudflareUsageSchema(storage);
 
-    expect(readCloudflareUsageSchemaVersion(storage)).toBe(1);
+    expect(readCloudflareUsageSchemaVersion(storage)).toBe(CLOUDFLARE_USAGE_SCHEMA_VERSION);
+    expect(fake.tables.has('reservation_growth')).toBe(true);
+    expect(fake.accountingMutationCount).toBe(0);
+  });
+
+  it('migrates a database explicitly marked v1 to v2 without touching accounting rows', () => {
+    const fake = new FakeStorage();
+    fake.seedLegacyV1();
+    fake.schemaRows = [{ id: 1, version: 1 }];
+
+    initializeCloudflareUsageSchema(asStorage(fake));
+
+    expect(readCloudflareUsageSchemaVersion(asStorage(fake))).toBe(2);
+    expect(fake.tables.has('reservation_growth')).toBe(true);
     expect(fake.accountingMutationCount).toBe(0);
   });
 
@@ -282,7 +317,7 @@ describe('Cloudflare SQLite schema versioning', () => {
     expect(fake.schemaRows).toEqual([]);
 
     initializeCloudflareUsageSchema(storage);
-    expect(readCloudflareUsageSchemaVersion(storage)).toBe(1);
+    expect(readCloudflareUsageSchemaVersion(storage)).toBe(CLOUDFLARE_USAGE_SCHEMA_VERSION);
   });
 
   it('fails closed on a partial unversioned schema', () => {

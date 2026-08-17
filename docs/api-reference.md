@@ -597,3 +597,13 @@ The safe accounting state machine is defined in [MCP Tasks accounting](mcp-tasks
 - Firestore Emulator integration and `@google-cloud/firestore` 8.7.0 type/runtime compatibility evidence
 
 The project remains pre-v1 until a separately authorized v1 release. The current source API is assessed as ready for v1 release-candidate/final-release preparation; see [v1.0 readiness review](v1-readiness.md).
+
+## Progressive reservation growth (v0.6)
+
+`ReservationRecord` may include an opaque `growthCursor`. `UsageLease.grow({ incrementId, additionalUnits, budgets })` requests capacity on the same logical reservation and returns an accepted/denied `StoreGrowResult`. A thrown Store/transport error leaves the attempt unresolved; the same lease permits only an exact retry until an authoritative result is obtained.
+
+Stores opt in through `ProgressiveUsageStore.growReservation()`. The base `UsageStore` interface is unchanged, so existing third-party fixed-reservation implementations remain compatible.
+
+The public conformance subpath also exports `runProgressiveUsageStoreConformance()` for Stores that claim growth support.
+
+See [Progressive reservation growth](progressive-reservation-growth.md).

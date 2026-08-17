@@ -6,25 +6,26 @@ This document records the evidence accumulated toward a future v1.0. It is a **r
 
 No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
-## Status update — v0.5 before v1
+## Status update — v0.6 progressive-growth decision
 
-The immediate next source release is **v0.5.0**.
+The immediate next source release is **v0.6.0**. v0.5.0 remains the released stabilization baseline.
 
 The repository previously reached a point where the current fixed-reservation / scalar-unit model could have been frozen for v1. That conclusion remains evidence that the existing model is internally coherent, but the project is intentionally taking one more pre-1.0 stabilization release before committing to the final v1 surface.
 
-Therefore, statements from the earlier review that #83/#84 were *definitively post-v1* are superseded by the current plan:
+The v0.6 decision for #83 is now explicit:
 
-- v0.5.0 keeps the current bounded fixed-reservation model;
-- v0.5.0 keeps one scalar quoted/actual unit count across all budgets participating in one reservation;
-- #83 progressive reservation growth remains an open **v1-scope candidate**;
-- #84 heterogeneous multi-dimensional usage remains an open **v1-scope candidate**;
-- either capability may still remain post-v1 if its design cannot preserve the existing safety guarantees with sufficient evidence.
+- the bounded fixed-reservation `UsageStore` contract remains valid and source-compatible;
+- progressive reservation growth is adopted as an **optional** future-v1 capability through `UsageLease.grow()` + `ProgressiveUsageStore`;
+- stable `incrementId` + Store-issued `growthCursor` provides the lost-ACK replay fence;
+- growth is atomic across all original participating budgets, preserves pending/liable semantics, and remains bounded by total successfully reserved capacity at settlement;
+- settled/expired reservations reject every growth call, including replay;
+- #84 heterogeneous multi-dimensional usage remains the next open v1-scope candidate for v0.7.0.
 
 This is a release-planning change, not a rollback of the correctness work already completed.
 
 ## Verdict
 
-**GO for v0.5.0 stabilization/source release.**
+**GO for v0.6.0 source-release preparation, subject to the normal CI/package/provider-integration gate.**
 
 The identified correctness/evidence gates are resolved:
 
@@ -35,17 +36,18 @@ The identified correctness/evidence gates are resolved:
 
 No known defect in those areas requires holding v0.5.0.
 
-**v1.0 readiness remains intentionally provisional.** The final v1 scope should be chosen after v0.5 experience, including explicit reconsideration of #83/#84 and any other low-risk/high-value capability that would be materially harder to add after a stable API commitment.
+**v1.0 readiness remains intentionally provisional.** #83 is no longer unresolved: its proven optional growth surface is adopted for future v1. #84 and the later completion-ladder decisions remain open until their designated v0.x gates.
 
-## v0.5 accounting boundary
+## v0.6 accounting boundary
 
 v0.5.0 preserves the currently proven contract:
 
 - `UsagePolicy` quote followed by atomic `UsageStore.reserve()`;
 - all-or-nothing multi-budget admission;
 - one scalar quoted/actual unit count applied to every budget participating in one reservation;
-- a bounded fixed reservation established before metered work;
-- `actualUnits <= reservedUnits`;
+- a bounded fixed reservation established before metered work for base `UsageStore` implementations;
+- optional progressive capacity growth on the **same** reservation for `ProgressiveUsageStore` implementations, with stable increment identity + opaque growth cursor replay fencing;
+- `actualUnits <= reservedUnits`, where `reservedUnits` includes only successfully committed growth;
 - replay identity `(tenantId, principal.id, tool, operationId)`;
 - explicit `pending -> cost-liable` transition via `markLiable()`;
 - renewable leases;
@@ -63,19 +65,13 @@ A second logical operation is not treated as an accounting-equivalent top-up wor
 
 ## v1 scope questions intentionally left open
 
-### #83 — progressive reservation growth
+### #83 — progressive reservation growth — ADOPTED in v0.6
 
-The feature can enter v1 if the design proves, before API freeze:
+The v0.6 proof adopts progressive growth into the future v1 surface as an optional Store extension rather than a mandatory change to `UsageStore`. The proven contract covers atomic all-budget growth, deterministic increment replay identity, lost-ACK fencing, pending/liable inheritance, conservative expiry/recovery, terminal-state rejection, and settlement bounded by total successfully reserved capacity.
 
-- every increment is atomically admitted across all participating budgets or not applied;
-- one top-up attempt has deterministic retry/idempotency identity;
-- lost ACK after a committed increment cannot duplicate capacity;
-- pending vs. cost-liable semantics remain explicit;
-- expiry/recovery retains the correct conservative charge after one or more increments;
-- settlement cannot exceed total successfully reserved capacity;
-- long-running / multi-round execution does not create a second logical operation merely to gain capacity.
+Memory provides the reference proof; Redis uses one Lua transaction, Cloudflare Durable Objects use one SQLite `transactionSync` domain plus schema-v2 additive growth metadata, and Firestore uses one retried transaction with the next cursor fixed outside the callback. Portable progressive conformance is supplemented by provider-specific ambiguity/concurrency tests.
 
-If this proof is not ready, v1 may retain the v0.5 fixed-reservation model and add top-up later.
+See [Progressive reservation growth](progressive-reservation-growth.md) and [Progressive MCP growth](progressive-mcp-integration.md).
 
 ### #84 — heterogeneous multi-dimensional usage
 
@@ -158,17 +154,17 @@ See [Mutable quota limits](mutable-quota-limits.md).
 - production horizontal scale requires shared provider-backed accounting/flow state where appropriate;
 - Firestore's supported lease-recovery profile requires bounded/synchronized host clocks and correctly sized `expiryGraceMs`.
 
-## v0.5 release checks
+## v0.6 release checks
 
-Before creating the v0.5.0 source tag/release:
+Before creating any v0.6.0 source tag/release:
 
-1. version all five packages together to `0.5.0`;
-2. move the intended post-v0.4 changes into the `0.5.0` changelog section;
-3. run Node 20/22/24 normal CI;
-4. run Redis, Cloudflare local/workerd, and Firestore Emulator integration checks;
-5. run package tarball/content/version and clean-consumer verification;
-6. verify README/roadmap/release docs describe v0.5 as the immediate release and v1 as a later scope decision;
-7. create the v0.5.0 source tag/GitHub Release only after the release commit is green;
+1. version all five packages together to `0.6.0`;
+2. run Node 20/22/24 normal CI;
+3. run Redis progressive conformance/lost-ACK integration, Cloudflare local workerd progressive conformance/lost-growth-ACK integration, and Firestore Emulator progressive conformance;
+4. run package tarball/content/version and clean-consumer verification;
+5. verify English/Japanese growth/state-machine/MCP/migration documentation;
+6. merge the implementation PR only after required checks are green;
+7. create the v0.6.0 tag/GitHub Release only with separate explicit authorization;
 8. keep npm publication separate unless independently authorized.
 
 ## Future v1 release gate
@@ -176,7 +172,7 @@ Before creating the v0.5.0 source tag/release:
 A future v1.0 release should happen only after:
 
 1. v0.5 stabilization/dogfood has produced enough operational confidence;
-2. #83/#84 and other deliberate v1-scope candidates have been explicitly accepted or deferred;
+2. each deliberate v1-scope candidate has been explicitly accepted or deferred at its designated v0.x gate;
 3. long-lived public package/subpath/API names are reviewed one final time;
 4. any breaking contract change judged necessary is made before the v1 tag;
 5. the full package/integration matrix is green at `1.0.0`;
@@ -190,12 +186,14 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 ## Current decision
 
-**Next source release: v0.5.0.**
+**Next source release: v0.6.0.**
 
-**v0.5.0 readiness: GO, subject to normal release CI/packaging checks.**
+**v0.6.0 readiness: GO for release preparation, subject to normal CI/provider/package checks.**
 
-**v1.0 scope/API freeze: NOT FINAL; re-evaluate after v0.5.**
+**#83: ADOPTED for the future v1 stable surface as optional progressive reservation growth.**
 
-**#83/#84: OPEN v1-scope candidates, not predetermined post-v1 work.**
+**#84: next v1-scope decision target in v0.7.0.**
+
+**v1.0 itself remains a later stable promotion with no new feature.**
 
 **npm publication: still deferred and separate.**

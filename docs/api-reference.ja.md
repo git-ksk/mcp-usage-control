@@ -593,3 +593,13 @@ safe accounting state machineは [MCP Tasks の利用量 accounting](mcp-tasks-a
 - Firestore Emulator integration + `@google-cloud/firestore` 8.7.0 compatibility evidence
 
 projectは別途v1 releaseがexplicitにauthorizeされるまでpre-v1です。current source APIはv1 release-candidate / final-release準備へ進める状態と評価しています。詳しくは [v1.0 readiness review](v1-readiness.ja.md)。
+
+## Progressive reservation growth（v0.6）
+
+`ReservationRecord`にはopaqueな`growthCursor`が付く場合がある。`UsageLease.grow({ incrementId, additionalUnits, budgets })`はsame logical reservationのcapacityを増加要求し、accepted/deniedの`StoreGrowResult`を返す。Store/transport errorがthrowされた場合attemptはunresolvedのままで、authoritative resultが得られるまで同じleaseはexact retryだけを許可する。
+
+Storeは`ProgressiveUsageStore.growReservation()`でopt-inする。base `UsageStore` interfaceは変更しないため、既存third-party fixed-reservation Storeは互換のまま。
+
+public conformance subpathはgrowth supportをclaimするStore向けに`runProgressiveUsageStoreConformance()`もexportする。
+
+詳細は[Progressive reservation growth](progressive-reservation-growth.ja.md)を参照。

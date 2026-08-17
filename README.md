@@ -66,11 +66,11 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.5.0`. `v0.5.0` is the next GitHub/source stabilization release; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.6.0` for the next GitHub/source release preparation. `v0.5.0` remains the latest released source baseline; npm registry publication remains intentionally deferred.
 
 ## v1 scope under consideration after v0.5
 
-The current runtime behavior remains the leading v1 candidate, but **the v1 API freeze is not final**. v0.5.0 is intentionally being released first so the final stable surface can reflect real integration experience.
+The v1 API freeze is still not final. The v0.6 decision adopts failure-safe progressive reservation growth as an optional future-v1 capability while keeping the base fixed-reservation `UsageStore` contract compatible.
 
 | Area | Current status | Boundary |
 | --- | --- | --- |
@@ -80,7 +80,7 @@ The current runtime behavior remains the leading v1 candidate, but **the v1 API 
 | `protectTool()` | **strong v1 candidate** | Single-round MCP tools |
 | `protectMultiRoundTool()` | **strong v1 candidate** | Supported `input_required` multi-round accounting |
 | Shared/durable MRTR compare-and-consume | **current v1 direction** | Cross-instance resume without sticky MCP sessions |
-| Progressive reservation growth (#83) | **open v1-scope candidate** | v0.5 uses fixed reservation; atomic top-up needs failure proof |
+| Progressive reservation growth (#83) | **adopted in v0.6** | Optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic/lost-ACK/provider proof |
 | Heterogeneous multi-dimensional usage (#84) | **open v1-scope candidate** | v0.5 uses one scalar unit count; vector accounting needs atomic design proof |
 | First-class MCP Tasks wire/runtime adapter | **scope depends on upstream stabilization** | Accounting semantics are defined; stable adapter is not yet claimed |
 | New stateless MRTR claim mode | **deferred unless justified** | No demonstrated advantage over shared one-time claim |
@@ -321,7 +321,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.5.0` is the immediate GitHub/source stabilization release. The project will re-evaluate the final v1 scope after v0.5 rather than treating the current candidate boundary as already frozen.
+`v0.6.0` is the current source-release preparation target. #83 is adopted for the future v1 surface; later ladder decisions remain intentionally open. Tag/Release creation and npm publication remain separate operations.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 

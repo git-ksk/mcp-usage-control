@@ -10,11 +10,11 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.5.0 is released** as the pre-v1 stabilization baseline.
+**v0.5.0 is released** as the pre-v1 stabilization baseline. **v0.6.0 is the current completion target and #83 has passed its design/implementation proof gate for adoption.**
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
-The current runtime still uses bounded fixed reservations and one scalar quoted/actual unit count across every budget participating in a reservation. Those are v0.5 semantics, not an irreversible v1 freeze.
+The base runtime keeps bounded fixed reservations and one scalar quoted/actual unit count across every budget participating in a reservation. v0.6 adds optional progressive growth on that same reservation for growth-capable Stores; heterogeneous multi-dimensional usage remains a later decision.
 
 ## What “v1 complete” means
 
@@ -37,7 +37,7 @@ Each release below is a **decision gate**. A target feature is not forced into v
 
 | Release | Primary scope | Preferred outcome | Release gate |
 | --- | --- | --- | --- |
-| **v0.6.0** | #83 progressive reservation growth | Include failure-safe reservation top-up in v1 | Atomic multi-budget growth, retry identity, lost-ACK safety, liable/expiry semantics, settlement bound, Store/concurrency proof; otherwise explicitly exclude/defer from v1 |
+| **v0.6.0** | #83 progressive reservation growth | **Adopted** as an optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`, growth cursor + stable increment identity, atomic multi-budget proof, lost-ACK replay fence, provider conformance |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | Include atomic vector/per-dimension accounting in v1 if it composes cleanly with the v0.6 decision | One logical replay identity, atomic admission/settlement across dimensions, deterministic retry/conflict semantics, Store conformance; otherwise explicitly exclude/defer |
 | **v0.8.0** | #81 operation reconciliation/status | Include a coherent read-only reconciliation capability and per-Store support matrix | No second reservation, authoritative/provable states only, explicit `unknown/indeterminate`, adapter-specific lost-ACK evidence; otherwise define and freeze the narrower supported boundary |
 | **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals | Include bounded non-authoritative production observability/tooling or canonical helpers | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement; documentation-only outcome is acceptable if a stateful API adds more risk than value |
@@ -49,6 +49,8 @@ Each release below is a **decision gate**. A target feature is not forced into v
 ## Detailed decision targets
 
 ### v0.6.0 — progressive reservation growth (#83)
+
+**Decision: adopt for the future v1 stable surface.** The base `UsageStore` stays fixed-reservation compatible; growth is an optional extension for Stores that can prove the stronger transaction contract.
 
 The current bounded-reservation model is correct but can be unnecessarily restrictive for streaming, iterative, or long-running metered work whose safe maximum is not practical to know at admission time.
 
@@ -63,7 +65,7 @@ The preferred v1 design adds progressive growth only if it preserves:
 - `actual <= total successfully reserved` settlement;
 - one logical operation across multi-round and Tasks flows.
 
-If those guarantees cannot be proven without weakening the current model, v0.6 records an explicit v1 exclusion/defer decision.
+Those guarantees are implemented and proof-tested through Memory plus portable/provider-specific paths for Redis, Cloudflare Durable Objects, and Firestore. The v0.6 decision is therefore adoption, subject to the normal release CI/package gate.
 
 ### v0.7.0 — heterogeneous multi-dimensional usage (#84)
 
@@ -112,7 +114,7 @@ It must resolve:
 
 | Issue | Target decision | Current direction |
 | --- | --- | --- |
-| #83 progressive reservation growth | **v0.6.0** | Prefer inclusion if atomic top-up proof succeeds |
+| #83 progressive reservation growth | **v0.6.0** | **Adopted**: optional progressive Store capability + `UsageLease.grow()` |
 | #84 heterogeneous multi-dimensional usage | **v0.7.0** | Prefer inclusion if atomic vector model composes safely with #83 |
 | #81 operation reconciliation/status | **v0.8.0** | Prefer inclusion as read-only capability vocabulary + Store support matrix |
 | #76 operational usage snapshot | **v0.9.0** | Prefer bounded non-authoritative helper/pattern |
@@ -147,7 +149,10 @@ The current multi-round direction remains shared/durable one-time compare-and-co
 Portable conformance remains a required behavioral baseline:
 
 ```ts
-import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
+import {
+  assertUsageStoreConformance,
+  runProgressiveUsageStoreConformance,
+} from 'mcp-usage-control/conformance';
 import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
 ```
 

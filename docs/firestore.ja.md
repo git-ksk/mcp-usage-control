@@ -256,3 +256,13 @@ Firestoreを選ぶ場合でも、共有budgetが重要な要件なら本番traff
 - Reads/writes at scale: https://firebase.google.com/docs/firestore/understand-reads-writes-scale
 
 API optionは [API reference](api-reference.ja.md)、全体のstate machineは [Architecture](architecture.ja.md) を参照してください。
+
+## Progressive reservation growth（v0.6）
+
+`FirestoreUsageStore`はoptional progressive-growth contractを、reservation documentと全participating budget documentを含む1 Firestore transactionで実装します。
+
+next growth cursorはtransaction callbackの**外側**で生成します。Firestore SDKはcallbackを自動retryする場合があるため、retry全体でattempt identity / cursorを固定し、SDK retryがsecond logical increaseになることを防ぎます。transaction内ではexact increment replay、stale-cursor reject、original budget membership完全一致、all-or-nothing quota admission、既存pending / liable expiry ruleを適用します。
+
+storage compatibilityはadditiveです。v0.6 reservation documentには`growthCursor`とlatest-growth replay metadataが追加される場合があります。既存v0.5 documentはvalid fixed reservationのままで、暗黙にgrowableへupgradeしません。collection resetやaccounting rewriteは不要です。
+
+既存`expiryGraceMs` clock-skew contractもgrowthへ適用します。configured grace内でactiveなreservationはgrow可能ですが、authoritative expiry / recovery後は全growth callをfail closedにします。testではgrown pending release、liable retention、Firestore transaction retry、commit-after-ACK-lossをsame stable increment identityでreplayする経路をcoverします。

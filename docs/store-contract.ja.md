@@ -318,3 +318,33 @@ built-in Storeはportable semanticsとprovider-specific test / documentationを�
 | `RedisMcpUsageFlowStore` | per-flow Redis Lua compare/delete | Redis expiry/server time | concurrent consume / mismatch preservation / lost-consume-ACK fail-closed test。Redis HAはdeployment-specific |
 
 built-in test合格はunderlying providerをfinancial ledgerへ変えるものではありません。このprojectはusage admissionをenforceし、financial-grade durabilityが必要なら別systemへreconcileします。
+
+## Optional progressive reservation growth contract（v0.6）
+
+third-party Storeはfixed-reservation `UsageStore`のままでよい。Progressive growthは**optional capability**とし、既存Storeのsource compatibilityを維持する。
+
+```ts
+interface ProgressiveUsageStore extends UsageStore {
+  growReservation(input: GrowReservationInput): Promise<StoreGrowResult>;
+}
+```
+
+このcapabilityを実装するStoreは`runProgressiveUsageStoreConformance()`にも合格し、production-safeなprogressive growthをclaimする前にbackend-specificなconcurrency / acknowledgement-ambiguity evidenceを持たなければならない。
+
+normative rule:
+
+- Store-issued opaque `growthCursor`付きで作成されたreservationだけgrowable。旧/fixed reservationはreadableだが`grow`はfail closed。
+- attemptはapplication-owned stable `incrementId`、`additionalUnits`、current limitを含むoriginal budget set全体、expected cursorを持つ。
+- accepted growthは全participating budgetと`reservedUnits`をatomicに増加する。partial growthは禁止。
+- authoritative quota denialはcapacityを変更しないが、attempt resultを記録してcursorをrotateする。
+- same increment + same prior cursor + same canonical parametersはexact replayし、二重reserveしない。
+- same increment identityのconflicting reuse、またはstale cursorでdifferent incrementを送るとreject。
+- pendingはpending、liableはliableのまま。growthはTTLをrenewしない。
+- expiry/recoveryはgrown total全体へ既存pending/liable ruleを適用する。
+- settlementはtotal successfully reserved capacityを超えられない。
+- settledまたはexpired/recovered後は、replayを含む全growth callをrejectする。
+- Store/provider ambiguityを追加metered workの許可へ変換しない。
+
+process lossから同じlogical operationを復旧する必要がある場合、callerはgrowth送信**前**に同じ`incrementId`を永続化するかdeterministicに再構成できるようにする。cursorはreplay fenceでありauthenticationではない。
+
+詳細は[Progressive reservation growth](progressive-reservation-growth.ja.md)と[MCP progressive example](progressive-mcp-integration.ja.md)を参照。

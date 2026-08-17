@@ -227,6 +227,54 @@ describe('FirestoreUsageStore cross-instance clock skew', () => {
     });
   });
 
+  it('applies the same skew grace to growth and releases the full grown pending total on expiry', async () => {
+    const database = new SharedFirestore();
+    let realNow = 15_000;
+    const producer = storeAt(database, () => realNow, 500);
+    const recovery = storeAt(database, () => realNow + 400, 500);
+
+    const reserved = await producer.reserve({
+      request: request('growth-skew'),
+      units: 1,
+      budgets: [{ key: 'day:user-a', limit: 3 }],
+      ttlMs: 1_000,
+    });
+    if (!reserved.accepted || !reserved.reservation.growthCursor) {
+      throw new Error('expected growable reservation');
+    }
+
+    realNow = 15_999;
+    const growth = await recovery.growReservation({
+      reservationId: reserved.reservation.id,
+      incrementId: 'growth-inside-grace',
+      expectedGrowthCursor: reserved.reservation.growthCursor,
+      additionalUnits: 1,
+      budgets: [{ key: 'day:user-a', limit: 3 }],
+    });
+    expect(growth).toMatchObject({ accepted: true, reservedUnits: 2 });
+    if (!growth.accepted) throw new Error('expected growth');
+
+    realNow = 16_100;
+    await expect(
+      recovery.growReservation({
+        reservationId: reserved.reservation.id,
+        incrementId: 'growth-after-grace',
+        expectedGrowthCursor: growth.growthCursor,
+        additionalUnits: 1,
+        budgets: [{ key: 'day:user-a', limit: 3 }],
+      }),
+    ).rejects.toThrow(/expired|not found|active/i);
+
+    await expect(
+      recovery.reserve({
+        request: request('after-grown-pending-expiry'),
+        units: 3,
+        budgets: [{ key: 'day:user-a', limit: 3 }],
+        ttlMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ accepted: true });
+  });
+
   it('uses grace to absorb a slow renewing host without premature pending release', async () => {
     const database = new SharedFirestore();
     let realNow = 20_000;

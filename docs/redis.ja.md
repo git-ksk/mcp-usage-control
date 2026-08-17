@@ -184,3 +184,19 @@ CIの実Redis 7 test:
 - Redis durability policyはdeployment-specific。
 - observabilityはbest-effort / non-durableでquota ledgerではない。
 - billing、payment、authentication、analytics backendは内蔵しません。
+
+## Progressive reservation growth（v0.6）
+
+`RedisUsageStore`はoptional progressive-growth contractを実装します。1本の`GROW_SCRIPT` Lua transaction内でactive reservation、original budget-key set完全一致、growth cursor、replay identity、全current budget limitを検証してからaccounting stateを変更します。
+
+- accepted growthは全participating budgetと`reservedUnits`をatomicに増加。
+- quota denialはどのcapacityも増加させず、authoritative denied attemptを記録してgrowth cursorだけrotate。
+- same `incrementId` + prior cursor + canonical parametersのretryはrecorded resultをreplayし、二重growthしない。
+- stale cursorでdifferent incrementを送るとfail closed。
+- pending / liable / expiry semanticsは既存reservation ruleをgrown total全体へ適用。
+- settlementはtotal successfully reserved capacityを超えない。
+- settled / expired reservationはreplayを含めgrowth successを返さない。
+
+Growth metadataは既存reservation JSONへadditiveに`growthCursor`とlatest replay metadataを保存します。v0.5以前が書いたreservationにはgrowth cursorがないため、fixed-reservation contractのままread / settle可能ですがgrowできません。v0.6 upgradeでRedis key migration、balance rewrite、resetは不要です。
+
+実Redis CIではportable progressive Store conformanceとcommitted-growth ACK-loss caseを実行します。ambiguous ACK後はsame stable increment identityだけをretryし、fresh increment発行は禁止です。

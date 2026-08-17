@@ -1,10 +1,11 @@
 import type { DurableObjectState, SqlStorageValue } from 'cloudflare:workers';
 
-export const CLOUDFLARE_USAGE_SCHEMA_VERSION = 1;
+export const CLOUDFLARE_USAGE_SCHEMA_VERSION = 2;
 
 const SCHEMA_TABLE = 'usage_control_schema';
 const BUDGETS_TABLE = 'budgets';
 const RESERVATIONS_TABLE = 'reservations';
+const RESERVATION_GROWTH_TABLE = 'reservation_growth';
 
 const ACTIVE_EXPIRY_INDEX = 'reservations_active_expiry';
 const TOMBSTONE_EXPIRY_INDEX = 'reservations_tombstone_expiry';
@@ -55,6 +56,12 @@ const RESERVATION_COLUMNS: readonly ExpectedColumn[] = [
   { name: 'budget_ids_json', type: 'TEXT', notNull: true, primaryKey: 0 },
 ];
 
+const RESERVATION_GROWTH_COLUMNS: readonly ExpectedColumn[] = [
+  { name: 'reservation_id', type: 'TEXT', notNull: false, primaryKey: 1 },
+  { name: 'growth_cursor', type: 'TEXT', notNull: true, primaryKey: 0 },
+  { name: 'last_growth_json', type: 'TEXT', notNull: false, primaryKey: 0 },
+];
+
 /**
  * Initializes or validates the Cloudflare SQLite schema as one synchronous
  * transaction. The first versioned release adopts the exact pre-versioning
@@ -67,10 +74,12 @@ export function initializeCloudflareUsageSchema(storage: DurableObjectStorage): 
 
     if (version === undefined) {
       adoptOrCreateV1(storage);
+      migrateV1ToV2(storage);
       storage.sql.exec(
         `INSERT INTO ${SCHEMA_TABLE} (id, version) VALUES (1, ?)`,
         CLOUDFLARE_USAGE_SCHEMA_VERSION,
       );
+      validateV2(storage);
       return;
     }
 
@@ -81,15 +90,22 @@ export function initializeCloudflareUsageSchema(storage: DurableObjectStorage): 
       );
     }
 
+    if (version === 1) {
+      validateV1(storage, { allowMissingIndexes: false });
+      migrateV1ToV2(storage);
+      storage.sql.exec(`UPDATE ${SCHEMA_TABLE} SET version = ? WHERE id = 1`, 2);
+      validateV2(storage);
+      return;
+    }
+
     if (version < CLOUDFLARE_USAGE_SCHEMA_VERSION) {
-      // Future releases add one deterministic migration step per version here.
       throw new Error(
         `Unsupported older Cloudflare usage schema version ${version}; ` +
           'no migration step is registered',
       );
     }
 
-    validateV1(storage, { allowMissingIndexes: false });
+    validateV2(storage);
   });
 }
 
@@ -182,6 +198,25 @@ function createV1Indexes(storage: DurableObjectStorage): void {
   );
 }
 
+function migrateV1ToV2(storage: DurableObjectStorage): void {
+  storage.sql.exec(`
+    CREATE TABLE IF NOT EXISTS ${RESERVATION_GROWTH_TABLE} (
+      reservation_id TEXT PRIMARY KEY,
+      growth_cursor TEXT NOT NULL,
+      last_growth_json TEXT
+    );
+  `);
+}
+
+function validateV2(storage: DurableObjectStorage): void {
+  validateV1(storage, { allowMissingIndexes: false });
+  const objects = applicationTables(storage);
+  if (!objects.has(RESERVATION_GROWTH_TABLE)) {
+    throw new Error('Cloudflare usage schema v2 is missing reservation_growth');
+  }
+  validateColumns(storage, RESERVATION_GROWTH_TABLE, RESERVATION_GROWTH_COLUMNS);
+}
+
 function validateV1(
   storage: DurableObjectStorage,
   options: { allowMissingIndexes: boolean },
@@ -227,9 +262,10 @@ function applicationTables(storage: DurableObjectStorage): Map<string, SchemaObj
   const rows = storage.sql
     .exec<SchemaObjectRow>(
       `SELECT name, type, sql FROM sqlite_master
-       WHERE type = 'table' AND name IN (?, ?)`,
+       WHERE type = 'table' AND name IN (?, ?, ?)`,
       BUDGETS_TABLE,
       RESERVATIONS_TABLE,
+      RESERVATION_GROWTH_TABLE,
     )
     .toArray();
   return new Map(rows.map(row => [String(row.name), row]));

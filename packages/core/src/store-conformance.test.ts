@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryUsageStore } from './index.js';
-import { assertUsageStoreConformance, runUsageStoreConformance } from './store-conformance.js';
+import {
+  assertUsageStoreConformance,
+  runProgressiveUsageStoreConformance,
+  runUsageStoreConformance,
+} from './store-conformance.js';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -12,6 +16,23 @@ describe('UsageStore conformance kit', () => {
     vi.setSystemTime(new Date('2026-08-13T00:00:00Z'));
 
     const report = await assertUsageStoreConformance({
+      createStore() {
+        return new MemoryUsageStore();
+      },
+      async waitForLeaseExpiry(ttlMs) {
+        await vi.advanceTimersByTimeAsync(ttlMs + 1);
+      },
+    });
+
+    expect(report.passed).toBe(true);
+    expect(report.cases.every(result => result.passed)).toBe(true);
+  });
+
+  it('accepts the MemoryUsageStore progressive growth contract', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-17T00:00:00Z'));
+
+    const report = await runProgressiveUsageStoreConformance({
       createStore() {
         return new MemoryUsageStore();
       },

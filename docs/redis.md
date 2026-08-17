@@ -184,3 +184,19 @@ CI uses real Redis 7 for:
 - Redis durability policy remains deployment-specific;
 - observability is best-effort/non-durable and not the quota ledger;
 - no built-in billing, payment, authentication, or analytics backend.
+
+## Progressive reservation growth (v0.6)
+
+`RedisUsageStore` implements the optional progressive-growth contract. One `GROW_SCRIPT` Lua transaction validates the active reservation, exact original budget-key set, growth cursor, replay identity, and every current budget limit before mutating accounting state.
+
+- accepted growth increments every participating budget and `reservedUnits` atomically;
+- quota denial increments none of them, but records the authoritative denied attempt and rotates the growth cursor;
+- retry of the same `incrementId` + prior cursor + canonical parameters replays the recorded result without growing twice;
+- a different increment on a stale cursor fails closed;
+- pending/liable and expiry behavior remains the existing reservation behavior, applied to the full grown total;
+- settlement remains bounded by the total successfully reserved capacity;
+- settled/expired reservations never return growth success, including replay.
+
+Growth metadata is stored additively inside the existing reservation JSON (`growthCursor` plus latest replay metadata). A reservation written by v0.5 or earlier has no growth cursor: it remains readable/settleable under the fixed-reservation contract but cannot be grown. No Redis key migration, balance rewrite, or reset is required when upgrading to v0.6.
+
+Real-Redis CI runs the portable progressive Store conformance plus a committed-growth acknowledgement-loss case. The retry must use the same stable increment identity; issuing a fresh increment after an ambiguous ACK is forbidden.

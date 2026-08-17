@@ -5,6 +5,8 @@ import {
 } from 'cloudflare:workers';
 import type {
   CloudflareDirectRecovery,
+  CloudflareGrowCommand,
+  CloudflareGrowReply,
   CloudflareMarkLiableCommand,
   CloudflareRecoveryReport,
   CloudflareRecoverySummary,
@@ -14,6 +16,7 @@ import type {
   CloudflareSettlementReply,
   CloudflareSettleCommand,
   CloudflareStoreEnvelope,
+  CloudflareStoreErrorCode,
 } from './index.js';
 
 const RESERVATION_ID_PATTERN = /^cf1\.[a-f0-9]{64}$/;
@@ -43,6 +46,24 @@ type StateRow = Record<string, SqlStorageValue> & {
 };
 
 type UsedRow = Record<string, SqlStorageValue> & { used: number };
+
+type GrowthRow = Record<string, SqlStorageValue> & {
+  growth_cursor: string;
+  last_growth_json: string | null;
+};
+
+interface StoredGrowthReplay {
+  incrementHash: string;
+  expectedGrowthCursor: string;
+  fingerprint: string;
+  nextGrowthCursor: string;
+  accepted: boolean;
+  previousReservedUnits?: number;
+  reservedUnits?: number;
+  remainingByBudget?: Array<{ id: string; remaining: number }>;
+  limitingBudgetId?: string;
+  remaining?: number;
+}
 
 /**
  * SQLite-backed Durable Object implementing one atomic usage-control domain.
@@ -113,6 +134,10 @@ export class UsageControlDurableObject extends DurableObject<unknown> {
 
       const expiresAt = safeAdd(now, command.ttlMs, 'expiresAt');
       this.ctx.storage.sql.exec(
+        'DELETE FROM reservation_growth WHERE reservation_id = ?',
+        command.reservationId,
+      );
+      this.ctx.storage.sql.exec(
         `INSERT INTO reservations (
           id, state, reserved_units, expires_at, actual_units, outcome_hash,
           terminal_reason, tombstone_expires_at, budget_ids_json
@@ -121,6 +146,12 @@ export class UsageControlDurableObject extends DurableObject<unknown> {
         command.units,
         expiresAt,
         JSON.stringify(command.budgets.map(budget => budget.id)),
+      );
+      this.ctx.storage.sql.exec(
+        `INSERT INTO reservation_growth (reservation_id, growth_cursor, last_growth_json)
+         VALUES (?, ?, NULL)`,
+        command.reservationId,
+        command.initialGrowthCursor,
       );
 
       return ok<CloudflareReserveReply>(
@@ -134,6 +165,129 @@ export class UsageControlDurableObject extends DurableObject<unknown> {
         },
         recovery,
       );
+    });
+  }
+
+  async grow(
+    command: CloudflareGrowCommand,
+  ): Promise<CloudflareStoreEnvelope<CloudflareGrowReply>> {
+    validateGrowCommand(command);
+    const now = Date.now();
+
+    return this.ctx.storage.transactionSync(() => {
+      const direct = this.recoverSpecific(command.reservationId, now, command.idempotencyTtlMs);
+      const recovery = reportWithDirect(direct);
+      if (direct) return fail('not_found_or_expired', recovery);
+
+      const row = this.ctx.storage.sql
+        .exec<StateRow>(
+          `SELECT state, expires_at, reserved_units, actual_units, outcome_hash,
+                  terminal_reason, budget_ids_json
+           FROM reservations WHERE id = ?`,
+          command.reservationId,
+        )
+        .toArray()[0];
+      if (!row || (row.state !== 'pending' && row.state !== 'liable')) {
+        return fail('not_found_or_expired', recovery);
+      }
+
+      const growthRow = this.ctx.storage.sql
+        .exec<GrowthRow>(
+          `SELECT growth_cursor, last_growth_json
+           FROM reservation_growth WHERE reservation_id = ?`,
+          command.reservationId,
+        )
+        .toArray()[0];
+      if (!growthRow) return fail('growth_not_supported', recovery);
+      const currentCursor = nonEmptyString(growthRow.growth_cursor, 'growth cursor');
+      const lastGrowth = parseStoredGrowth(growthRow.last_growth_json);
+
+      if (lastGrowth?.incrementHash === command.incrementHash) {
+        if (
+          lastGrowth.expectedGrowthCursor !== command.expectedGrowthCursor ||
+          lastGrowth.fingerprint !== command.fingerprint
+        ) {
+          return fail('growth_conflict', recovery);
+        }
+        return ok(growthReplyFromStored(lastGrowth, true), recovery);
+      }
+
+      if (currentCursor !== command.expectedGrowthCursor) {
+        return fail('growth_stale_cursor', recovery);
+      }
+
+      const storedBudgetIds = parseBudgetIds(row.budget_ids_json);
+      const commandBudgetIds = command.budgets.map(budget => budget.id);
+      if (!sameStrings(storedBudgetIds, commandBudgetIds)) {
+        return fail('growth_budget_mismatch', recovery);
+      }
+
+      const balances = command.budgets.map(budget => {
+        const usedRow = this.ctx.storage.sql
+          .exec<UsedRow>('SELECT used FROM budgets WHERE id = ?', budget.id)
+          .toArray()[0];
+        const used = usedRow ? integer(usedRow.used, 'used') : 0;
+        return { id: budget.id, remaining: Math.max(0, budget.limit - used) };
+      });
+      const limiting = balances.find(balance => command.additionalUnits > balance.remaining);
+
+      if (limiting) {
+        const stored: StoredGrowthReplay = {
+          incrementHash: command.incrementHash,
+          expectedGrowthCursor: command.expectedGrowthCursor,
+          fingerprint: command.fingerprint,
+          nextGrowthCursor: command.nextGrowthCursor,
+          accepted: false,
+          limitingBudgetId: limiting.id,
+          remaining: limiting.remaining,
+        };
+        this.ctx.storage.sql.exec(
+          `UPDATE reservation_growth
+           SET growth_cursor = ?, last_growth_json = ?
+           WHERE reservation_id = ?`,
+          command.nextGrowthCursor,
+          JSON.stringify(stored),
+          command.reservationId,
+        );
+        return ok(growthReplyFromStored(stored, false), recovery);
+      }
+
+      const previousReservedUnits = integer(row.reserved_units, 'reservedUnits');
+      const reservedUnits = safeAdd(previousReservedUnits, command.additionalUnits, 'reservedUnits');
+      for (const budget of command.budgets) {
+        this.ctx.storage.sql.exec(
+          'UPDATE budgets SET used = used + ? WHERE id = ?',
+          command.additionalUnits,
+          budget.id,
+        );
+      }
+      this.ctx.storage.sql.exec(
+        `UPDATE reservations SET reserved_units = ? WHERE id = ? AND state IN ('pending', 'liable')`,
+        reservedUnits,
+        command.reservationId,
+      );
+      const stored: StoredGrowthReplay = {
+        incrementHash: command.incrementHash,
+        expectedGrowthCursor: command.expectedGrowthCursor,
+        fingerprint: command.fingerprint,
+        nextGrowthCursor: command.nextGrowthCursor,
+        accepted: true,
+        previousReservedUnits,
+        reservedUnits,
+        remainingByBudget: balances.map(balance => ({
+          id: balance.id,
+          remaining: balance.remaining - command.additionalUnits,
+        })),
+      };
+      this.ctx.storage.sql.exec(
+        `UPDATE reservation_growth
+         SET growth_cursor = ?, last_growth_json = ?
+         WHERE reservation_id = ?`,
+        command.nextGrowthCursor,
+        JSON.stringify(stored),
+        command.reservationId,
+      );
+      return ok(growthReplyFromStored(stored, false), recovery);
     });
   }
 
@@ -314,6 +468,13 @@ export class UsageControlDurableObject extends DurableObject<unknown> {
         budget_ids_json TEXT NOT NULL
       );
     `);
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS reservation_growth (
+        reservation_id TEXT PRIMARY KEY,
+        growth_cursor TEXT NOT NULL,
+        last_growth_json TEXT
+      );
+    `);
     this.ctx.storage.sql.exec(
       `CREATE INDEX IF NOT EXISTS reservations_active_expiry
        ON reservations(state, expires_at)`,
@@ -362,6 +523,18 @@ export class UsageControlDurableObject extends DurableObject<unknown> {
       }
     }
 
+    this.ctx.storage.sql.exec(
+      `DELETE FROM reservation_growth
+       WHERE reservation_id IN (
+         SELECT id FROM reservations
+         WHERE state = 'settled' AND tombstone_expires_at IS NOT NULL
+           AND tombstone_expires_at <= ?
+         ORDER BY tombstone_expires_at, id
+         LIMIT ?
+       )`,
+      now,
+      cleanupBatchSize,
+    );
     this.ctx.storage.sql.exec(
       `DELETE FROM reservations
        WHERE id IN (
@@ -414,6 +587,10 @@ export class UsageControlDurableObject extends DurableObject<unknown> {
           budgetId,
         );
       }
+      this.ctx.storage.sql.exec(
+        'DELETE FROM reservation_growth WHERE reservation_id = ?',
+        reservationId,
+      );
       this.ctx.storage.sql.exec('DELETE FROM reservations WHERE id = ?', reservationId);
       return { reservationId, state: 'pending', reservedUnits };
     }
@@ -439,6 +616,7 @@ function validateReserveCommand(command: CloudflareReserveCommand): void {
   assertPositiveInteger(command.ttlMs, 'ttlMs');
   assertPositiveInteger(command.cleanupBatchSize, 'cleanupBatchSize');
   assertPositiveInteger(command.idempotencyTtlMs, 'idempotencyTtlMs');
+  nonEmptyString(command.initialGrowthCursor, 'initialGrowthCursor');
   if (!Array.isArray(command.budgets) || command.budgets.length === 0) {
     throw new RangeError('budgets must contain at least one budget');
   }
@@ -449,6 +627,133 @@ function validateReserveCommand(command: CloudflareReserveCommand): void {
     if (seen.has(budget.id)) throw new RangeError('duplicate budget id');
     seen.add(budget.id);
   }
+}
+
+function validateGrowCommand(command: CloudflareGrowCommand): void {
+  validateReservationId(command.reservationId);
+  validateHash(command.incrementHash, 'incrementHash');
+  nonEmptyString(command.expectedGrowthCursor, 'expectedGrowthCursor');
+  assertPositiveInteger(command.additionalUnits, 'additionalUnits');
+  validateHash(command.fingerprint, 'fingerprint');
+  nonEmptyString(command.nextGrowthCursor, 'nextGrowthCursor');
+  assertPositiveInteger(command.idempotencyTtlMs, 'idempotencyTtlMs');
+  if (!Array.isArray(command.budgets) || command.budgets.length === 0) {
+    throw new RangeError('budgets must contain at least one budget');
+  }
+  const seen = new Set<string>();
+  for (const budget of command.budgets) {
+    validateHash(budget.id, 'budget.id');
+    assertNonNegativeInteger(budget.limit, 'budget.limit');
+    if (seen.has(budget.id)) throw new RangeError('duplicate budget id');
+    seen.add(budget.id);
+  }
+}
+
+function nonEmptyString(value: SqlStorageValue | string, name: string): string {
+  if (typeof value !== 'string' || value.length === 0) throw new Error(`Invalid ${name}`);
+  return value;
+}
+
+function sameStrings(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function parseStoredGrowth(raw: SqlStorageValue): StoredGrowthReplay | undefined {
+  if (raw === null) return undefined;
+  if (typeof raw !== 'string') throw new Error('Invalid stored growth replay');
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error('Invalid stored growth replay');
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid stored growth replay');
+  }
+  const data = value as Record<string, unknown>;
+  for (const field of ['incrementHash', 'fingerprint'] as const) {
+    if (typeof data[field] !== 'string' || !HASH_PATTERN.test(data[field])) {
+      throw new Error(`Invalid stored growth ${field}`);
+    }
+  }
+  const expectedGrowthCursor = nonEmptyString(data.expectedGrowthCursor as SqlStorageValue, 'growth prior cursor');
+  const nextGrowthCursor = nonEmptyString(data.nextGrowthCursor as SqlStorageValue, 'growth next cursor');
+  if (typeof data.accepted !== 'boolean') throw new Error('Invalid stored growth accepted state');
+  const result: StoredGrowthReplay = {
+    incrementHash: data.incrementHash as string,
+    expectedGrowthCursor,
+    fingerprint: data.fingerprint as string,
+    nextGrowthCursor,
+    accepted: data.accepted,
+  };
+  if (data.accepted) {
+    result.previousReservedUnits = storedNonNegativeInteger(data.previousReservedUnits, 'growth previousReservedUnits');
+    result.reservedUnits = storedNonNegativeInteger(data.reservedUnits, 'growth reservedUnits');
+    if (!Array.isArray(data.remainingByBudget) || data.remainingByBudget.length === 0) {
+      throw new Error('Invalid stored growth balances');
+    }
+    result.remainingByBudget = data.remainingByBudget.map(entry => {
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+        throw new Error('Invalid stored growth balance');
+      }
+      const balance = entry as Record<string, unknown>;
+      if (typeof balance.id !== 'string' || !HASH_PATTERN.test(balance.id)) {
+        throw new Error('Invalid stored growth budget id');
+      }
+      return {
+        id: balance.id,
+        remaining: storedNonNegativeInteger(balance.remaining, 'growth remaining'),
+      };
+    });
+  } else {
+    if (typeof data.limitingBudgetId !== 'string' || !HASH_PATTERN.test(data.limitingBudgetId)) {
+      throw new Error('Invalid stored growth limiting budget id');
+    }
+    result.limitingBudgetId = data.limitingBudgetId;
+    result.remaining = storedNonNegativeInteger(data.remaining, 'growth remaining');
+  }
+  return result;
+}
+
+function growthReplyFromStored(
+  growth: StoredGrowthReplay,
+  replayed: boolean,
+): CloudflareGrowReply {
+  if (growth.accepted) {
+    if (
+      growth.previousReservedUnits === undefined ||
+      growth.reservedUnits === undefined ||
+      growth.remainingByBudget === undefined
+    ) {
+      throw new Error('Incomplete stored accepted growth replay');
+    }
+    return {
+      accepted: true,
+      replayed,
+      previousReservedUnits: growth.previousReservedUnits,
+      reservedUnits: growth.reservedUnits,
+      growthCursor: growth.nextGrowthCursor,
+      remainingByBudget: growth.remainingByBudget.map(balance => ({ ...balance })),
+    };
+  }
+  if (growth.limitingBudgetId === undefined || growth.remaining === undefined) {
+    throw new Error('Incomplete stored denied growth replay');
+  }
+  return {
+    accepted: false,
+    reason: 'quota_exceeded',
+    replayed,
+    growthCursor: growth.nextGrowthCursor,
+    limitingBudgetId: growth.limitingBudgetId,
+    remaining: growth.remaining,
+  };
+}
+
+function storedNonNegativeInteger(value: unknown, name: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Invalid stored ${name}`);
+  }
+  return value;
 }
 
 function validateReservationId(value: string): void {
@@ -516,7 +821,7 @@ function ok<T>(result: T, recovery: CloudflareRecoveryReport): CloudflareStoreEn
 }
 
 function fail<T = never>(
-  error: 'not_found_or_expired' | 'settlement_conflict' | 'actual_units_exceed_reserved',
+  error: CloudflareStoreErrorCode,
   recovery: CloudflareRecoveryReport,
 ): CloudflareStoreEnvelope<T> {
   return { ok: false, error, recovery };

@@ -151,6 +151,25 @@ integration('RedisUsageStore', () => {
     });
   });
 
+  it('replays a committed growth after its Redis acknowledgement is lost', async () => {
+    const lossyClient = new LoseNextReplyClient(client);
+    const control = new UsageControl(new RedisUsageStore(lossyClient), policy(3));
+    const admission = await control.reserve(request('growth-lost-ack'));
+    if (!admission.allowed) throw new Error('expected admission');
+    const budgets = [{ key: 'month:user-1:2026-08', limit: 3 }] as const;
+    const attempt = { incrementId: 'stable-growth-increment', additionalUnits: 1, budgets };
+
+    lossyClient.loseNextReply = true;
+    await expect(admission.lease.grow(attempt)).rejects.toThrow('simulated lost Redis acknowledgement');
+    await expect(
+      admission.lease.grow({ ...attempt, incrementId: 'fresh-growth-increment' }),
+    ).rejects.toThrow(/unresolved/i);
+
+    const replay = await admission.lease.grow(attempt);
+    expect(replay).toMatchObject({ accepted: true, replayed: true, reservedUnits: 2 });
+    expect(admission.lease.reservedUnits).toBe(2);
+  });
+
   it('fails closed after an admission write whose acknowledgement was lost', async () => {
     const lossyClient = new LoseNextReplyClient(client);
     const control = new UsageControl(new RedisUsageStore(lossyClient), policy(1));

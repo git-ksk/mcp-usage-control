@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UsageRequest } from 'mcp-usage-control';
+import { runProgressiveUsageStoreConformance } from 'mcp-usage-control/conformance';
 import type { Firestore } from '@google-cloud/firestore';
 import {
   FirestoreUsageStore,
@@ -379,5 +380,31 @@ describe('FirestoreUsageStore', () => {
     expect(budgetIds[0]).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.stringify([...database.rows('muc_reservations').values()])).not.toContain('private-user');
     expect(JSON.stringify([...database.rows('muc_budgets').values()])).not.toContain('private-budget-key');
+  });
+});
+
+
+describe('FirestoreUsageStore progressive conformance', () => {
+  it('passes the portable growth contract on transactional Firestore semantics', async () => {
+    const clocks = new Map<string, { now: number }>();
+    const report = await runProgressiveUsageStoreConformance({
+      createStore(scenario) {
+        const clock = { now: 1_000 };
+        clocks.set(scenario, clock);
+        return new FirestoreUsageStore(new FakeFirestore(), {
+          cleanupBatchSize: 16,
+          cleanupIntervalMs: 0,
+          expiryGraceMs: 0,
+          now: () => clock.now,
+        });
+      },
+      waitForLeaseExpiry(ttlMs, scenario) {
+        const clock = clocks.get(scenario);
+        if (!clock) throw new Error(`missing clock for ${scenario}`);
+        clock.now += ttlMs + 1;
+      },
+    });
+    expect(report.cases.filter(result => !result.passed)).toEqual([]);
+    expect(report.passed).toBe(true);
   });
 });

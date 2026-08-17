@@ -6,6 +6,7 @@ local operationKey = ARGV[4]
 local cleanupLimit = tonumber(ARGV[5])
 local idempotencyTtlMs = tonumber(ARGV[6])
 local budgets = cjson.decode(ARGV[7])
+local growthCursor = ARGV[8]
 
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
@@ -111,7 +112,8 @@ local record = cjson.encode({
   operationKey = operationKey,
   reservedUnits = units,
   expiresAt = expiresAt,
-  budgetHashes = budgetHashes
+  budgetHashes = budgetHashes,
+  growthCursor = growthCursor
 })
 redis.call('HSET', KEYS[3], reservationId, record)
 redis.call('HSET', KEYS[4], operationKey, reservationId)
@@ -280,4 +282,141 @@ redis.call('ZREM', KEYS[2], reservationId)
 redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
 
 return { 'settled', tostring(reservedUnits), tostring(actualUnits), tostring(released) }
+`;
+
+export const GROW_SCRIPT = String.raw`
+local reservationId = ARGV[1]
+local incrementHash = ARGV[2]
+local expectedGrowthCursor = ARGV[3]
+local additionalUnits = tonumber(ARGV[4])
+local idempotencyTtlMs = tonumber(ARGV[5])
+local budgets = cjson.decode(ARGV[6])
+local fingerprint = ARGV[7]
+local nextGrowthCursor = ARGV[8]
+
+local redisTime = redis.call('TIME')
+local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
+
+local function subtractUsed(budgetHashes, amount)
+  if amount <= 0 then return end
+  for _, budgetHash in ipairs(budgetHashes) do
+    local nextUsed = redis.call('HINCRBY', KEYS[1], budgetHash, -amount)
+    if tonumber(nextUsed) <= 0 then redis.call('HDEL', KEYS[1], budgetHash) end
+  end
+end
+
+local raw = redis.call('HGET', KEYS[3], reservationId)
+if not raw then return { 'not_found' } end
+
+local record = cjson.decode(raw)
+local reservedUnits = tonumber(record.reservedUnits)
+
+-- A terminal reservation can never authorize more metered work, including replay.
+if record.state == 'settled' then return { 'terminal' } end
+if record.state ~= 'pending' and record.state ~= 'liable' then return { 'terminal' } end
+
+-- Expiry is authoritative before replay. A replay must never resurrect an expired lease.
+if tonumber(record.expiresAt) <= now then
+  local expiredState = record.state
+  if record.state == 'pending' then
+    subtractUsed(record.budgetHashes, reservedUnits)
+    redis.call('HDEL', KEYS[4], record.operationKey)
+    redis.call('HDEL', KEYS[3], reservationId)
+  else
+    record.state = 'settled'
+    record.actualUnits = reservedUnits
+    record.outcome = 'lease_expired_after_execution_started'
+    redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
+    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+  end
+  redis.call('ZREM', KEYS[2], reservationId)
+  return { 'expired', expiredState, tostring(reservedUnits) }
+end
+
+local lastGrowth = record.lastGrowth
+if lastGrowth and lastGrowth.incrementHash == incrementHash then
+  if lastGrowth.expectedGrowthCursor ~= expectedGrowthCursor or lastGrowth.fingerprint ~= fingerprint then
+    return { 'conflict' }
+  end
+  if lastGrowth.accepted == true then
+    return {
+      'accepted_replay',
+      tostring(lastGrowth.previousReservedUnits),
+      tostring(lastGrowth.reservedUnits),
+      lastGrowth.nextGrowthCursor,
+      cjson.encode(lastGrowth.remainingByHashes)
+    }
+  end
+  return {
+    'quota_replay',
+    lastGrowth.nextGrowthCursor,
+    lastGrowth.limitingBudgetHash,
+    tostring(lastGrowth.remaining)
+  }
+end
+
+if not record.growthCursor then return { 'not_supported' } end
+if record.growthCursor ~= expectedGrowthCursor then return { 'stale_cursor' } end
+
+if #record.budgetHashes ~= #budgets then return { 'budget_mismatch' } end
+for index, budget in ipairs(budgets) do
+  if record.budgetHashes[index] ~= budget.hash then return { 'budget_mismatch' } end
+end
+
+local remainingByHashes = {}
+local limitingBudgetHash = nil
+local limitingRemaining = nil
+for _, budget in ipairs(budgets) do
+  local used = tonumber(redis.call('HGET', KEYS[1], budget.hash) or '0')
+  local remaining = tonumber(budget.limit) - used
+  if remaining < 0 then remaining = 0 end
+  table.insert(remainingByHashes, { hash = budget.hash, remaining = remaining - additionalUnits })
+  if not limitingBudgetHash and additionalUnits > remaining then
+    limitingBudgetHash = budget.hash
+    limitingRemaining = remaining
+  end
+end
+
+if limitingBudgetHash then
+  record.growthCursor = nextGrowthCursor
+  record.lastGrowth = {
+    accepted = false,
+    incrementHash = incrementHash,
+    expectedGrowthCursor = expectedGrowthCursor,
+    fingerprint = fingerprint,
+    nextGrowthCursor = nextGrowthCursor,
+    limitingBudgetHash = limitingBudgetHash,
+    remaining = limitingRemaining
+  }
+  redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
+  return { 'quota_exceeded', nextGrowthCursor, limitingBudgetHash, tostring(limitingRemaining) }
+end
+
+local previousReservedUnits = reservedUnits
+local nextReservedUnits = reservedUnits + additionalUnits
+for _, budget in ipairs(budgets) do
+  redis.call('HINCRBY', KEYS[1], budget.hash, additionalUnits)
+end
+
+record.reservedUnits = nextReservedUnits
+record.growthCursor = nextGrowthCursor
+record.lastGrowth = {
+  accepted = true,
+  incrementHash = incrementHash,
+  expectedGrowthCursor = expectedGrowthCursor,
+  fingerprint = fingerprint,
+  nextGrowthCursor = nextGrowthCursor,
+  previousReservedUnits = previousReservedUnits,
+  reservedUnits = nextReservedUnits,
+  remainingByHashes = remainingByHashes
+}
+redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
+
+return {
+  'accepted',
+  tostring(previousReservedUnits),
+  tostring(nextReservedUnits),
+  nextGrowthCursor,
+  cjson.encode(remainingByHashes)
+}
 `;

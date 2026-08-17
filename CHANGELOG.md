@@ -8,6 +8,39 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.6.0] - 2026-08-17
+
+Sixth GitHub/source release preparation. npm publication remains intentionally separate and is not authorized by this change.
+
+### Added
+
+- Added failure-safe progressive reservation growth through `UsageLease.grow()` and the optional `ProgressiveUsageStore.growReservation()` capability without making growth mandatory for existing third-party `UsageStore` implementations.
+- Added stable per-increment identity plus an opaque Store-issued growth cursor. Exact retry after a lost acknowledgement replays the committed result; a different increment on a stale cursor fails closed. Authoritative quota denial also rotates the cursor without consuming capacity.
+- Added portable progressive Store conformance covering sequential/replayed/concurrent growth, all-or-nothing multi-budget denial, pending/liable expiry, settlement bounds, and grow/settle races.
+- Added an MCP-oriented English/Japanese example for small initial reservation, bounded top-ups, safe stop on denial/ambiguity, and same-logical-operation multi-round/Tasks handling.
+
+### Provider implementation / proof
+
+- Memory: reference implementation with detached Store snapshots, exact growth replay, lost-ACK before/after-commit proof, and terminal-state fail-closed behavior.
+- Redis: one Lua transaction grows every participating budget and the reservation atomically, stores replay metadata in the existing reservation JSON, and keeps v0.5 rows fixed/non-growable. Redis integration runs portable progressive conformance plus committed-growth ACK-loss replay.
+- Cloudflare Durable Objects: schema v2 adds a separate `reservation_growth` table without altering v1 accounting rows; `transactionSync` applies growth atomically, and local workerd integration covers portable progressive conformance and remote lost-growth-ACK replay.
+- Firestore: one transaction updates the reservation and all participating budget documents; the next growth cursor is created outside the retry callback so automatic transaction retries cannot double-grow. Emulator progressive conformance and committed-growth ACK-loss fault injection cover the provider boundary.
+
+### Safety / compatibility
+
+- `renew()` remains lease-duration-only; capacity growth is a separate responsibility.
+- Growth preserves the reservation's pending/liable state and does not renew TTL. Pending expiry releases the full grown amount; liable expiry conservatively retains the full grown amount.
+- `actualUnits` remains bounded by total successfully reserved capacity. Denied increments never add capacity.
+- Settled or expired/recovered reservations reject every growth call, including replay, so stale acknowledgement recovery cannot authorize new metered work after terminal state.
+- v0.5 provider data remains readable. Existing Redis/Firestore records without growth metadata and Cloudflare reservations without a growth row remain fixed reservations.
+- The v0.6 decision adopts progressive reservation growth for the future v1 stable surface as an optional capability. #84 becomes the next feature decision gate in v0.7.0.
+
+### Release boundary
+
+- All five package manifests are aligned at `0.6.0`.
+- The normal release gate remains Node 20/22/24, Redis, Cloudflare local workerd, Firestore Emulator, package tarball/content, and clean-consumer verification.
+- This preparation does **not** create a `v0.6.0` tag, GitHub Release, or npm publication.
+
 ## [0.5.0] - 2026-08-17
 
 Fifth GitHub/source release. This is a pre-v1 stabilization release; npm registry publication remains intentionally deferred and is not part of this release.
