@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control-firestore",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Transactional Firestore usage store for mcp-usage-control.",
   "type": "module",
   "license": "Apache-2.0",
@@ -22,16 +22,30 @@
     "README.md",
     "LICENSE"
   ],
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
     "directory": "packages/firestore"
   },
   "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
-  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
-  "keywords": ["mcp", "firestore", "firebase", "usage", "quota", "credits", "atomic"],
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/git-ksk/mcp-usage-control/issues"
+  },
+  "keywords": [
+    "mcp",
+    "firestore",
+    "firebase",
+    "usage",
+    "quota",
+    "credits",
+    "atomic"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",

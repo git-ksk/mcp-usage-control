@@ -365,3 +365,13 @@ The normative rules are:
 The caller must persist or deterministically reconstruct the same `incrementId` **before** sending a growth request if the logical operation must survive process loss. The cursor is a replay fence, not authentication.
 
 See [Progressive reservation growth](progressive-reservation-growth.md) and the [MCP progressive example](progressive-mcp-integration.md).
+
+## Optional atomic vector capability (v0.7)
+
+`VectorUsageStore` is an optional extension for one logical operation that consumes unlike dimensions such as requests and tokens. It does **not** change the scalar `UsageStore` contract.
+
+A vector Store must keep all required dimensions in one atomic transaction domain for `reserveVector()`, `growVectorReservation()`, recovery, and `settleVector()`. Unlike units are never summed. Scalar and vector reservations share the same operation-idempotency domain.
+
+Vector growth composes the v0.6 stable-increment/cursor contract across the whole vector: exact retry after acknowledgement loss replays the authoritative result, quota denial rotates the cursor without consuming capacity, and a fresh increment on a stale cursor fails closed. Settlement reports every dimension exactly once and is bounded independently by that dimension's total successfully reserved capacity.
+
+Use `runVectorUsageStoreConformance()` from `mcp-usage-control/conformance` before claiming Store compatibility. See [Atomic heterogeneous usage vectors](vector-usage.md).

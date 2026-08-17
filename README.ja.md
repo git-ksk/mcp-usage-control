@@ -66,11 +66,11 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは次のGitHub/source release preparation向けに `0.6.0` へ揃えます。`v0.5.0` はlatest released source baselineで、npm registry publicationは引き続き意図的にdeferredです。
+5 packageのmanifestは次のGitHub/source release preparation向けに `0.7.0` へ揃えます。`v0.6.0` はlatest released source baselineで、npm registry publicationは引き続き意図的にdeferredです。
 
 ## v0.5後に再評価するv1 scope
 
-**v1 API freezeはまだfinalではありません**。v0.6ではbase fixed-reservation `UsageStore`互換を維持したまま、failure-safe progressive reservation growthをoptional future-v1 capabilityとして採用します。
+**v1 API freezeはまだfinalではありません**。v0.6のprogressive growthに続き、v0.7ではbase scalar `UsageStore`互換を維持したままatomic heterogeneous vector accountingをoptional future-v1 capabilityとして採用します。
 
 | 領域 | current status | 境界 |
 | --- | --- | --- |
@@ -81,7 +81,7 @@ remaining確認 -> paid work実行 -> counter加算
 | `protectMultiRoundTool()` | **strong v1候補** | current `input_required` accounting |
 | shared / durable MRTR compare-and-consume | **current v1 direction** | sticky MCP sessionなしのcross-instance resume |
 | progressive reservation growth (#83) | **v0.6で採用** | optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic / lost-ACK / provider proof |
-| heterogeneous multi-dimensional usage (#84) | **open v1-scope candidate** | v0.5は1 scalar unit。vector accountingのatomic design proofが必要 |
+| heterogeneous multi-dimensional usage (#84) | **v0.7で採用** | optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
 | first-class MCP Tasks adapter | **upstream stabilization次第** | accounting semanticsは定義済み、stable adapter未宣言 |
 | new stateless MRTR claim mode | **必要性が出るまでdeferred** | shared one-time claimより明確な利点なし |
 | billing / financial ledger / workflow replay | **out of scope** | enforcement外 |
@@ -301,7 +301,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.6.0` がcurrent source-release preparation targetです。#83はfuture v1 surfaceへ採用し、後続ladder decisionは意図的にopenのままです。tag / GitHub Release / npm publicationは別操作です。
+`v0.7.0` がcurrent source-release preparation targetです。#83と#84はfuture v1 surfaceへoptional capabilityとして採用し、#81が次のv0.8 decision targetです。tag / GitHub Release / npm publicationは別操作です。
 
 **npm publicationは別途explicit authorizationが必要で、まだ実施していません。**
 

@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control-mcp",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "MCP TypeScript SDK v2 adapter for mcp-usage-control.",
   "type": "module",
   "license": "Apache-2.0",
@@ -31,16 +31,28 @@
     "README.md",
     "LICENSE"
   ],
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
     "directory": "packages/mcp"
   },
   "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
-  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
-  "keywords": ["mcp", "model-context-protocol", "usage", "quota", "middleware"],
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/git-ksk/mcp-usage-control/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "usage",
+    "quota",
+    "middleware"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",

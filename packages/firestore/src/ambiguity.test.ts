@@ -282,6 +282,67 @@ describe('FirestoreUsageStore ambiguous commit acknowledgements', () => {
     ).rejects.toThrow(/cursor/i);
   });
 
+  it('replays a committed vector growth after its acknowledgement is lost without double reserving', async () => {
+    const database = new AmbiguousAckFirestore();
+    const store = createStore(database);
+    const reserved = await store.reserveVector({
+      request: request('lost-vector-growth-ack'),
+      dimensions: [
+        { key: 'requests', units: 1, budgets: [{ key: 'vector:requests', limit: 2 }] },
+        { key: 'tokens', units: 5, budgets: [{ key: 'vector:tokens', limit: 20 }] },
+      ],
+      ttlMs: 60_000,
+    });
+    if (!reserved.accepted || !reserved.reservation.growthCursor) {
+      throw new Error('expected growable vector reservation');
+    }
+    const input = {
+      reservationId: reserved.reservation.id,
+      incrementId: 'stable-vector-growth-id',
+      expectedGrowthCursor: reserved.reservation.growthCursor,
+      dimensions: [
+        {
+          key: 'requests',
+          additionalUnits: 0,
+          budgets: [{ key: 'vector:requests', limit: 2 }],
+        },
+        {
+          key: 'tokens',
+          additionalUnits: 3,
+          budgets: [{ key: 'vector:tokens', limit: 20 }],
+        },
+      ],
+    } as const;
+
+    database.failNextAcknowledgement();
+    await expect(store.growVectorReservation(input)).rejects.toThrow(
+      'simulated ambiguous acknowledgement after commit',
+    );
+    expect(database.document('muc_reservations', reserved.reservation.id)).toMatchObject({
+      mode: 'vector',
+      dimensions: [
+        { reservedUnits: 1 },
+        { reservedUnits: 8 },
+      ],
+      lastVectorGrowth: { accepted: true },
+    });
+
+    await expect(store.growVectorReservation(input)).resolves.toMatchObject({
+      accepted: true,
+      replayed: true,
+      reservedByDimension: [
+        { key: 'requests', reservedUnits: 1 },
+        { key: 'tokens', reservedUnits: 8 },
+      ],
+    });
+    await expect(
+      store.growVectorReservation({
+        ...input,
+        incrementId: 'fresh-vector-id-after-ambiguous-commit',
+      }),
+    ).rejects.toThrow(/cursor/i);
+  });
+
   it('reconciles a lost settlement acknowledgement only through identical replay', async () => {
     const database = new AmbiguousAckFirestore();
     const store = createStore(database);

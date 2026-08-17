@@ -220,3 +220,9 @@ The next growth cursor is generated **outside** the transaction callback. Firest
 Storage compatibility is additive: v0.6 reservation documents may contain `growthCursor` and latest-growth replay metadata. Existing v0.5 documents remain valid fixed reservations and are not implicitly upgraded into growable reservations. No collection reset or accounting rewrite is required.
 
 The existing `expiryGraceMs` clock-skew contract also applies to growth. A reservation that is still inside the configured grace may grow; after authoritative expiry/recovery, every growth call fails closed. Tests cover grown pending release, liable retention, Firestore transaction retry behavior, and commit-after-ACK-loss replay with the same stable increment identity.
+
+## Atomic heterogeneous vector usage (v0.7)
+
+`FirestoreUsageStore` implements optional `VectorUsageStore` using additive optional reservation-document fields: `mode: "vector"`, dimension metadata, per-dimension actuals, and vector-growth replay metadata. Existing v0.6 mode-less documents remain scalar and require no rewrite.
+
+Vector admission, growth, settlement, and expiry/recovery run in one Firestore transaction over the reservation plus every participating budget document. The next vector growth cursor is created outside the transaction callback so automatic Firestore retries cannot double-grow. Emulator CI runs portable vector conformance and committed-growth acknowledgement-loss replay.

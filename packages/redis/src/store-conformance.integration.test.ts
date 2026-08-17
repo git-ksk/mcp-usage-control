@@ -3,6 +3,7 @@ import { createClient } from 'redis';
 import {
   assertUsageStoreConformance,
   runProgressiveUsageStoreConformance,
+  runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
 import { RedisUsageStore } from './index.js';
 
@@ -58,4 +59,23 @@ integration('RedisUsageStore portable conformance', () => {
     expect(report.cases.filter(result => !result.passed)).toEqual([]);
     expect(report.passed).toBe(true);
   });
+  it('passes the atomic vector usage contract', async () => {
+    const report = await runVectorUsageStoreConformance({
+      createStore(scenario) {
+        return new RedisUsageStore(client, {
+          prefix: `${runId}-vector-${scenario}`,
+          hashTag: `${runId}-vector-${scenario}`,
+        });
+      },
+      async waitForLeaseExpiry(ttlMs) {
+        await new Promise(resolve => setTimeout(resolve, ttlMs + 80));
+      },
+      leaseTtlMs: 60,
+      concurrency: 8,
+    });
+
+    expect(report.cases.filter(result => !result.passed)).toEqual([]);
+    expect(report.passed).toBe(true);
+  });
+
 });

@@ -16,6 +16,18 @@ import {
   type UsageObserver,
   type UsageRequest,
   type UsageStore,
+  type UsageDimension,
+  type UsageDimensionActual,
+  type UsageDimensionGrowth,
+  type UsageDimensionReserved,
+  type VectorBudgetRemaining,
+  type VectorGrowReservationInput,
+  type VectorReserveInput,
+  type VectorSettleInput,
+  type VectorSettlementResult,
+  type VectorUsageStore,
+  type StoreVectorGrowResult,
+  type StoreVectorReserveResult,
 } from 'mcp-usage-control';
 
 export interface CloudflareRecoverySummary {
@@ -23,13 +35,23 @@ export interface CloudflareRecoverySummary {
   pendingUnits: number;
   liableCount: number;
   liableUnits: number;
+  vectorPendingCount?: number;
+  vectorLiableCount?: number;
 }
 
-export interface CloudflareDirectRecovery {
-  reservationId: string;
-  state: 'pending' | 'liable';
-  reservedUnits: number;
-}
+export type CloudflareDirectRecovery =
+  | {
+      reservationId: string;
+      state: 'pending' | 'liable';
+      reservedUnits: number;
+    }
+  | {
+      reservationId: string;
+      state: 'pending' | 'liable';
+      vector: true;
+      dimensionCount: number;
+      budgetCount: number;
+    };
 
 export interface CloudflareRecoveryReport {
   aggregate: CloudflareRecoverySummary;
@@ -43,7 +65,9 @@ export type CloudflareStoreErrorCode =
   | 'growth_conflict'
   | 'growth_stale_cursor'
   | 'growth_budget_mismatch'
-  | 'growth_not_supported';
+  | 'growth_not_supported'
+  | 'vector_dimension_mismatch'
+  | 'usage_mode_mismatch';
 
 export type CloudflareStoreEnvelope<T> =
   | { ok: true; result: T; recovery: CloudflareRecoveryReport }
@@ -52,6 +76,23 @@ export type CloudflareStoreEnvelope<T> =
 export interface CloudflareHashedBudget {
   id: string;
   limit: number;
+}
+
+export interface CloudflareHashedDimension {
+  id: string;
+  units: number;
+  budgets: readonly CloudflareHashedBudget[];
+}
+
+export interface CloudflareVectorGrowthDimension {
+  id: string;
+  additionalUnits: number;
+  budgets: readonly CloudflareHashedBudget[];
+}
+
+export interface CloudflareVectorActualDimension {
+  id: string;
+  actualUnits: number;
 }
 
 export interface CloudflareReserveCommand {
@@ -73,6 +114,29 @@ export type CloudflareReserveReply =
   | {
       accepted: false;
       reason: 'quota_exceeded' | 'duplicate_operation';
+      limitingBudgetId?: string;
+      remaining?: number;
+    };
+
+export interface CloudflareVectorReserveCommand {
+  reservationId: string;
+  dimensions: readonly CloudflareHashedDimension[];
+  ttlMs: number;
+  cleanupBatchSize: number;
+  idempotencyTtlMs: number;
+  initialGrowthCursor: string;
+}
+
+export type CloudflareVectorReserveReply =
+  | {
+      accepted: true;
+      expiresAt: number;
+      remainingByBudget: readonly { dimensionId: string; budgetId: string; remaining: number }[];
+    }
+  | {
+      accepted: false;
+      reason: 'quota_exceeded' | 'duplicate_operation';
+      limitingDimensionId?: string;
       limitingBudgetId?: string;
       remaining?: number;
     };
@@ -106,6 +170,35 @@ export type CloudflareGrowReply =
       remaining: number;
     };
 
+export interface CloudflareVectorGrowCommand {
+  reservationId: string;
+  incrementHash: string;
+  expectedGrowthCursor: string;
+  dimensions: readonly CloudflareVectorGrowthDimension[];
+  fingerprint: string;
+  nextGrowthCursor: string;
+  idempotencyTtlMs: number;
+}
+
+export type CloudflareVectorGrowReply =
+  | {
+      accepted: true;
+      replayed: boolean;
+      previousReservedByDimension: readonly { id: string; reservedUnits: number }[];
+      reservedByDimension: readonly { id: string; reservedUnits: number }[];
+      growthCursor: string;
+      remainingByBudget: readonly { dimensionId: string; budgetId: string; remaining: number }[];
+    }
+  | {
+      accepted: false;
+      reason: 'quota_exceeded';
+      replayed: boolean;
+      growthCursor: string;
+      limitingDimensionId: string;
+      limitingBudgetId: string;
+      remaining: number;
+    };
+
 export interface CloudflareMarkLiableCommand {
   reservationId: string;
   idempotencyTtlMs: number;
@@ -131,10 +224,28 @@ export interface CloudflareSettlementReply {
   replayed: boolean;
 }
 
+export interface CloudflareVectorSettleCommand {
+  reservationId: string;
+  actualByDimension: readonly CloudflareVectorActualDimension[];
+  outcomeHash: string;
+  idempotencyTtlMs: number;
+}
+
+export interface CloudflareVectorSettlementReply {
+  dimensions: readonly { id: string; reservedUnits: number; actualUnits: number; releasedUnits: number }[];
+  replayed: boolean;
+}
+
 /** Structural type for a Durable Object RPC stub. */
 export interface CloudflareUsageDurableObjectStub {
   reserve(command: CloudflareReserveCommand): Promise<CloudflareStoreEnvelope<CloudflareReserveReply>>;
+  reserveVector?(
+    command: CloudflareVectorReserveCommand,
+  ): Promise<CloudflareStoreEnvelope<CloudflareVectorReserveReply>>;
   grow?(command: CloudflareGrowCommand): Promise<CloudflareStoreEnvelope<CloudflareGrowReply>>;
+  growVector?(
+    command: CloudflareVectorGrowCommand,
+  ): Promise<CloudflareStoreEnvelope<CloudflareVectorGrowReply>>;
   markLiable(
     command: CloudflareMarkLiableCommand,
   ): Promise<CloudflareStoreEnvelope<{ expiresAt: number }>>;
@@ -142,6 +253,9 @@ export interface CloudflareUsageDurableObjectStub {
   settle(
     command: CloudflareSettleCommand,
   ): Promise<CloudflareStoreEnvelope<CloudflareSettlementReply>>;
+  settleVector?(
+    command: CloudflareVectorSettleCommand,
+  ): Promise<CloudflareStoreEnvelope<CloudflareVectorSettlementReply>>;
 }
 
 /**
@@ -184,13 +298,32 @@ interface PreparedGrowth {
   budgetById: Map<string, Budget>;
 }
 
+interface PreparedVectorReserve {
+  command: CloudflareVectorReserveCommand;
+  reservationId: string;
+  dimensions: UsageDimension[];
+  dimensionById: Map<string, UsageDimension>;
+  budgetById: Map<string, Budget>;
+}
+
+interface PreparedVectorGrowth {
+  command: CloudflareVectorGrowCommand;
+  dimensionById: Map<string, UsageDimensionGrowth>;
+  budgetById: Map<string, Budget>;
+}
+
+interface PreparedVectorSettlement {
+  command: CloudflareVectorSettleCommand;
+  dimensionKeyById: Map<string, string>;
+}
+
 const RESERVATION_ID_PATTERN = /^cf1\.[a-f0-9]{64}$/;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const DEFAULT_PATH = '/v1/usage-store';
 const MAX_GATEWAY_BODY_BYTES = 65_536;
 
 /** Worker-local UsageStore backed by a Durable Object namespace binding. */
-export class CloudflareUsageStore implements ProgressiveUsageStore {
+export class CloudflareUsageStore implements ProgressiveUsageStore, VectorUsageStore {
   private readonly options: NormalizedCloudflareUsageStoreOptions;
 
   constructor(
@@ -211,6 +344,42 @@ export class CloudflareUsageStore implements ProgressiveUsageStore {
     this.emitRecovery(envelope.recovery);
     if (!envelope.ok) throw mapStoreError(envelope.error);
     return mapReserveReply(envelope.result, prepared, input.request, input.units);
+  }
+
+  async reserveVector(input: VectorReserveInput): Promise<StoreVectorReserveResult> {
+    const prepared = await prepareVectorReserve(input, this.options);
+    const stub = this.stub();
+    if (!stub.reserveVector) {
+      throw new UsageStateError('Cloudflare Durable Object does not support atomic vector usage');
+    }
+    const envelope = await stub.reserveVector(prepared.command);
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapVectorReserveReply(envelope.result, prepared, input.request);
+  }
+
+  async growVectorReservation(input: VectorGrowReservationInput): Promise<StoreVectorGrowResult> {
+    const prepared = await prepareVectorGrowth(input, this.options.idempotencyTtlMs);
+    const stub = this.stub();
+    if (!stub.growVector) {
+      throw new UsageStateError('Cloudflare Durable Object does not support atomic vector usage');
+    }
+    const envelope = await stub.growVector(prepared.command);
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapVectorGrowthReply(envelope.result, input, prepared);
+  }
+
+  async settleVector(input: VectorSettleInput): Promise<VectorSettlementResult> {
+    const prepared = await prepareVectorSettlement(input, this.options.idempotencyTtlMs);
+    const stub = this.stub();
+    if (!stub.settleVector) {
+      throw new UsageStateError('Cloudflare Durable Object does not support atomic vector usage');
+    }
+    const envelope = await stub.settleVector(prepared.command);
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapVectorSettlementReply(envelope.result, input, prepared);
   }
 
   async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
@@ -302,7 +471,7 @@ export class CloudflareUsageTransportError extends Error {
 }
 
 /** Node/edge remote UsageStore for a separately deployed Cloudflare gateway Worker. */
-export class RemoteCloudflareUsageStore implements ProgressiveUsageStore {
+export class RemoteCloudflareUsageStore implements ProgressiveUsageStore, VectorUsageStore {
   private readonly endpoint: URL;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
@@ -349,6 +518,58 @@ export class RemoteCloudflareUsageStore implements ProgressiveUsageStore {
     this.emitRecovery(envelope.recovery);
     if (!envelope.ok) throw mapStoreError(envelope.error);
     return mapReserveReply(envelope.result, prepared, input.request, input.units);
+  }
+
+  async reserveVector(input: VectorReserveInput): Promise<StoreVectorReserveResult> {
+    const prepared = await prepareVectorReserve(input, { cleanupBatchSize: 1, idempotencyTtlMs: 1 });
+    const envelope = await this.post<CloudflareVectorReserveReply>({
+      version: 1,
+      method: 'reserve_vector',
+      input: {
+        reservationId: prepared.command.reservationId,
+        dimensions: prepared.command.dimensions,
+        ttlMs: prepared.command.ttlMs,
+        initialGrowthCursor: prepared.command.initialGrowthCursor,
+      },
+    });
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapVectorReserveReply(envelope.result, prepared, input.request);
+  }
+
+  async growVectorReservation(input: VectorGrowReservationInput): Promise<StoreVectorGrowResult> {
+    const prepared = await prepareVectorGrowth(input, 1);
+    const envelope = await this.post<CloudflareVectorGrowReply>({
+      version: 1,
+      method: 'grow_vector',
+      input: {
+        reservationId: prepared.command.reservationId,
+        incrementHash: prepared.command.incrementHash,
+        expectedGrowthCursor: prepared.command.expectedGrowthCursor,
+        dimensions: prepared.command.dimensions,
+        fingerprint: prepared.command.fingerprint,
+        nextGrowthCursor: prepared.command.nextGrowthCursor,
+      },
+    });
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapVectorGrowthReply(envelope.result, input, prepared);
+  }
+
+  async settleVector(input: VectorSettleInput): Promise<VectorSettlementResult> {
+    const prepared = await prepareVectorSettlement(input, 1);
+    const envelope = await this.post<CloudflareVectorSettlementReply>({
+      version: 1,
+      method: 'settle_vector',
+      input: {
+        reservationId: prepared.command.reservationId,
+        actualByDimension: prepared.command.actualByDimension,
+        outcomeHash: prepared.command.outcomeHash,
+      },
+    });
+    this.emitRecovery(envelope.recovery);
+    if (!envelope.ok) throw mapStoreError(envelope.error);
+    return mapVectorSettlementReply(envelope.result, input, prepared);
   }
 
   async growReservation(input: GrowReservationInput): Promise<StoreGrowResult> {
@@ -503,6 +724,16 @@ export type CloudflareHttpRequest =
     }
   | {
       version: 1;
+      method: 'reserve_vector';
+      input: {
+        reservationId: string;
+        dimensions: readonly CloudflareHashedDimension[];
+        ttlMs: number;
+        initialGrowthCursor: string;
+      };
+    }
+  | {
+      version: 1;
       method: 'grow';
       input: {
         reservationId: string;
@@ -514,12 +745,33 @@ export type CloudflareHttpRequest =
         nextGrowthCursor: string;
       };
     }
+  | {
+      version: 1;
+      method: 'grow_vector';
+      input: {
+        reservationId: string;
+        incrementHash: string;
+        expectedGrowthCursor: string;
+        dimensions: readonly CloudflareVectorGrowthDimension[];
+        fingerprint: string;
+        nextGrowthCursor: string;
+      };
+    }
   | { version: 1; method: 'mark_liable'; input: { reservationId: string } }
   | { version: 1; method: 'renew'; input: { reservationId: string; ttlMs: number } }
   | {
       version: 1;
       method: 'settle';
       input: { reservationId: string; actualUnits: number; outcomeHash: string };
+    }
+  | {
+      version: 1;
+      method: 'settle_vector';
+      input: {
+        reservationId: string;
+        actualByDimension: readonly CloudflareVectorActualDimension[];
+        outcomeHash: string;
+      };
     };
 
 /**
@@ -590,9 +842,22 @@ async function invokeGateway(
         cleanupBatchSize: options.cleanupBatchSize,
         idempotencyTtlMs: options.idempotencyTtlMs,
       });
+    case 'reserve_vector':
+      if (!stub.reserveVector) return failGatewayVectorUnsupported();
+      return stub.reserveVector({
+        ...body.input,
+        cleanupBatchSize: options.cleanupBatchSize,
+        idempotencyTtlMs: options.idempotencyTtlMs,
+      });
     case 'grow':
       if (!stub.grow) return failGatewayGrowthUnsupported();
       return stub.grow({
+        ...body.input,
+        idempotencyTtlMs: options.idempotencyTtlMs,
+      });
+    case 'grow_vector':
+      if (!stub.growVector) return failGatewayVectorUnsupported();
+      return stub.growVector({
         ...body.input,
         idempotencyTtlMs: options.idempotencyTtlMs,
       });
@@ -614,6 +879,14 @@ async function invokeGateway(
         outcomeHash: body.input.outcomeHash,
         idempotencyTtlMs: options.idempotencyTtlMs,
       });
+    case 'settle_vector':
+      if (!stub.settleVector) return failGatewayVectorUnsupported();
+      return stub.settleVector({
+        reservationId: body.input.reservationId,
+        actualByDimension: body.input.actualByDimension,
+        outcomeHash: body.input.outcomeHash,
+        idempotencyTtlMs: options.idempotencyTtlMs,
+      });
   }
 }
 
@@ -622,7 +895,31 @@ function failGatewayGrowthUnsupported(): CloudflareStoreEnvelope<never> {
     ok: false,
     error: 'growth_not_supported',
     recovery: {
-      aggregate: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
+      aggregate: {
+        pendingCount: 0,
+        pendingUnits: 0,
+        liableCount: 0,
+        liableUnits: 0,
+        vectorPendingCount: 0,
+        vectorLiableCount: 0,
+      },
+    },
+  };
+}
+
+function failGatewayVectorUnsupported(): CloudflareStoreEnvelope<never> {
+  return {
+    ok: false,
+    error: 'growth_not_supported',
+    recovery: {
+      aggregate: {
+        pendingCount: 0,
+        pendingUnits: 0,
+        liableCount: 0,
+        liableUnits: 0,
+        vectorPendingCount: 0,
+        vectorLiableCount: 0,
+      },
     },
   };
 }
@@ -667,6 +964,256 @@ async function prepareReserve(
       idempotencyTtlMs: options.idempotencyTtlMs,
       initialGrowthCursor,
     },
+  };
+}
+
+async function prepareVectorReserve(
+  input: VectorReserveInput,
+  options: Pick<NormalizedCloudflareUsageStoreOptions, 'cleanupBatchSize' | 'idempotencyTtlMs'>,
+): Promise<PreparedVectorReserve> {
+  validateRequestIdentity(input.request);
+  assertPositiveInteger(input.ttlMs, 'ttlMs');
+  const dimensions = canonicalizeUsageDimensions(input.dimensions);
+  const operationHash = await digest(
+    JSON.stringify([
+      input.request.principal.tenantId ?? null,
+      input.request.principal.id,
+      input.request.tool,
+      input.request.operationId,
+    ]),
+  );
+  const reservationId = `cf1.${operationHash}`;
+  const encoded = await Promise.all(
+    dimensions.map(async dimension => ({
+      dimension,
+      id: await digest(dimension.key),
+      budgets: await Promise.all(
+        dimension.budgets.map(async budget => ({ budget, id: await digest(budget.key) })),
+      ),
+    })),
+  );
+  const dimensionById = new Map(encoded.map(entry => [entry.id, entry.dimension] as const));
+  const budgetById = new Map(
+    encoded.flatMap(entry => entry.budgets.map(budget => [budget.id, budget.budget] as const)),
+  );
+  return {
+    reservationId,
+    dimensions,
+    dimensionById,
+    budgetById,
+    command: {
+      reservationId,
+      dimensions: encoded.map(entry => ({
+        id: entry.id,
+        units: entry.dimension.units,
+        budgets: entry.budgets.map(budget => ({ id: budget.id, limit: budget.budget.limit })),
+      })),
+      ttlMs: input.ttlMs,
+      cleanupBatchSize: options.cleanupBatchSize,
+      idempotencyTtlMs: options.idempotencyTtlMs,
+      initialGrowthCursor: newGrowthCursor(),
+    },
+  };
+}
+
+async function prepareVectorGrowth(
+  input: VectorGrowReservationInput,
+  idempotencyTtlMs: number,
+): Promise<PreparedVectorGrowth> {
+  assertReservationId(input.reservationId);
+  if (!input.incrementId) throw new RangeError('incrementId must be a non-empty string');
+  if (!input.expectedGrowthCursor) {
+    throw new RangeError('expectedGrowthCursor must be a non-empty string');
+  }
+  assertPositiveInteger(idempotencyTtlMs, 'idempotencyTtlMs');
+  const dimensions = canonicalizeGrowthDimensions(input.dimensions);
+  const encoded = await Promise.all(
+    dimensions.map(async dimension => ({
+      dimension,
+      id: await digest(dimension.key),
+      budgets: await Promise.all(
+        dimension.budgets.map(async budget => ({ budget, id: await digest(budget.key) })),
+      ),
+    })),
+  );
+  const dimensionById = new Map(encoded.map(entry => [entry.id, entry.dimension] as const));
+  const budgetById = new Map(
+    encoded.flatMap(entry => entry.budgets.map(budget => [budget.id, budget.budget] as const)),
+  );
+  const encodedDimensions = encoded.map(entry => ({
+    id: entry.id,
+    additionalUnits: entry.dimension.additionalUnits,
+    budgets: entry.budgets.map(budget => ({ id: budget.id, limit: budget.budget.limit })),
+  }));
+  return {
+    dimensionById,
+    budgetById,
+    command: {
+      reservationId: input.reservationId,
+      incrementHash: await digest(input.incrementId),
+      expectedGrowthCursor: input.expectedGrowthCursor,
+      dimensions: encodedDimensions,
+      fingerprint: await digest(
+        JSON.stringify(
+          encodedDimensions.map(dimension => [
+            dimension.id,
+            dimension.additionalUnits,
+            dimension.budgets.map(budget => [budget.id, budget.limit]),
+          ]),
+        ),
+      ),
+      nextGrowthCursor: newGrowthCursor(),
+      idempotencyTtlMs,
+    },
+  };
+}
+
+async function prepareVectorSettlement(
+  input: VectorSettleInput,
+  idempotencyTtlMs: number,
+): Promise<PreparedVectorSettlement> {
+  assertReservationId(input.reservationId);
+  assertPositiveInteger(idempotencyTtlMs, 'idempotencyTtlMs');
+  const actuals = canonicalizeActualDimensions(input.actualByDimension);
+  const encoded = await Promise.all(
+    actuals.map(async actual => ({ actual, id: await digest(actual.key) })),
+  );
+  return {
+    dimensionKeyById: new Map(encoded.map(entry => [entry.id, entry.actual.key] as const)),
+    command: {
+      reservationId: input.reservationId,
+      actualByDimension: encoded.map(entry => ({ id: entry.id, actualUnits: entry.actual.actualUnits })),
+      outcomeHash: await digest(input.outcome),
+      idempotencyTtlMs,
+    },
+  };
+}
+
+function mapVectorReserveReply(
+  reply: CloudflareVectorReserveReply,
+  prepared: PreparedVectorReserve,
+  request: UsageRequest,
+): StoreVectorReserveResult {
+  if (!reply.accepted) {
+    if (reply.reason === 'duplicate_operation') return { accepted: false, reason: reply.reason };
+    if (!reply.limitingDimensionId || !reply.limitingBudgetId || reply.remaining === undefined) {
+      throw new UsageStateError('Cloudflare vector quota reply was incomplete');
+    }
+    const dimension = prepared.dimensionById.get(reply.limitingDimensionId);
+    const budget = prepared.budgetById.get(reply.limitingBudgetId);
+    if (!dimension || !budget) {
+      throw new UsageStateError('Cloudflare vector quota reply referenced unknown identifiers');
+    }
+    return {
+      accepted: false,
+      reason: 'quota_exceeded',
+      limitingDimensionKey: dimension.key,
+      limitingBudgetKey: budget.key,
+      remaining: reply.remaining,
+    };
+  }
+  const remainingByBudget: VectorBudgetRemaining[] = reply.remainingByBudget.map(balance => {
+    const dimension = prepared.dimensionById.get(balance.dimensionId);
+    const budget = prepared.budgetById.get(balance.budgetId);
+    if (!dimension || !budget) {
+      throw new UsageStateError('Cloudflare vector reserve reply referenced unknown identifiers');
+    }
+    return { dimensionKey: dimension.key, budgetKey: budget.key, remaining: balance.remaining };
+  });
+  if (remainingByBudget.length !== prepared.budgetById.size) {
+    throw new UsageStateError('Cloudflare vector reserve reply omitted a budget balance');
+  }
+  return {
+    accepted: true,
+    reservation: {
+      id: prepared.reservationId,
+      operationId: request.operationId,
+      principalId: request.principal.id,
+      ...(request.principal.tenantId === undefined ? {} : { tenantId: request.principal.tenantId }),
+      ...(request.principal.plan === undefined ? {} : { plan: request.principal.plan }),
+      tool: request.tool,
+      dimensions: prepared.dimensions.map(dimension => ({
+        key: dimension.key,
+        budgetKeys: dimension.budgets.map(budget => budget.key),
+        reservedUnits: dimension.units,
+      })),
+      expiresAt: reply.expiresAt,
+      growthCursor: prepared.command.initialGrowthCursor,
+    },
+    remainingByBudget,
+  };
+}
+
+function mapVectorGrowthReply(
+  reply: CloudflareVectorGrowReply,
+  input: VectorGrowReservationInput,
+  prepared: PreparedVectorGrowth,
+): StoreVectorGrowResult {
+  if (!reply.accepted) {
+    const dimension = prepared.dimensionById.get(reply.limitingDimensionId);
+    const budget = prepared.budgetById.get(reply.limitingBudgetId);
+    if (!dimension || !budget) {
+      throw new UsageStateError('Cloudflare vector growth denial referenced unknown identifiers');
+    }
+    return {
+      accepted: false,
+      reason: 'quota_exceeded',
+      replayed: reply.replayed,
+      reservationId: input.reservationId,
+      incrementId: input.incrementId,
+      growthCursor: reply.growthCursor,
+      limitingDimensionKey: dimension.key,
+      limitingBudgetKey: budget.key,
+      remaining: reply.remaining,
+    };
+  }
+  const mapReserved = (items: readonly { id: string; reservedUnits: number }[]): UsageDimensionReserved[] =>
+    items.map(item => {
+      const dimension = prepared.dimensionById.get(item.id);
+      if (!dimension) throw new UsageStateError('Cloudflare vector growth reply referenced unknown dimension');
+      return { key: dimension.key, reservedUnits: item.reservedUnits };
+    });
+  const remainingByBudget = reply.remainingByBudget.map(balance => {
+    const dimension = prepared.dimensionById.get(balance.dimensionId);
+    const budget = prepared.budgetById.get(balance.budgetId);
+    if (!dimension || !budget) {
+      throw new UsageStateError('Cloudflare vector growth reply referenced unknown identifiers');
+    }
+    return { dimensionKey: dimension.key, budgetKey: budget.key, remaining: balance.remaining };
+  });
+  if (remainingByBudget.length !== prepared.budgetById.size) {
+    throw new UsageStateError('Cloudflare vector growth reply omitted a budget balance');
+  }
+  return {
+    accepted: true,
+    replayed: reply.replayed,
+    reservationId: input.reservationId,
+    incrementId: input.incrementId,
+    previousReservedByDimension: mapReserved(reply.previousReservedByDimension),
+    reservedByDimension: mapReserved(reply.reservedByDimension),
+    growthCursor: reply.growthCursor,
+    remainingByBudget,
+  };
+}
+
+function mapVectorSettlementReply(
+  reply: CloudflareVectorSettlementReply,
+  input: VectorSettleInput,
+  prepared: PreparedVectorSettlement,
+): VectorSettlementResult {
+  return {
+    reservationId: input.reservationId,
+    dimensions: reply.dimensions.map(dimension => {
+      const key = prepared.dimensionKeyById.get(dimension.id);
+      if (!key) throw new UsageStateError('Cloudflare vector settlement referenced unknown dimension');
+      return {
+        key,
+        reservedUnits: dimension.reservedUnits,
+        actualUnits: dimension.actualUnits,
+        releasedUnits: dimension.releasedUnits,
+      };
+    }),
+    outcome: input.outcome,
   };
 }
 
@@ -801,15 +1348,28 @@ function mapReserveReply(
 
 function emitRecovery(observer: UsageObserver, report: CloudflareRecoveryReport): void {
   if (report.direct) {
-    emitUsageEvent(observer, {
-      type: 'reservation.recovered',
-      timestamp: Date.now(),
-      store: 'cloudflare',
-      recovery: report.direct.state === 'pending' ? 'pending_released' : 'liable_retained',
-      reservationId: report.direct.reservationId,
-      reservedUnits: report.direct.reservedUnits,
-      count: 1,
-    });
+    if ('vector' in report.direct) {
+      emitUsageEvent(observer, {
+        type: 'vector.reservation.recovered',
+        timestamp: Date.now(),
+        store: 'cloudflare',
+        recovery: report.direct.state === 'pending' ? 'pending_released' : 'liable_retained',
+        reservationId: report.direct.reservationId,
+        dimensionCount: report.direct.dimensionCount,
+        budgetCount: report.direct.budgetCount,
+        count: 1,
+      });
+    } else {
+      emitUsageEvent(observer, {
+        type: 'reservation.recovered',
+        timestamp: Date.now(),
+        store: 'cloudflare',
+        recovery: report.direct.state === 'pending' ? 'pending_released' : 'liable_retained',
+        reservationId: report.direct.reservationId,
+        reservedUnits: report.direct.reservedUnits,
+        count: 1,
+      });
+    }
   }
   if (report.aggregate.pendingCount > 0) {
     emitUsageEvent(observer, {
@@ -831,6 +1391,24 @@ function emitRecovery(observer: UsageObserver, report: CloudflareRecoveryReport)
       count: report.aggregate.liableCount,
     });
   }
+  if ((report.aggregate.vectorPendingCount ?? 0) > 0) {
+    emitUsageEvent(observer, {
+      type: 'vector.reservation.recovered',
+      timestamp: Date.now(),
+      store: 'cloudflare',
+      recovery: 'pending_released',
+      count: report.aggregate.vectorPendingCount ?? 0,
+    });
+  }
+  if ((report.aggregate.vectorLiableCount ?? 0) > 0) {
+    emitUsageEvent(observer, {
+      type: 'vector.reservation.recovered',
+      timestamp: Date.now(),
+      store: 'cloudflare',
+      recovery: 'liable_retained',
+      count: report.aggregate.vectorLiableCount ?? 0,
+    });
+  }
 }
 
 function mapStoreError(code: CloudflareStoreErrorCode): UsageStateError {
@@ -846,7 +1424,11 @@ function mapStoreError(code: CloudflareStoreErrorCode): UsageStateError {
     case 'growth_budget_mismatch':
       return new UsageStateError('Growth budgets must exactly match the reservation budget set');
     case 'growth_not_supported':
-      return new UsageStateError('Reservation does not support progressive growth');
+      return new UsageStateError('Reservation does not support requested growth/capability');
+    case 'vector_dimension_mismatch':
+      return new UsageStateError('Vector dimensions and budgets must exactly match the reservation');
+    case 'usage_mode_mismatch':
+      return new UsageStateError('Usage reservation mode does not match the requested operation');
     case 'not_found_or_expired':
       return new UsageStateError('Reservation not found or expired');
   }
@@ -876,6 +1458,74 @@ function normalizeOptions(options: CloudflareUsageStoreOptions): NormalizedCloud
     idempotencyTtlMs,
     ...(options.observer === undefined ? {} : { observer: options.observer }),
   };
+}
+
+function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
+  if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
+  const normalized = dimensions.map(dimension => {
+    if (!dimension.key) throw new RangeError('dimension.key must be non-empty');
+    assertNonNegativeInteger(dimension.units, `dimension.units (${dimension.key})`);
+    return { key: dimension.key, units: dimension.units, budgets: canonicalizeBudgets(dimension.budgets) };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  validateVectorTopology(normalized);
+  return normalized;
+}
+
+function canonicalizeGrowthDimensions(
+  dimensions: readonly UsageDimensionGrowth[],
+): UsageDimensionGrowth[] {
+  if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
+  const normalized = dimensions.map(dimension => {
+    if (!dimension.key) throw new RangeError('dimension.key must be non-empty');
+    assertNonNegativeInteger(dimension.additionalUnits, `dimension.additionalUnits (${dimension.key})`);
+    return {
+      key: dimension.key,
+      additionalUnits: dimension.additionalUnits,
+      budgets: canonicalizeBudgets(dimension.budgets),
+    };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  validateVectorTopology(normalized);
+  if (!normalized.some(dimension => dimension.additionalUnits > 0)) {
+    throw new RangeError('vector growth must add units to at least one dimension');
+  }
+  return normalized;
+}
+
+function canonicalizeActualDimensions(
+  actuals: readonly UsageDimensionActual[],
+): UsageDimensionActual[] {
+  if (actuals.length === 0) throw new RangeError('actualByDimension must contain at least one dimension');
+  const normalized = actuals.map(actual => {
+    if (!actual.key) throw new RangeError('actual dimension key must be non-empty');
+    assertNonNegativeInteger(actual.actualUnits, `actualUnits (${actual.key})`);
+    return { key: actual.key, actualUnits: actual.actualUnits };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  for (let index = 1; index < normalized.length; index += 1) {
+    if (normalized[index - 1]!.key === normalized[index]!.key) {
+      throw new RangeError(`duplicate dimension key: ${normalized[index]!.key}`);
+    }
+  }
+  return normalized;
+}
+
+function validateVectorTopology(
+  dimensions: readonly { key: string; budgets: readonly Budget[] }[],
+): void {
+  const dimensionKeys = new Set<string>();
+  const budgetKeys = new Set<string>();
+  for (const dimension of dimensions) {
+    if (dimensionKeys.has(dimension.key)) throw new RangeError(`duplicate dimension key: ${dimension.key}`);
+    dimensionKeys.add(dimension.key);
+    for (const budget of dimension.budgets) {
+      if (budgetKeys.has(budget.key)) {
+        throw new RangeError(`budget key cannot appear in multiple vector dimensions: ${budget.key}`);
+      }
+      budgetKeys.add(budget.key);
+    }
+  }
 }
 
 function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
@@ -980,6 +1630,14 @@ function isHttpRequest(value: unknown): value is CloudflareHttpRequest {
             isNonNegativeInteger(budget.limit),
         )
       );
+    case 'reserve_vector':
+      return (
+        isReservationId(input.reservationId) &&
+        isPositiveInteger(input.ttlMs) &&
+        typeof input.initialGrowthCursor === 'string' &&
+        input.initialGrowthCursor.length > 0 &&
+        isHashedDimensions(input.dimensions, 'reserve')
+      );
     case 'grow':
       return (
         isReservationId(input.reservationId) &&
@@ -1002,6 +1660,19 @@ function isHttpRequest(value: unknown): value is CloudflareHttpRequest {
         typeof input.nextGrowthCursor === 'string' &&
         input.nextGrowthCursor.length > 0
       );
+    case 'grow_vector':
+      return (
+        isReservationId(input.reservationId) &&
+        typeof input.incrementHash === 'string' &&
+        HASH_PATTERN.test(input.incrementHash) &&
+        typeof input.expectedGrowthCursor === 'string' &&
+        input.expectedGrowthCursor.length > 0 &&
+        isHashedDimensions(input.dimensions, 'growth') &&
+        typeof input.fingerprint === 'string' &&
+        HASH_PATTERN.test(input.fingerprint) &&
+        typeof input.nextGrowthCursor === 'string' &&
+        input.nextGrowthCursor.length > 0
+      );
     case 'mark_liable':
       return isReservationId(input.reservationId);
     case 'renew':
@@ -1013,9 +1684,46 @@ function isHttpRequest(value: unknown): value is CloudflareHttpRequest {
         typeof input.outcomeHash === 'string' &&
         HASH_PATTERN.test(input.outcomeHash)
       );
+    case 'settle_vector':
+      return (
+        isReservationId(input.reservationId) &&
+        Array.isArray(input.actualByDimension) &&
+        input.actualByDimension.length > 0 &&
+        input.actualByDimension.every(
+          dimension =>
+            isRecord(dimension) &&
+            typeof dimension.id === 'string' &&
+            HASH_PATTERN.test(dimension.id) &&
+            isNonNegativeInteger(dimension.actualUnits),
+        ) &&
+        typeof input.outcomeHash === 'string' &&
+        HASH_PATTERN.test(input.outcomeHash)
+      );
     default:
       return false;
   }
+}
+
+function isHashedDimensions(value: unknown, mode: 'reserve' | 'growth'): boolean {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every(dimension => {
+    if (!isRecord(dimension) || typeof dimension.id !== 'string' || !HASH_PATTERN.test(dimension.id)) {
+      return false;
+    }
+    const units = mode === 'reserve' ? dimension.units : dimension.additionalUnits;
+    if (!isNonNegativeInteger(units)) return false;
+    return (
+      Array.isArray(dimension.budgets) &&
+      dimension.budgets.length > 0 &&
+      dimension.budgets.every(
+        budget =>
+          isRecord(budget) &&
+          typeof budget.id === 'string' &&
+          HASH_PATTERN.test(budget.id) &&
+          isNonNegativeInteger(budget.limit),
+      )
+    );
+  });
 }
 
 function isEnvelope(value: unknown): value is CloudflareStoreEnvelope<unknown> {
@@ -1031,6 +1739,8 @@ function isEnvelope(value: unknown): value is CloudflareStoreEnvelope<unknown> {
       'growth_stale_cursor',
       'growth_budget_mismatch',
       'growth_not_supported',
+      'vector_dimension_mismatch',
+      'usage_mode_mismatch',
     ].includes(value.error)
   );
 }
@@ -1038,12 +1748,20 @@ function isEnvelope(value: unknown): value is CloudflareStoreEnvelope<unknown> {
 function isRecoveryReport(value: unknown): value is CloudflareRecoveryReport {
   if (!isRecord(value) || !isRecoverySummary(value.aggregate)) return false;
   if (value.direct === undefined) return true;
-  return (
-    isRecord(value.direct) &&
-    isReservationId(value.direct.reservationId) &&
-    (value.direct.state === 'pending' || value.direct.state === 'liable') &&
-    isNonNegativeInteger(value.direct.reservedUnits)
-  );
+  if (
+    !isRecord(value.direct) ||
+    !isReservationId(value.direct.reservationId) ||
+    (value.direct.state !== 'pending' && value.direct.state !== 'liable')
+  ) {
+    return false;
+  }
+  if (value.direct.vector === true) {
+    return (
+      isNonNegativeInteger(value.direct.dimensionCount) &&
+      isNonNegativeInteger(value.direct.budgetCount)
+    );
+  }
+  return isNonNegativeInteger(value.direct.reservedUnits);
 }
 
 function isRecoverySummary(value: unknown): value is CloudflareRecoverySummary {
@@ -1052,7 +1770,9 @@ function isRecoverySummary(value: unknown): value is CloudflareRecoverySummary {
     isNonNegativeInteger(value.pendingCount) &&
     isNonNegativeInteger(value.pendingUnits) &&
     isNonNegativeInteger(value.liableCount) &&
-    isNonNegativeInteger(value.liableUnits)
+    isNonNegativeInteger(value.liableUnits) &&
+    (value.vectorPendingCount === undefined || isNonNegativeInteger(value.vectorPendingCount)) &&
+    (value.vectorLiableCount === undefined || isNonNegativeInteger(value.vectorLiableCount))
   );
 }
 

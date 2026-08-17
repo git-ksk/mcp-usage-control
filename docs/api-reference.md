@@ -607,3 +607,13 @@ Stores opt in through `ProgressiveUsageStore.growReservation()`. The base `Usage
 The public conformance subpath also exports `runProgressiveUsageStoreConformance()` for Stores that claim growth support.
 
 See [Progressive reservation growth](progressive-reservation-growth.md).
+
+## Vector usage APIs (v0.7)
+
+`VectorUsagePolicy` returns a canonical dimension vector instead of one scalar `units` value. `VectorUsageControl.reserve()` returns a `VectorUsageLease` when the configured Store implements optional `VectorUsageStore`.
+
+`VectorUsageLease` exposes `reservedByDimension`, `markLiable()`, `renew()`, `grow()`, `settle()`, and `toResumeState()`. `grow()` takes one stable `incrementId` plus the complete dimension/budget topology. `settle()` takes every dimension exactly once as `{ key, actualUnits }`.
+
+`VectorUsageStore` adds `reserveVector()`, `growVectorReservation()`, and `settleVector()` while inheriting the shared lifecycle operations from `UsageStore`. Existing third-party scalar Stores do not need to implement these methods.
+
+The public `runVectorUsageStoreConformance()` entry point verifies atomic admission, replay/cursor behavior, expiry, settlement bounds, scalar/vector operation collision, and growth/settlement races. See [Atomic heterogeneous usage vectors](vector-usage.md).

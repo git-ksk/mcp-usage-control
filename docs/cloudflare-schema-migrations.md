@@ -4,83 +4,44 @@
 
 ## Current schema
 
-The current schema version is **2**.
+The current schema version is **3**.
 
-Version 2 keeps the v1 accounting layout and adds one separate progressive-growth metadata table:
+Schema v3 contains `budgets`, `reservations`, v2 `reservation_growth`, v3 `reservation_vectors`, the active/tombstone expiry indexes, and the single-row `usage_control_schema` marker. The v1 `budgets` / `reservations` column layouts remain unchanged through v3.
 
-- `budgets`
-- `reservations`
-- `reservation_growth` (`reservation_id`, current `growth_cursor`, latest replay metadata)
-- `reservations_active_expiry`
-- `reservations_tombstone_expiry`
-- `usage_control_schema`, a single-row metadata table containing the schema version
+## Startup and migration behavior
 
-The v1 `budgets` and `reservations` column layouts are unchanged.
+Initialization runs synchronously inside a Durable Object storage transaction before usage-control RPC operations are served. It is retry-safe; an exception rolls back the schema transaction and prevents enforcement from starting.
 
-The schema metadata is internal adapter state. Do not modify it from application code.
+Supported paths are deterministic:
 
-## Startup behavior
+- fresh/pre-versioning: validate/adopt or create v1 -> add v2 `reservation_growth` -> add v3 `reservation_vectors` -> validate v3 -> write version 3;
+- marked v1: validate -> v2 -> v3 -> validate -> version 3;
+- marked v2: validate -> v3 -> validate -> version 3;
+- v3: validate the exact supported layout;
+- future version: fail closed.
 
-Schema initialization runs synchronously inside a Durable Object storage transaction before the public Durable Object runtime starts serving usage-control RPC operations.
-
-For a fresh database, the adapter creates the v1 accounting tables/indexes, adds `reservation_growth`, validates the resulting v2 layout, and then writes schema version `2`.
-
-For a pre-versioning database, the adapter first validates/adopts the exact v1 accounting layout and then performs the deterministic v1 -> v2 additive migration. For an explicitly marked v1 database, it validates v1 before the same migration. Existing `budgets` / `reservations` accounting rows are not rewritten; only `reservation_growth` and the schema-version marker are added. Missing v1 indexes may still be recreated because they do not change quota balances.
-
-Initialization is safe to retry. If initialization throws, the schema transaction is rolled back and the Durable Object does not proceed with usage enforcement.
+Existing accounting rows are not rewritten by the additive migrations. Missing v1 indexes may be recreated because they do not alter balances.
 
 ## v1 -> v2 progressive-growth migration
 
-The v0.6 migration is intentionally additive. It creates `reservation_growth` without changing the v1 accounting tables. Reservations that already exist at upgrade time have no corresponding growth row and therefore remain fixed reservations. New v0.6 reservations create their growth row atomically with admission and can opt into `grow`.
+v2 adds `reservation_growth` without changing v1 accounting tables. Existing reservations receive no growth row and remain fixed; new growth-capable reservations create the row atomically with admission. No quota balance, liability state, expiry, settlement, or tombstone is rewritten.
 
-This avoids retroactively inventing a growth cursor for an operation whose caller never received one. No quota balance, liability state, expiry timestamp, settlement state, or tombstone is rewritten by the migration.
+## v2 -> v3 vector-metadata migration
 
-An older v1 binary does not understand schema version 2 and must not be used after a domain has migrated. Rollback is therefore a forward-fix/new-domain operation rather than manually lowering `usage_control_schema.version`.
+v3 adds only `reservation_vectors` (`reservation_id`, `dimensions_json`, optional `actual_dimensions_json`, optional `last_vector_growth_json`). It does not backfill scalar reservations or rewrite balances/lifecycle state, so existing v1/v2 rows remain scalar.
+
+A new vector admission writes its normal base reservation identity plus the sidecar in the same `transactionSync` boundary. The sidecar stores per-dimension reserved totals; unlike units are never converted into scalar `reserved_units`. The base vector row uses scalar `reserved_units = 0` as a non-accounting placeholder.
+
+A v2 binary does not understand schema version 3. After migration, rollback must use a forward fix or a separate/explicitly restored domain; never manually lower `usage_control_schema.version`.
 
 ## Fail-closed cases
 
-Startup fails rather than silently repairing or reinitializing when any of these conditions is detected:
+Startup fails rather than silently reinitializing when required accounting tables are incomplete, columns/constraints differ, schema metadata is malformed, the stored version is newer than supported, or an old version has no deterministic registered migration. Applications must preserve fail-closed behavior and must not turn schema incompatibility into unmetered execution.
 
-- only one of the required accounting tables exists;
-- required columns or accounting constraints differ from the expected v1 layout;
-- schema metadata is malformed;
-- the stored schema version is newer than the runtime supports;
-- the stored schema version is older than the runtime supports and no explicit migration step is registered.
+## Future schema changes
 
-A remote caller then observes the usage-control backend as unavailable. Applications should preserve their existing fail-close policy and must not convert a schema incompatibility into an unmetered fallback path.
+Every schema-changing release must add an explicit deterministic migration from the immediately previous version, run inside the schema transaction, preserve accounting invariants, be retry-safe, validate the resulting layout, update the version only after success, cover fresh/upgrade/interruption/future-version tests, and pass local workerd integration before merge.
 
-## Adding a future schema version
+`CREATE TABLE IF NOT EXISTS` is not a substitute for a declared migration step.
 
-A schema-changing release must add an explicit deterministic migration step from the immediately previous version.
-
-The migration should:
-
-1. run inside the schema transaction;
-2. preserve all quota/accounting invariants while transforming data;
-3. be safe if startup is retried after an interrupted deployment;
-4. validate the resulting tables, indexes, and constraints;
-5. update `usage_control_schema.version` only after the migration succeeds;
-6. include unit coverage for fresh creation, upgrade, retry/interruption, and unsupported versions;
-7. run the Cloudflare workerd integration suite before merge.
-
-Do not use `CREATE TABLE IF NOT EXISTS` as a substitute for a data/schema migration.
-
-## Deployment procedure
-
-Before deploying a schema-changing release broadly:
-
-1. deploy it to a dedicated dogfood/test Worker and Durable Object domain;
-2. exercise `reserve`, `markLiable`, `renew`, `settle`, expiry recovery, contention, and retry/reconciliation paths;
-3. confirm no schema/startup errors are reported as business `quota_exceeded` results;
-4. confirm the application remains fail-closed if the usage-control Worker cannot start;
-5. expand deployment only after the migrated domain remains stable.
-
-The normal deployed-E2E procedure is documented in [Cloudflare deployed E2E](cloudflare-deployed-e2e.md).
-
-## Rollback limitations
-
-For the initial versioning change itself, pre-versioning v0.1 accounting tables are adopted without data rewrites, so the change does not require a destructive conversion of existing balances.
-
-Do **not** generalize that property to future versions. After a later schema migration changes columns, constraints, or stored semantics, an older binary may not understand the migrated database. Every schema-changing release must document whether binary rollback is supported and, when necessary, define a forward-fix or explicit data rollback procedure before deployment.
-
-Never lower the stored schema version manually to force an old runtime to start.
+See [Cloudflare deployed E2E](cloudflare-deployed-e2e.md) for deployment evidence and rollback planning.

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   assertUsageStoreConformance,
   runProgressiveUsageStoreConformance,
+  runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
 import { RemoteCloudflareUsageStore } from '../dist/index.js';
 
@@ -42,3 +43,20 @@ assert.equal(
   JSON.stringify(growthReport.cases.filter(result => !result.passed)),
 );
 console.log(`Cloudflare progressive UsageStore conformance: PASS (${endpoint})`);
+
+const vectorReport = await runVectorUsageStoreConformance({
+  createStore() {
+    return new RemoteCloudflareUsageStore({ endpoint, headers });
+  },
+  async waitForLeaseExpiry(ttlMs) {
+    await sleep(ttlMs + 250);
+  },
+  leaseTtlMs: 500,
+  concurrency: 8,
+});
+assert.equal(
+  vectorReport.passed,
+  true,
+  JSON.stringify(vectorReport.cases.filter(result => !result.passed)),
+);
+console.log(`Cloudflare vector UsageStore conformance: PASS (${endpoint})`);

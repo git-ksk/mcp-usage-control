@@ -195,3 +195,9 @@ coverする内容:
 - remote gatewayのauthentication / credential rotationはapplication責務。
 - enforcement stateはfinancial-grade accounting ledgerではない。
 - MCP multi-round `input_required` は引き続きv0.1 `protectTool()` の対象外。
+
+## Atomic heterogeneous vector usage (v0.7 / schema v3)
+
+`CloudflareUsageStore` / `RemoteCloudflareUsageStore`はoptional `VectorUsageStore`を実装します。base `reservations` rowはshared operation/lifecycle identityとして維持し、schema v3ではvector専用metadataをadditive `reservation_vectors` sidecar tableへ保存します。existing v1/v2 scalar accounting rowはrewriteしません。
+
+Durable Object `transactionSync`が全vector dimension/budget変更とreservation/vector metadataを1 atomic boundaryで処理します。vector HTTP methodはprotocol v1へのadditive method（`reserve_vector` / `grow_vector` / `settle_vector`）です。local workerd CIではportable vector conformanceとremote committed-vector-growth ACK-loss replayも実行します。

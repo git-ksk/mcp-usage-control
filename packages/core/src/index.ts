@@ -31,6 +31,67 @@ export interface BudgetRemaining {
   remaining: number;
 }
 
+/** One metering dimension inside a single logical vector admission. */
+export interface UsageDimension {
+  key: string;
+  units: number;
+  budgets: readonly Budget[];
+}
+
+export interface UsageDimensionGrowth {
+  key: string;
+  additionalUnits: number;
+  budgets: readonly Budget[];
+}
+
+export interface UsageDimensionActual {
+  key: string;
+  actualUnits: number;
+}
+
+export interface UsageDimensionReserved {
+  key: string;
+  reservedUnits: number;
+}
+
+/** Current balance for one budget, qualified by its vector dimension. */
+export interface VectorBudgetRemaining {
+  dimensionKey: string;
+  budgetKey: string;
+  remaining: number;
+}
+
+export interface VectorReservationDimension {
+  key: string;
+  budgetKeys: string[];
+  reservedUnits: number;
+}
+
+export interface VectorReservationRecord {
+  id: string;
+  operationId: string;
+  principalId: string;
+  tenantId?: string;
+  plan?: string;
+  tool: string;
+  dimensions: VectorReservationDimension[];
+  expiresAt: number;
+  /** One opaque replay fence serializes growth across the whole vector. */
+  growthCursor?: string;
+}
+
+export type VectorUsageQuote =
+  | {
+      decision: 'allow';
+      dimensions: readonly UsageDimension[];
+      reservationTtlMs?: number;
+    }
+  | { decision: 'deny'; reason: string };
+
+export interface VectorUsagePolicy {
+  quote(request: UsageRequest): VectorUsageQuote | Promise<VectorUsageQuote>;
+}
+
 type AllowUsageQuoteBase = {
   decision: 'allow';
   units: number;
@@ -163,6 +224,104 @@ export interface ReservationGrowthRequest {
   budgets: readonly Budget[];
 }
 
+export interface VectorReserveInput {
+  request: UsageRequest;
+  dimensions: readonly UsageDimension[];
+  ttlMs: number;
+}
+
+export type StoreVectorReserveResult =
+  | {
+      accepted: true;
+      reservation: VectorReservationRecord;
+      remainingByBudget: VectorBudgetRemaining[];
+    }
+  | {
+      accepted: false;
+      reason: 'quota_exceeded' | 'duplicate_operation';
+      limitingDimensionKey?: string;
+      limitingBudgetKey?: string;
+      remaining?: number;
+    };
+
+export interface VectorGrowReservationInput {
+  reservationId: string;
+  incrementId: string;
+  expectedGrowthCursor: string;
+  dimensions: readonly UsageDimensionGrowth[];
+}
+
+export type StoreVectorGrowResult =
+  | {
+      accepted: true;
+      replayed: boolean;
+      reservationId: string;
+      incrementId: string;
+      previousReservedByDimension: UsageDimensionReserved[];
+      reservedByDimension: UsageDimensionReserved[];
+      growthCursor: string;
+      remainingByBudget: VectorBudgetRemaining[];
+    }
+  | {
+      accepted: false;
+      reason: 'quota_exceeded';
+      replayed: boolean;
+      reservationId: string;
+      incrementId: string;
+      growthCursor: string;
+      limitingDimensionKey: string;
+      limitingBudgetKey: string;
+      remaining: number;
+    };
+
+export interface VectorSettleInput {
+  reservationId: string;
+  actualByDimension: readonly UsageDimensionActual[];
+  outcome: string;
+}
+
+export interface VectorSettlementDimension {
+  key: string;
+  reservedUnits: number;
+  actualUnits: number;
+  releasedUnits: number;
+}
+
+export interface VectorSettlementResult {
+  reservationId: string;
+  dimensions: VectorSettlementDimension[];
+  outcome: string;
+}
+
+/**
+ * Optional atomic vector capability. Scalar UsageStore methods remain unchanged.
+ * Implementations must keep scalar and vector reservations in one operation-idempotency domain.
+ */
+export interface VectorUsageStore extends UsageStore {
+  reserveVector(input: VectorReserveInput): Promise<StoreVectorReserveResult>;
+  growVectorReservation(input: VectorGrowReservationInput): Promise<StoreVectorGrowResult>;
+  settleVector(input: VectorSettleInput): Promise<VectorSettlementResult>;
+}
+
+export interface VectorReservationGrowthRequest {
+  incrementId: string;
+  dimensions: readonly UsageDimensionGrowth[];
+}
+
+export type VectorAdmissionResult =
+  | {
+      allowed: true;
+      lease: VectorUsageLease;
+      remainingByBudget: VectorBudgetRemaining[];
+    }
+  | {
+      allowed: false;
+      reason: string;
+      limitingDimensionKey?: string;
+      limitingBudgetKey?: string;
+      remaining?: number;
+    };
+
 export type AdmissionResult =
   | { allowed: true; lease: UsageLease; remainingByBudget: BudgetRemaining[] }
   | {
@@ -206,6 +365,14 @@ export interface UsageLeaseResumeState {
   metadata?: UsageEventMetadata;
   /** Retained only after an ambiguous growth call so the same attempt must be retried. */
   unresolvedGrowth?: ReservationGrowthRequest;
+}
+
+export interface VectorUsageLeaseResumeState {
+  reservation: VectorReservationRecord;
+  ttlMs: number;
+  metadata?: UsageEventMetadata;
+  /** Retained only after an ambiguous vector growth call so exact retry is mandatory. */
+  unresolvedGrowth?: VectorReservationGrowthRequest;
 }
 
 export class UsageLease {
@@ -360,6 +527,164 @@ export class UsageLease {
   }
 }
 
+export class VectorUsageLease {
+  private unresolvedGrowth: VectorReservationGrowthRequest | undefined;
+
+  constructor(
+    private readonly store: UsageStore,
+    public readonly reservation: VectorReservationRecord,
+    public readonly ttlMs: number,
+    private readonly observer?: UsageObserver,
+    private readonly metadata?: UsageEventMetadata,
+    unresolvedGrowth?: VectorReservationGrowthRequest,
+  ) {
+    this.unresolvedGrowth =
+      unresolvedGrowth === undefined
+        ? undefined
+        : canonicalizeVectorGrowthRequest(unresolvedGrowth);
+  }
+
+  get reservedByDimension(): UsageDimensionReserved[] {
+    return this.reservation.dimensions.map(dimension => ({
+      key: dimension.key,
+      reservedUnits: dimension.reservedUnits,
+    }));
+  }
+
+  toResumeState(): VectorUsageLeaseResumeState {
+    return {
+      reservation: cloneVectorReservationRecord(this.reservation),
+      ttlMs: this.ttlMs,
+      ...(this.metadata === undefined ? {} : { metadata: { ...this.metadata } }),
+      ...(this.unresolvedGrowth === undefined
+        ? {}
+        : { unresolvedGrowth: cloneVectorGrowthRequest(this.unresolvedGrowth) }),
+    };
+  }
+
+  async grow(input: VectorReservationGrowthRequest): Promise<StoreVectorGrowResult> {
+    const request = canonicalizeVectorGrowthRequest(input);
+    if (this.unresolvedGrowth && !sameVectorGrowthRequest(this.unresolvedGrowth, request)) {
+      throw new UsageStateError(
+        'A vector growth attempt is unresolved; retry the same incrementId and parameters',
+      );
+    }
+    if (!isVectorUsageStore(this.store)) {
+      throw new UsageStateError('UsageStore does not support atomic vector usage');
+    }
+    const expectedGrowthCursor = this.reservation.growthCursor;
+    if (!expectedGrowthCursor) {
+      throw new UsageStateError('Vector reservation was not created with growth support');
+    }
+
+    this.unresolvedGrowth = request;
+    try {
+      const result = await this.store.growVectorReservation({
+        reservationId: this.reservation.id,
+        incrementId: request.incrementId,
+        expectedGrowthCursor,
+        dimensions: request.dimensions,
+      });
+      this.reservation.growthCursor = result.growthCursor;
+      if (result.accepted) {
+        const byKey = new Map(result.reservedByDimension.map(item => [item.key, item.reservedUnits]));
+        for (const dimension of this.reservation.dimensions) {
+          const reservedUnits = byKey.get(dimension.key);
+          if (reservedUnits === undefined) {
+            throw new UsageStateError('Vector growth result omitted a reservation dimension');
+          }
+          dimension.reservedUnits = reservedUnits;
+        }
+      }
+      this.unresolvedGrowth = undefined;
+      return result;
+    } catch (error) {
+      if (error instanceof UsageStateError) this.unresolvedGrowth = undefined;
+      throw error;
+    }
+  }
+
+  async markLiable(): Promise<MarkLiableResult> {
+    try {
+      const marked = await this.store.markLiable({ reservationId: this.reservation.id });
+      this.reservation.expiresAt = marked.expiresAt;
+      return marked;
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'mark_liable',
+        source: 'store',
+        reservationId: this.reservation.id,
+        ...vectorReservationIdentity(this.reservation),
+        errorName: usageErrorName(error),
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      throw error;
+    }
+  }
+
+  async renew(ttlMs = this.ttlMs): Promise<RenewResult> {
+    assertPositiveInteger(ttlMs, 'ttlMs');
+    try {
+      const renewed = await this.store.renew({ reservationId: this.reservation.id, ttlMs });
+      this.reservation.expiresAt = renewed.expiresAt;
+      return renewed;
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'renew',
+        source: 'store',
+        reservationId: this.reservation.id,
+        ...vectorReservationIdentity(this.reservation),
+        errorName: usageErrorName(error),
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      throw error;
+    }
+  }
+
+  async settle(
+    actualByDimension: readonly UsageDimensionActual[],
+    outcome: string,
+  ): Promise<VectorSettlementResult> {
+    if (!isVectorUsageStore(this.store)) {
+      throw new UsageStateError('UsageStore does not support atomic vector usage');
+    }
+    const actual = canonicalizeVectorActuals(actualByDimension, this.reservation.dimensions);
+    try {
+      const settlement = await this.store.settleVector({
+        reservationId: this.reservation.id,
+        actualByDimension: actual,
+        outcome,
+      });
+      emitUsageEvent(this.observer, {
+        type: 'vector.settlement.completed',
+        timestamp: Date.now(),
+        reservationId: this.reservation.id,
+        ...vectorReservationIdentity(this.reservation),
+        dimensions: settlement.dimensions.map(dimension => ({ ...dimension })),
+        outcome: settlement.outcome,
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      return settlement;
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'settle',
+        source: 'store',
+        reservationId: this.reservation.id,
+        ...vectorReservationIdentity(this.reservation),
+        errorName: usageErrorName(error),
+        ...(this.metadata === undefined ? {} : { metadata: this.metadata }),
+      });
+      throw error;
+    }
+  }
+}
+
 export class UsageControl {
   private readonly defaultReservationTtlMs: number;
   private readonly observer?: UsageObserver;
@@ -498,6 +823,151 @@ export class UsageControl {
   }
 }
 
+export class VectorUsageControl {
+  private readonly defaultReservationTtlMs: number;
+  private readonly observer?: UsageObserver;
+  private readonly metadata?: UsageControlOptions['metadata'];
+
+  constructor(
+    private readonly store: UsageStore,
+    private readonly policy: VectorUsagePolicy,
+    optionsOrTtl: number | UsageControlOptions = 60_000,
+  ) {
+    if (typeof optionsOrTtl === 'number') {
+      this.defaultReservationTtlMs = optionsOrTtl;
+    } else {
+      this.defaultReservationTtlMs = optionsOrTtl.defaultReservationTtlMs ?? 60_000;
+      this.observer = optionsOrTtl.observer;
+      this.metadata = optionsOrTtl.metadata;
+    }
+    assertPositiveInteger(this.defaultReservationTtlMs, 'defaultReservationTtlMs');
+  }
+
+  resumeLease(state: VectorUsageLeaseResumeState): VectorUsageLease {
+    if (!isVectorUsageStore(this.store)) {
+      throw new UsageStateError('UsageStore does not support atomic vector usage');
+    }
+    assertPositiveInteger(state.ttlMs, 'ttlMs');
+    return new VectorUsageLease(
+      this.store,
+      cloneVectorReservationRecord(state.reservation),
+      state.ttlMs,
+      this.observer,
+      state.metadata === undefined ? undefined : { ...state.metadata },
+      state.unresolvedGrowth,
+    );
+  }
+
+  async reserve<TArgs>(request: UsageRequest<TArgs>): Promise<VectorAdmissionResult> {
+    validateRequestIdentity(request);
+    if (!isVectorUsageStore(this.store)) {
+      throw new UsageStateError('UsageStore does not support atomic vector usage');
+    }
+    const requestForPolicy = request as UsageRequest;
+    const metadata = resolveMetadata(this.metadata, requestForPolicy);
+    let quote: VectorUsageQuote;
+    try {
+      quote = await this.policy.quote(requestForPolicy);
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'quote',
+        source: 'policy',
+        ...requestIdentity(requestForPolicy),
+        errorName: usageErrorName(error),
+        ...(metadata === undefined ? {} : { metadata }),
+      });
+      throw error;
+    }
+
+    if (quote.decision === 'deny') {
+      emitUsageEvent(this.observer, {
+        type: 'vector.reserve.denied',
+        timestamp: Date.now(),
+        ...requestIdentity(requestForPolicy),
+        reason: quote.reason,
+        ...(metadata === undefined ? {} : { metadata }),
+      });
+      return { allowed: false, reason: quote.reason };
+    }
+
+    const dimensions = canonicalizeUsageDimensions(quote.dimensions);
+    const ttlMs = quote.reservationTtlMs ?? this.defaultReservationTtlMs;
+    assertPositiveInteger(ttlMs, 'reservationTtlMs');
+
+    let result: StoreVectorReserveResult;
+    try {
+      result = await this.store.reserveVector({ request: requestForPolicy, dimensions, ttlMs });
+    } catch (error) {
+      emitUsageEvent(this.observer, {
+        type: 'operation.error',
+        timestamp: Date.now(),
+        phase: 'reserve',
+        source: 'store',
+        ...requestIdentity(requestForPolicy),
+        errorName: usageErrorName(error),
+        ...(metadata === undefined ? {} : { metadata }),
+      });
+      throw error;
+    }
+
+    if (!result.accepted) {
+      emitUsageEvent(this.observer, {
+        type: 'vector.reserve.denied',
+        timestamp: Date.now(),
+        ...requestIdentity(requestForPolicy),
+        reason: result.reason,
+        ...(result.limitingDimensionKey === undefined
+          ? {}
+          : { limitingDimensionKey: result.limitingDimensionKey }),
+        ...(result.limitingBudgetKey === undefined
+          ? {}
+          : { limitingBudgetKey: result.limitingBudgetKey }),
+        ...(result.remaining === undefined ? {} : { remaining: result.remaining }),
+        ...(metadata === undefined ? {} : { metadata }),
+      });
+      return {
+        allowed: false,
+        reason: result.reason,
+        ...(result.limitingDimensionKey === undefined
+          ? {}
+          : { limitingDimensionKey: result.limitingDimensionKey }),
+        ...(result.limitingBudgetKey === undefined
+          ? {}
+          : { limitingBudgetKey: result.limitingBudgetKey }),
+        ...(result.remaining === undefined ? {} : { remaining: result.remaining }),
+      };
+    }
+
+    emitUsageEvent(this.observer, {
+      type: 'vector.reserve.accepted',
+      timestamp: Date.now(),
+      ...requestIdentity(requestForPolicy),
+      reservationId: result.reservation.id,
+      dimensions: result.reservation.dimensions.map(dimension => ({
+        key: dimension.key,
+        reservedUnits: dimension.reservedUnits,
+        budgetKeys: [...dimension.budgetKeys],
+      })),
+      remainingByBudget: result.remainingByBudget.map(balance => ({ ...balance })),
+      ...(metadata === undefined ? {} : { metadata }),
+    });
+
+    return {
+      allowed: true,
+      lease: new VectorUsageLease(
+        this.store,
+        result.reservation,
+        ttlMs,
+        this.observer,
+        metadata,
+      ),
+      remainingByBudget: result.remainingByBudget.map(balance => ({ ...balance })),
+    };
+  }
+}
+
 const DEFAULT_MEMORY_MAX_RETAINED_OPERATIONS = 100_000;
 const DEFAULT_MEMORY_MAX_RETAINED_BUDGET_KEYS = 100_000;
 
@@ -539,12 +1009,24 @@ export class MemoryUsageStoreCapacityError extends UsageStateError {
   }
 }
 
-interface InternalReservation extends ReservationRecord {
+interface InternalReservationBase {
+  id: string;
+  operationId: string;
+  principalId: string;
+  tenantId?: string;
+  plan?: string;
+  tool: string;
+  expiresAt: number;
+  growthCursor?: string;
   operationKey: string;
   state: 'pending' | 'liable' | 'settled';
-  actualUnits?: number;
   outcome?: string;
   tombstoneExpiresAt?: number;
+}
+
+interface InternalScalarReservation extends InternalReservationBase, ReservationRecord {
+  mode: 'scalar';
+  actualUnits?: number;
   lastGrowth?: {
     incrementId: string;
     expectedGrowthCursor: string;
@@ -553,7 +1035,20 @@ interface InternalReservation extends ReservationRecord {
   };
 }
 
-export class MemoryUsageStore implements ProgressiveUsageStore {
+interface InternalVectorReservation extends InternalReservationBase, VectorReservationRecord {
+  mode: 'vector';
+  actualByDimension?: UsageDimensionActual[];
+  lastVectorGrowth?: {
+    incrementId: string;
+    expectedGrowthCursor: string;
+    fingerprint: string;
+    result: StoreVectorGrowResult;
+  };
+}
+
+type InternalReservation = InternalScalarReservation | InternalVectorReservation;
+
+export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore {
   private readonly used = new Map<string, number>();
   private readonly reservations = new Map<string, InternalReservation>();
   private readonly operations = new Map<string, string>();
@@ -599,7 +1094,10 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
     }
     this.recoverExpired(Date.now());
     for (const reservation of this.reservations.values()) {
-      if (reservation.state !== 'settled' && reservation.budgetKeys.includes(budgetKey)) {
+      if (
+        reservation.state !== 'settled' &&
+        internalReservationBudgetKeys(reservation).includes(budgetKey)
+      ) {
         throw new UsageStateError('Cannot retire a budget key referenced by an active reservation');
       }
     }
@@ -642,7 +1140,8 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
     this.assertOperationCapacity();
     if (input.units > 0) this.assertBudgetCapacity(budgets);
 
-    const reservation: InternalReservation = {
+    const reservation: InternalScalarReservation = {
+      mode: 'scalar',
       id: operationKey,
       operationId: input.request.operationId,
       principalId: input.request.principal.id,
@@ -678,6 +1177,267 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
     };
   }
 
+  async reserveVector(input: VectorReserveInput): Promise<StoreVectorReserveResult> {
+    assertPositiveInteger(input.ttlMs, 'ttlMs');
+    validateRequestIdentity(input.request);
+    const dimensions = canonicalizeUsageDimensions(input.dimensions);
+    const now = Date.now();
+    this.recoverExpired(now);
+
+    const operationKey = operationKeyFor(input.request);
+    if (this.operations.has(operationKey)) {
+      return { accepted: false, reason: 'duplicate_operation' };
+    }
+
+    const remainingByBudget: VectorBudgetRemaining[] = [];
+    let limiting:
+      | { dimensionKey: string; budgetKey: string; remaining: number }
+      | undefined;
+    for (const dimension of dimensions) {
+      for (const budget of dimension.budgets) {
+        const remaining = Math.max(0, budget.limit - (this.used.get(budget.key) ?? 0));
+        remainingByBudget.push({
+          dimensionKey: dimension.key,
+          budgetKey: budget.key,
+          remaining,
+        });
+        if (!limiting && dimension.units > remaining) {
+          limiting = { dimensionKey: dimension.key, budgetKey: budget.key, remaining };
+        }
+      }
+    }
+    if (limiting) {
+      return {
+        accepted: false,
+        reason: 'quota_exceeded',
+        limitingDimensionKey: limiting.dimensionKey,
+        limitingBudgetKey: limiting.budgetKey,
+        remaining: limiting.remaining,
+      };
+    }
+
+    this.assertOperationCapacity();
+    const nonZeroBudgets = dimensions.flatMap(dimension =>
+      dimension.units > 0 ? dimension.budgets : [],
+    );
+    if (nonZeroBudgets.length > 0) this.assertBudgetCapacity(nonZeroBudgets);
+
+    const reservation: InternalVectorReservation = {
+      mode: 'vector',
+      id: operationKey,
+      operationId: input.request.operationId,
+      principalId: input.request.principal.id,
+      ...(input.request.principal.tenantId === undefined
+        ? {}
+        : { tenantId: input.request.principal.tenantId }),
+      ...(input.request.principal.plan === undefined ? {} : { plan: input.request.principal.plan }),
+      tool: input.request.tool,
+      dimensions: dimensions.map(dimension => ({
+        key: dimension.key,
+        budgetKeys: dimension.budgets.map(budget => budget.key),
+        reservedUnits: dimension.units,
+      })),
+      expiresAt: safeAdd(now, input.ttlMs, 'reservation expiry'),
+      growthCursor: newGrowthCursor(),
+      operationKey,
+      state: 'pending',
+    };
+
+    for (const dimension of dimensions) {
+      if (dimension.units === 0) continue;
+      for (const budget of dimension.budgets) {
+        this.used.set(
+          budget.key,
+          safeAdd(this.used.get(budget.key) ?? 0, dimension.units, `usage (${budget.key})`),
+        );
+      }
+    }
+    this.reservations.set(reservation.id, reservation);
+    this.operations.set(operationKey, reservation.id);
+    this.trackRecoveryAt(reservation.expiresAt);
+
+    const unitsByDimension = new Map(dimensions.map(dimension => [dimension.key, dimension.units]));
+    return {
+      accepted: true,
+      reservation: cloneVectorReservationRecord(reservation),
+      remainingByBudget: remainingByBudget.map(balance => ({
+        ...balance,
+        remaining: balance.remaining - (unitsByDimension.get(balance.dimensionKey) ?? 0),
+      })),
+    };
+  }
+
+  async growVectorReservation(
+    input: VectorGrowReservationInput,
+  ): Promise<StoreVectorGrowResult> {
+    validateVectorGrowthInput(input);
+    const dimensions = canonicalizeVectorGrowthDimensions(input.dimensions);
+    const fingerprint = vectorGrowthFingerprint(dimensions);
+    const now = Date.now();
+    this.recoverExpired(now);
+
+    const reservation = this.reservations.get(input.reservationId);
+    if (!reservation) throw new UsageStateError('Reservation not found or expired');
+    if (reservation.mode !== 'vector') {
+      throw new UsageStateError('Vector growth cannot target a scalar reservation');
+    }
+    if (reservation.state === 'settled') {
+      throw new UsageStateError('Cannot grow a settled or expired vector reservation');
+    }
+
+    const lastGrowth = reservation.lastVectorGrowth;
+    if (lastGrowth?.incrementId === input.incrementId) {
+      if (
+        lastGrowth.expectedGrowthCursor !== input.expectedGrowthCursor ||
+        lastGrowth.fingerprint !== fingerprint
+      ) {
+        throw new UsageStateError(
+          'Vector growth increment was already attempted with different parameters',
+        );
+      }
+      return replayVectorGrowthResult(lastGrowth.result);
+    }
+
+    if (!reservation.growthCursor) {
+      throw new UsageStateError('Vector reservation does not support progressive growth');
+    }
+    if (reservation.growthCursor !== input.expectedGrowthCursor) {
+      throw new UsageStateError('Vector growth cursor is stale or conflicts with reservation state');
+    }
+    if (!sameVectorTopology(reservation.dimensions, dimensions)) {
+      throw new UsageStateError('Vector growth dimensions and budgets must match the reservation');
+    }
+
+    const remainingByBudget: VectorBudgetRemaining[] = [];
+    let limiting:
+      | { dimensionKey: string; budgetKey: string; remaining: number }
+      | undefined;
+    for (const dimension of dimensions) {
+      for (const budget of dimension.budgets) {
+        const remaining = Math.max(0, budget.limit - (this.used.get(budget.key) ?? 0));
+        remainingByBudget.push({
+          dimensionKey: dimension.key,
+          budgetKey: budget.key,
+          remaining,
+        });
+        if (!limiting && dimension.additionalUnits > remaining) {
+          limiting = { dimensionKey: dimension.key, budgetKey: budget.key, remaining };
+        }
+      }
+    }
+
+    const nextGrowthCursor = newGrowthCursor();
+    if (limiting) {
+      const result: StoreVectorGrowResult = {
+        accepted: false,
+        reason: 'quota_exceeded',
+        replayed: false,
+        reservationId: reservation.id,
+        incrementId: input.incrementId,
+        growthCursor: nextGrowthCursor,
+        limitingDimensionKey: limiting.dimensionKey,
+        limitingBudgetKey: limiting.budgetKey,
+        remaining: limiting.remaining,
+      };
+      reservation.growthCursor = nextGrowthCursor;
+      reservation.lastVectorGrowth = {
+        incrementId: input.incrementId,
+        expectedGrowthCursor: input.expectedGrowthCursor,
+        fingerprint,
+        result: cloneVectorGrowthResult(result),
+      };
+      return result;
+    }
+
+    const previousReservedByDimension = reservation.dimensions.map(dimension => ({
+      key: dimension.key,
+      reservedUnits: dimension.reservedUnits,
+    }));
+    const growthByKey = new Map(dimensions.map(dimension => [dimension.key, dimension]));
+    for (const reservedDimension of reservation.dimensions) {
+      const growth = growthByKey.get(reservedDimension.key)!;
+      if (growth.additionalUnits > 0) {
+        for (const budget of growth.budgets) {
+          this.used.set(
+            budget.key,
+            safeAdd(
+              this.used.get(budget.key) ?? 0,
+              growth.additionalUnits,
+              `usage (${budget.key})`,
+            ),
+          );
+        }
+      }
+      reservedDimension.reservedUnits = safeAdd(
+        reservedDimension.reservedUnits,
+        growth.additionalUnits,
+        `reservedUnits (${reservedDimension.key})`,
+      );
+    }
+    reservation.growthCursor = nextGrowthCursor;
+    const reservedByDimension = reservation.dimensions.map(dimension => ({
+      key: dimension.key,
+      reservedUnits: dimension.reservedUnits,
+    }));
+    const addedByDimension = new Map(
+      dimensions.map(dimension => [dimension.key, dimension.additionalUnits]),
+    );
+    const result: StoreVectorGrowResult = {
+      accepted: true,
+      replayed: false,
+      reservationId: reservation.id,
+      incrementId: input.incrementId,
+      previousReservedByDimension,
+      reservedByDimension,
+      growthCursor: nextGrowthCursor,
+      remainingByBudget: remainingByBudget.map(balance => ({
+        ...balance,
+        remaining: balance.remaining - (addedByDimension.get(balance.dimensionKey) ?? 0),
+      })),
+    };
+    reservation.lastVectorGrowth = {
+      incrementId: input.incrementId,
+      expectedGrowthCursor: input.expectedGrowthCursor,
+      fingerprint,
+      result: cloneVectorGrowthResult(result),
+    };
+    return result;
+  }
+
+  async settleVector(input: VectorSettleInput): Promise<VectorSettlementResult> {
+    const now = Date.now();
+    this.recoverExpired(now);
+    const reservation = this.reservations.get(input.reservationId);
+    if (!reservation) throw new UsageStateError('Reservation not found or expired');
+    if (reservation.mode !== 'vector') {
+      throw new UsageStateError('Vector settlement cannot target a scalar reservation');
+    }
+    const actualByDimension = canonicalizeVectorActuals(input.actualByDimension, reservation.dimensions);
+
+    if (reservation.state === 'settled') {
+      if (
+        reservation.outcome !== input.outcome ||
+        !sameVectorActuals(reservation.actualByDimension, actualByDimension)
+      ) {
+        throw new UsageStateError('Vector reservation was already settled with a different result');
+      }
+      return toVectorSettlement(reservation);
+    }
+
+    const actualByKey = new Map(actualByDimension.map(item => [item.key, item.actualUnits]));
+    for (const dimension of reservation.dimensions) {
+      const actualUnits = actualByKey.get(dimension.key)!;
+      const releasedUnits = dimension.reservedUnits - actualUnits;
+      if (releasedUnits > 0) this.releaseAcrossBudgets(dimension.budgetKeys, releasedUnits);
+    }
+    reservation.state = 'settled';
+    reservation.actualByDimension = actualByDimension.map(item => ({ ...item }));
+    reservation.outcome = input.outcome;
+    reservation.tombstoneExpiresAt = safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry');
+    this.trackRecoveryAt(reservation.tombstoneExpiresAt);
+    return toVectorSettlement(reservation);
+  }
+
   async markLiable(input: MarkLiableInput): Promise<MarkLiableResult> {
     const now = Date.now();
     this.recoverExpired(now);
@@ -698,6 +1458,9 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
 
     const reservation = this.reservations.get(input.reservationId);
     if (!reservation) throw new UsageStateError('Reservation not found or expired');
+    if (reservation.mode !== 'scalar') {
+      throw new UsageStateError('Scalar growth cannot target a vector reservation');
+    }
 
     if (reservation.state === 'settled') {
       throw new UsageStateError('Cannot grow a settled or expired reservation');
@@ -815,6 +1578,9 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
     this.recoverExpired(now);
     const reservation = this.reservations.get(input.reservationId);
     if (!reservation) throw new UsageStateError('Reservation not found or expired');
+    if (reservation.mode !== 'scalar') {
+      throw new UsageStateError('Scalar settlement cannot target a vector reservation');
+    }
 
     if (input.actualUnits > reservation.reservedUnits) {
       throw new UsageStateError('actualUnits cannot exceed reservedUnits');
@@ -858,14 +1624,57 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
       }
 
       if (reservation.state === 'pending') {
-        this.releaseAcrossBudgets(reservation.budgetKeys, reservation.reservedUnits);
+        if (reservation.mode === 'scalar') {
+          this.releaseAcrossBudgets(reservation.budgetKeys, reservation.reservedUnits);
+          emitUsageEvent(this.observer, {
+            type: 'reservation.recovered',
+            timestamp: now,
+            store: 'memory',
+            recovery: 'pending_released',
+            reservationId: reservation.id,
+            principalId: reservation.principalId,
+            ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+            tool: reservation.tool,
+            budgetIdentifiers: [...reservation.budgetKeys],
+            reservedUnits: reservation.reservedUnits,
+            count: 1,
+          });
+        } else {
+          for (const dimension of reservation.dimensions) {
+            this.releaseAcrossBudgets(dimension.budgetKeys, dimension.reservedUnits);
+          }
+          emitUsageEvent(this.observer, {
+            type: 'vector.reservation.recovered',
+            timestamp: now,
+            store: 'memory',
+            recovery: 'pending_released',
+            reservationId: reservation.id,
+            principalId: reservation.principalId,
+            ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+            tool: reservation.tool,
+            dimensionCount: reservation.dimensions.length,
+            budgetCount: internalReservationBudgetKeys(reservation).length,
+            count: 1,
+          });
+        }
         this.operations.delete(reservation.operationKey);
         this.reservations.delete(id);
+        continue;
+      }
+
+      // Once execution has been marked liable, expiry is conservative: retain
+      // the full reservation as consumed so a process crash cannot become a refund.
+      reservation.state = 'settled';
+      reservation.outcome = 'lease_expired_after_execution_started';
+      reservation.tombstoneExpiresAt = safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry');
+      nextRecoveryAt = Math.min(nextRecoveryAt, reservation.tombstoneExpiresAt);
+      if (reservation.mode === 'scalar') {
+        reservation.actualUnits = reservation.reservedUnits;
         emitUsageEvent(this.observer, {
           type: 'reservation.recovered',
           timestamp: now,
           store: 'memory',
-          recovery: 'pending_released',
+          recovery: 'liable_retained',
           reservationId: reservation.id,
           principalId: reservation.principalId,
           ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
@@ -874,29 +1683,25 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
           reservedUnits: reservation.reservedUnits,
           count: 1,
         });
-        continue;
+      } else {
+        reservation.actualByDimension = reservation.dimensions.map(dimension => ({
+          key: dimension.key,
+          actualUnits: dimension.reservedUnits,
+        }));
+        emitUsageEvent(this.observer, {
+          type: 'vector.reservation.recovered',
+          timestamp: now,
+          store: 'memory',
+          recovery: 'liable_retained',
+          reservationId: reservation.id,
+          principalId: reservation.principalId,
+          ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+          tool: reservation.tool,
+          dimensionCount: reservation.dimensions.length,
+          budgetCount: internalReservationBudgetKeys(reservation).length,
+          count: 1,
+        });
       }
-
-      // Once execution has been marked liable, expiry is conservative: retain
-      // the full reservation as consumed so a process crash cannot become a refund.
-      reservation.state = 'settled';
-      reservation.actualUnits = reservation.reservedUnits;
-      reservation.outcome = 'lease_expired_after_execution_started';
-      reservation.tombstoneExpiresAt = now + this.idempotencyTtlMs;
-      nextRecoveryAt = Math.min(nextRecoveryAt, reservation.tombstoneExpiresAt);
-      emitUsageEvent(this.observer, {
-        type: 'reservation.recovered',
-        timestamp: now,
-        store: 'memory',
-        recovery: 'liable_retained',
-        reservationId: reservation.id,
-        principalId: reservation.principalId,
-        ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
-        tool: reservation.tool,
-        budgetIdentifiers: [...reservation.budgetKeys],
-        reservedUnits: reservation.reservedUnits,
-        count: 1,
-      });
     }
     this.nextRecoveryAt = nextRecoveryAt;
   }
@@ -928,6 +1733,90 @@ export class MemoryUsageStore implements ProgressiveUsageStore {
       else this.used.set(budgetKey, next);
     }
   }
+}
+
+function internalReservationBudgetKeys(reservation: InternalReservation): string[] {
+  return reservation.mode === 'scalar'
+    ? [...reservation.budgetKeys]
+    : reservation.dimensions.flatMap(dimension => [...dimension.budgetKeys]);
+}
+
+function validateVectorGrowthInput(input: VectorGrowReservationInput): void {
+  if (typeof input.reservationId !== 'string' || input.reservationId.length === 0) {
+    throw new RangeError('reservationId must be a non-empty string');
+  }
+  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+    throw new RangeError('incrementId must be a non-empty string');
+  }
+  if (typeof input.expectedGrowthCursor !== 'string' || input.expectedGrowthCursor.length === 0) {
+    throw new RangeError('expectedGrowthCursor must be a non-empty string');
+  }
+}
+
+function sameVectorTopology(
+  reserved: readonly VectorReservationDimension[],
+  growth: readonly UsageDimensionGrowth[],
+): boolean {
+  if (reserved.length !== growth.length) return false;
+  return reserved.every((dimension, index) => {
+    const candidate = growth[index];
+    return (
+      candidate !== undefined &&
+      dimension.key === candidate.key &&
+      sameBudgetKeys(dimension.budgetKeys, candidate.budgets)
+    );
+  });
+}
+
+function cloneVectorGrowthResult(result: StoreVectorGrowResult): StoreVectorGrowResult {
+  if (!result.accepted) return { ...result };
+  return {
+    ...result,
+    previousReservedByDimension: result.previousReservedByDimension.map(item => ({ ...item })),
+    reservedByDimension: result.reservedByDimension.map(item => ({ ...item })),
+    remainingByBudget: result.remainingByBudget.map(item => ({ ...item })),
+  };
+}
+
+function replayVectorGrowthResult(result: StoreVectorGrowResult): StoreVectorGrowResult {
+  return { ...cloneVectorGrowthResult(result), replayed: true };
+}
+
+function sameVectorActuals(
+  left: readonly UsageDimensionActual[] | undefined,
+  right: readonly UsageDimensionActual[],
+): boolean {
+  return (
+    left !== undefined &&
+    left.length === right.length &&
+    left.every(
+      (item, index) =>
+        item.key === right[index]!.key && item.actualUnits === right[index]!.actualUnits,
+    )
+  );
+}
+
+function toVectorSettlement(reservation: InternalVectorReservation): VectorSettlementResult {
+  const actual =
+    reservation.actualByDimension ??
+    reservation.dimensions.map(dimension => ({
+      key: dimension.key,
+      actualUnits: dimension.reservedUnits,
+    }));
+  const actualByKey = new Map(actual.map(item => [item.key, item.actualUnits]));
+  return {
+    reservationId: reservation.id,
+    dimensions: reservation.dimensions.map(dimension => {
+      const actualUnits = actualByKey.get(dimension.key) ?? dimension.reservedUnits;
+      return {
+        key: dimension.key,
+        reservedUnits: dimension.reservedUnits,
+        actualUnits,
+        releasedUnits: dimension.reservedUnits - actualUnits,
+      };
+    }),
+    outcome: reservation.outcome ?? 'unknown',
+  };
 }
 
 function operationKeyFor(request: UsageRequest): string {
@@ -1008,6 +1897,225 @@ function cloneReservationRecord(reservation: ReservationRecord): ReservationReco
 
 function isProgressiveUsageStore(store: UsageStore): store is ProgressiveUsageStore {
   return typeof (store as Partial<ProgressiveUsageStore>).growReservation === 'function';
+}
+
+function isVectorUsageStore(store: UsageStore): store is VectorUsageStore {
+  const candidate = store as Partial<VectorUsageStore>;
+  return (
+    typeof candidate.reserveVector === 'function' &&
+    typeof candidate.growVectorReservation === 'function' &&
+    typeof candidate.settleVector === 'function'
+  );
+}
+
+function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
+  if (dimensions.length === 0) {
+    throw new RangeError('dimensions must contain at least one dimension');
+  }
+  const normalized = dimensions.map(dimension => {
+    if (typeof dimension.key !== 'string' || dimension.key.length === 0) {
+      throw new RangeError('dimension.key must be a non-empty string');
+    }
+    assertNonNegativeInteger(dimension.units, `dimension.units (${dimension.key})`);
+    return {
+      key: dimension.key,
+      units: dimension.units,
+      budgets: canonicalizeBudgets(dimension.budgets),
+    };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  assertUniqueVectorTopology(normalized.map(dimension => ({
+    key: dimension.key,
+    budgets: dimension.budgets,
+  })));
+  return normalized;
+}
+
+function canonicalizeVectorGrowthDimensions(
+  dimensions: readonly UsageDimensionGrowth[],
+): UsageDimensionGrowth[] {
+  if (dimensions.length === 0) {
+    throw new RangeError('dimensions must contain at least one dimension');
+  }
+  const normalized = dimensions.map(dimension => {
+    if (typeof dimension.key !== 'string' || dimension.key.length === 0) {
+      throw new RangeError('dimension.key must be a non-empty string');
+    }
+    assertNonNegativeInteger(
+      dimension.additionalUnits,
+      `dimension.additionalUnits (${dimension.key})`,
+    );
+    return {
+      key: dimension.key,
+      additionalUnits: dimension.additionalUnits,
+      budgets: canonicalizeBudgets(dimension.budgets),
+    };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  assertUniqueVectorTopology(normalized.map(dimension => ({
+    key: dimension.key,
+    budgets: dimension.budgets,
+  })));
+  if (!normalized.some(dimension => dimension.additionalUnits > 0)) {
+    throw new RangeError('vector growth must add units to at least one dimension');
+  }
+  return normalized;
+}
+
+function assertUniqueVectorTopology(
+  dimensions: readonly { key: string; budgets: readonly Budget[] }[],
+): void {
+  const dimensionKeys = new Set<string>();
+  const budgetKeys = new Set<string>();
+  for (const dimension of dimensions) {
+    if (dimensionKeys.has(dimension.key)) {
+      throw new RangeError(`duplicate dimension key: ${dimension.key}`);
+    }
+    dimensionKeys.add(dimension.key);
+    for (const budget of dimension.budgets) {
+      if (budgetKeys.has(budget.key)) {
+        throw new RangeError(`budget key cannot appear in multiple vector dimensions: ${budget.key}`);
+      }
+      budgetKeys.add(budget.key);
+    }
+  }
+}
+
+function cloneVectorReservationRecord(
+  reservation: VectorReservationRecord,
+): VectorReservationRecord {
+  if (typeof reservation.id !== 'string' || reservation.id.length === 0) {
+    throw new UsageStateError('Resume vector reservation id must be non-empty');
+  }
+  if (typeof reservation.operationId !== 'string' || reservation.operationId.length === 0) {
+    throw new UsageStateError('Resume vector operationId must be non-empty');
+  }
+  if (typeof reservation.principalId !== 'string' || reservation.principalId.length === 0) {
+    throw new UsageStateError('Resume vector principalId must be non-empty');
+  }
+  if (typeof reservation.tool !== 'string' || reservation.tool.length === 0) {
+    throw new UsageStateError('Resume vector tool must be non-empty');
+  }
+  if (!Array.isArray(reservation.dimensions) || reservation.dimensions.length === 0) {
+    throw new UsageStateError('Resume vector reservation must contain dimensions');
+  }
+  const dimensions = reservation.dimensions.map(dimension => {
+    if (typeof dimension.key !== 'string' || dimension.key.length === 0) {
+      throw new UsageStateError('Resume vector dimension keys must be non-empty strings');
+    }
+    if (!Array.isArray(dimension.budgetKeys) || dimension.budgetKeys.length === 0) {
+      throw new UsageStateError('Resume vector dimension must contain budget keys');
+    }
+    if (dimension.budgetKeys.some(key => typeof key !== 'string' || key.length === 0)) {
+      throw new UsageStateError('Resume vector budget keys must be non-empty strings');
+    }
+    assertNonNegativeInteger(dimension.reservedUnits, `reservedUnits (${dimension.key})`);
+    return {
+      key: dimension.key,
+      budgetKeys: [...dimension.budgetKeys].sort((a, b) => a.localeCompare(b)),
+      reservedUnits: dimension.reservedUnits,
+    };
+  });
+  dimensions.sort((a, b) => a.key.localeCompare(b.key));
+  assertUniqueVectorTopology(
+    dimensions.map(dimension => ({
+      key: dimension.key,
+      budgets: dimension.budgetKeys.map(key => ({ key, limit: 0 })),
+    })),
+  );
+  assertPositiveInteger(reservation.expiresAt, 'expiresAt');
+  if (
+    reservation.growthCursor !== undefined &&
+    (typeof reservation.growthCursor !== 'string' || reservation.growthCursor.length === 0)
+  ) {
+    throw new UsageStateError('Resume vector growthCursor must be a non-empty string when present');
+  }
+  return {
+    id: reservation.id,
+    operationId: reservation.operationId,
+    principalId: reservation.principalId,
+    ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+    ...(reservation.plan === undefined ? {} : { plan: reservation.plan }),
+    tool: reservation.tool,
+    dimensions,
+    expiresAt: reservation.expiresAt,
+    ...(reservation.growthCursor === undefined ? {} : { growthCursor: reservation.growthCursor }),
+  };
+}
+
+function canonicalizeVectorGrowthRequest(
+  input: VectorReservationGrowthRequest,
+): VectorReservationGrowthRequest {
+  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
+    throw new RangeError('incrementId must be a non-empty string');
+  }
+  return {
+    incrementId: input.incrementId,
+    dimensions: canonicalizeVectorGrowthDimensions(input.dimensions),
+  };
+}
+
+function cloneVectorGrowthRequest(
+  input: VectorReservationGrowthRequest,
+): VectorReservationGrowthRequest {
+  return {
+    incrementId: input.incrementId,
+    dimensions: input.dimensions.map(dimension => ({
+      key: dimension.key,
+      additionalUnits: dimension.additionalUnits,
+      budgets: dimension.budgets.map(budget => ({ ...budget })),
+    })),
+  };
+}
+
+function sameVectorGrowthRequest(
+  left: VectorReservationGrowthRequest,
+  right: VectorReservationGrowthRequest,
+): boolean {
+  return (
+    left.incrementId === right.incrementId &&
+    vectorGrowthFingerprint(left.dimensions) === vectorGrowthFingerprint(right.dimensions)
+  );
+}
+
+function vectorGrowthFingerprint(dimensions: readonly UsageDimensionGrowth[]): string {
+  return JSON.stringify(
+    dimensions.map(dimension => [
+      dimension.key,
+      dimension.additionalUnits,
+      dimension.budgets.map(budget => [budget.key, budget.limit]),
+    ]),
+  );
+}
+
+function canonicalizeVectorActuals(
+  actualByDimension: readonly UsageDimensionActual[],
+  reservedDimensions: readonly VectorReservationDimension[],
+): UsageDimensionActual[] {
+  if (actualByDimension.length !== reservedDimensions.length) {
+    throw new UsageStateError('Vector settlement must report every reservation dimension exactly once');
+  }
+  const normalized = actualByDimension.map(item => {
+    if (typeof item.key !== 'string' || item.key.length === 0) {
+      throw new RangeError('actual dimension key must be a non-empty string');
+    }
+    assertNonNegativeInteger(item.actualUnits, `actualUnits (${item.key})`);
+    return { key: item.key, actualUnits: item.actualUnits };
+  });
+  normalized.sort((a, b) => a.key.localeCompare(b.key));
+  for (let index = 0; index < normalized.length; index += 1) {
+    const actual = normalized[index]!;
+    const reserved = reservedDimensions[index]!;
+    if (actual.key !== reserved.key) {
+      throw new UsageStateError('Vector settlement dimension keys do not match the reservation');
+    }
+    if (actual.actualUnits > reserved.reservedUnits) {
+      throw new UsageStateError(
+        `actualUnits cannot exceed reservedUnits for dimension ${actual.key}`,
+      );
+    }
+  }
+  return normalized;
 }
 
 function canonicalizeGrowthRequest(input: ReservationGrowthRequest): ReservationGrowthRequest {
@@ -1107,6 +2215,22 @@ function requestIdentity(request: UsageRequest): {
   };
 }
 
+function vectorReservationIdentity(reservation: VectorReservationRecord): {
+  principalId: string;
+  tenantId?: string;
+  plan?: string;
+  tool: string;
+  operationId: string;
+} {
+  return {
+    principalId: reservation.principalId,
+    ...(reservation.tenantId === undefined ? {} : { tenantId: reservation.tenantId }),
+    ...(reservation.plan === undefined ? {} : { plan: reservation.plan }),
+    tool: reservation.tool,
+    operationId: reservation.operationId,
+  };
+}
+
 function reservationIdentity(reservation: ReservationRecord): {
   principalId: string;
   tenantId?: string;
@@ -1136,7 +2260,7 @@ function resolveMetadata(
   }
 }
 
-function toSettlement(reservation: InternalReservation): SettlementResult {
+function toSettlement(reservation: InternalScalarReservation): SettlementResult {
   const actualUnits = reservation.actualUnits ?? reservation.reservedUnits;
   return {
     reservationId: reservation.id,

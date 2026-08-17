@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createClient } from 'redis';
-import { UsageControl, type UsagePolicy } from 'mcp-usage-control';
+import {
+  UsageControl,
+  VectorUsageControl,
+  type UsagePolicy,
+  type VectorUsagePolicy,
+} from 'mcp-usage-control';
 import { RedisUsageStore, type RedisEvalClient } from './index.js';
 
 const redisUrl = process.env.REDIS_URL;
@@ -30,6 +35,21 @@ function policy(limit = 1, reservationTtlMs = 5_000): UsagePolicy {
         units: 1,
         budgets: [{ key: 'month:user-1:2026-08', limit }],
         reservationTtlMs,
+      };
+    },
+  };
+}
+
+function vectorPolicy(reservationTtlMs = 5_000): VectorUsagePolicy {
+  return {
+    quote() {
+      return {
+        decision: 'allow',
+        reservationTtlMs,
+        dimensions: [
+          { key: 'requests', units: 1, budgets: [{ key: 'vector:requests', limit: 2 }] },
+          { key: 'tokens', units: 5, budgets: [{ key: 'vector:tokens', limit: 20 }] },
+        ],
       };
     },
   };
@@ -168,6 +188,43 @@ integration('RedisUsageStore', () => {
     const replay = await admission.lease.grow(attempt);
     expect(replay).toMatchObject({ accepted: true, replayed: true, reservedUnits: 2 });
     expect(admission.lease.reservedUnits).toBe(2);
+  });
+
+  it('replays a committed vector growth after its Redis acknowledgement is lost', async () => {
+    const lossyClient = new LoseNextReplyClient(client);
+    const control = new VectorUsageControl(new RedisUsageStore(lossyClient), vectorPolicy());
+    const admission = await control.reserve(request('vector-growth-lost-ack'));
+    if (!admission.allowed) throw new Error('expected vector admission');
+    const attempt = {
+      incrementId: 'stable-vector-growth-increment',
+      dimensions: [
+        {
+          key: 'requests',
+          additionalUnits: 0,
+          budgets: [{ key: 'vector:requests', limit: 2 }],
+        },
+        {
+          key: 'tokens',
+          additionalUnits: 3,
+          budgets: [{ key: 'vector:tokens', limit: 20 }],
+        },
+      ],
+    } as const;
+
+    lossyClient.loseNextReply = true;
+    await expect(admission.lease.grow(attempt)).rejects.toThrow(
+      'simulated lost Redis acknowledgement',
+    );
+    await expect(
+      admission.lease.grow({ ...attempt, incrementId: 'fresh-vector-growth-increment' }),
+    ).rejects.toThrow(/unresolved/i);
+
+    const replay = await admission.lease.grow(attempt);
+    expect(replay).toMatchObject({ accepted: true, replayed: true });
+    expect(admission.lease.reservedByDimension).toEqual([
+      { key: 'requests', reservedUnits: 1 },
+      { key: 'tokens', reservedUnits: 8 },
+    ]);
   });
 
   it('fails closed after an admission write whose acknowledgement was lost', async () => {

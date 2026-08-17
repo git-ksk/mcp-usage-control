@@ -6,91 +6,76 @@
 
 この文書だけでv1.0 tag、GitHub Release、npm publicationを実行しません。
 
-## Status update — v0.6 progressive-growth判断
+## Status update — v0.7 atomic-vector判断
 
-直近の次source releaseは **v0.6.0** です。v0.5.0はreleased stabilization baselineとして維持します。
+直近の次source release preparation targetは **v0.7.0** です。`v0.6.0` がlatest released source baselineです。
 
-repositoryは一度、current fixed-reservation / scalar-unit modelをそのままv1へfreezeできる地点まで到達しました。この結論は現行modelの内部整合性を示すevidenceとして有効ですが、final v1 surfaceを確定する前にもう1回pre-1.0 stabilization releaseを挟みます。
+v0.7で#84の判断を明示確定します。
 
-v0.6で#83の判断を明示確定します。
-
-- base bounded fixed-reservation `UsageStore` contractはsource-compatibleのまま維持
-- progressive reservation growthは`UsageLease.grow()` + optional `ProgressiveUsageStore`としてfuture v1へ **採用**
-- stable `incrementId` + Store-issued `growthCursor`でlost-ACK replay fenceを構成
-- original participating budget全体をatomicにgrowし、pending / liable semanticsを維持
-- settlement / expiry後はreplayを含む全growth callをreject
-- #84 heterogeneous multi-dimensional usageはv0.7.0の次decision target
-
-これはrelease planningの変更であり、完了済みcorrectness workを巻き戻すものではありません。
+- existing scalar `UsageStore` / `UsageControl` semanticsはsource-compatibleのまま変更しない
+- heterogeneous usageは`VectorUsageControl` / `VectorUsageLease` / optional `VectorUsageStore`としてfuture v1へ **採用**
+- 異なるunitをsynthetic scalarへ加算しない
+- 1 logical operationに必要な全dimension / budgetを1 authoritative Store transaction domainでadmit / grow / recover / settleする
+- scalar / vector reservationは同じoperation-idempotency domainを共有
+- vector全体で1 Store-issued growth cursorを使い、v0.6 stable increment / lost-ACK semanticsをcompose
+- pending expiryは全dimensionをrelease、liable expiryは全dimensionをconservative retain、terminal vectorはgrowth replayをreject
+- portable vector conformanceに加え、Redis / Cloudflare Durable Objects / Firestoreでcommitted vector growth ACK-loss fault injectionを持つ
 
 ## 判定
 
-**v0.6.0 source-release preparationへGO。normal CI / package / provider integration gate通過が条件です。**
+**v0.7.0 source-release preparationへGO。normal CI / package / provider integration gate通過が条件です。**
 
-解決済みcorrectness / evidence gate:
+#84はprovider-neutral contractとbuilt-in Store proofを持ち、v0.5 / v0.6までのresolved correctness gateもcarry forwardします。
 
-- #77 — Firestore ambiguous commit / ACK loss semantics
-- #78 — Firestore bounded cross-instance clock-skew safety
-- #79 — Node.js 24 full compatibility-evidence matrix
-- #85 — existing accounting bucketに対するmutable quota-limit semantics
+**v1.0 readinessは引き続きprovisionalです。** #83 progressive growthと#84 atomic heterogeneous vector accountingをoptional future-v1 capabilityとして採用しました。#81 operation reconciliation/statusがv0.8.0の次feature decision gateです。
 
-これらの領域にv0.6.0を止める既知defectはありません。
+## v0.7 accounting boundary
 
-**v1.0 readinessは引き続きprovisionalです。** #83は未決ではなく、proof済みoptional growth surfaceとしてfuture v1へ採用しました。#84以降は指定v0.x gateで判断します。
+application pathは互換な2系統になります。
 
-## v0.6 accounting boundary
+- **scalar path** — `UsagePolicy` -> `UsageControl` -> `UsageStore`。optional `ProgressiveUsageStore` growthあり
+- **vector path** — `VectorUsagePolicy` -> `VectorUsageControl` -> optional `VectorUsageStore`
 
-v0.6.0はv0.5のproof済みcontractを維持しつつ、optional progressive growthを追加します。
+共通stable invariant:
 
-- `UsagePolicy` quote -> atomic `UsageStore.reserve()`
-- all-or-nothing multi-budget admission
-- 1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用
-- base `UsageStore`ではmetered work前にbounded fixed reservationを確保
-- `ProgressiveUsageStore`ではsame reservationをstable increment identity + growth cursorでoptionalにgrow
-- `actualUnits <= reservedUnits`
-- replay identity `(tenantId, principal.id, tool, operationId)`
-- `markLiable()` によるexplicit `pending -> cost-liable`
-- renewable lease
-- liability後expiryのconservative behavior
-- identical settlement replay / conflicting-settlement rejection
-- fail-closed storage semantics
-- same-key mutable effective limitでもauthoritative reserved / consumed usageを維持
-- documented deployment constraintを持つMemory / Redis / Cloudflare Durable Objects / Firestore Store
-- single-round + supported multi-round MCP TypeScript SDK v2 accounting path
-- sticky MCP session不要のshared / durable one-time multi-round flow claim
-- enforcement outcomeを変更できないprovider-neutral observability
-- portable `UsageStore` / `McpUsageFlowStore` conformance runner
+- 1 logical operationは1 replay identity `(tenantId, principal.id, tool, operationId)`を維持
+- admissionに必要な全budget / dimensionはatomic commit、またはnone commit
+- metered work前にexplicit liability
+- renewはlease durationだけを変更
+- ambiguous state-changing resultはfail closedしexact replay / reconciliationを要求
+- pending expiryはcapacity release可、liable unknown usageはconservative
+- settlementは成功済みreserved capacity以内
+- business result replayはapplication-owned
 
-second logical operationをaccounting-equivalentなtop-up workaroundとは扱いません。all dimensionのatomic admissionが必要な場合、dimension別independent reserveも同等代替とは扱いません。
+vector固有invariant:
 
-## v1 scopeとして意図的に残す論点
+- dimensionごとにunitsとbudget topologyを保持
+- 1 vector内で同じbudget keyを複数dimensionへ所属させない
+- settlementは全dimensionをexactly once報告し、unused unitはそのdimensionのbudgetだけからrelease
+- vector growthはstable `incrementId` 1個 + reservation-wide opaque cursor 1個 + complete topology
+- dimension別independent reserveをatomic vector相当として扱わない
+
+## v1 scope decision
 
 ### #83 — progressive reservation growth — v0.6で採用
 
-v0.6 proofにより、progressive growthはbase `UsageStore`をmandatoryに変更せず、optional Store extensionとしてfuture v1 surfaceへ採用する。proof対象はatomic all-budget growth、deterministic increment replay identity、lost-ACK fence、pending/liable inheritance、conservative expiry/recovery、terminal-state reject、total successfully reserved capacity以内のsettlement。
-
-Memoryをreference proofとし、Redisは1本のLua transaction、Cloudflare Durable ObjectsはSQLite `transactionSync` + schema v2 additive growth metadata、Firestoreはnext cursorをcallback外で固定した1 transaction retryで実装する。portable progressive conformanceにprovider-specific ambiguity/concurrency testを重ねる。
+progressive scalar growthはoptional Store extensionとして維持します。atomic all-budget growth、deterministic increment replay identity、lost-ACK fence、pending/liable inheritance、conservative expiry/recovery、terminal-state reject、successfully reserved capacity以内のsettlementをproof済みです。
 
 詳細は[Progressive reservation growth](progressive-reservation-growth.ja.md)と[Progressive MCP growth](progressive-mcp-integration.ja.md)を参照。
 
-### #84 — heterogeneous multi-dimensional usage
+### #84 — heterogeneous multi-dimensional usage — v0.7で採用
 
-v1へ入れる場合、API freeze前に次をproofする必要があります。
+v0.7ではscalar contractを変更せずoptional vector surfaceを採用します。all-or-nothing dimension admission、one logical replay identity、dimension内hierarchical budget、per-dimension atomic settlement、progressive vector growth/replay、pending/liable recovery、scalar/vector operation collision、provider-neutral Store conformanceをproofします。
 
-- required dimensionは全部atomic admit、またはnone commit
-- logical operationごとにreplay identityは1つ
-- 1 dimension内のhierarchical budgetを自然にcompose
-- settlement / replay / expiry / lost-ACK semanticsをdeterministicに維持
-- provider-neutralで、usage enforcementをbilling / pricing logicへ変えない
-- built-in / third-party Store conformanceで必要transaction shapeを表現できる
+Memoryがreference implementation。Redisは1 Lua transaction + additive vector JSON metadata、Firestoreは1 retried transaction + additive optional reservation field、Cloudflare Durable ObjectsはSQLite `transactionSync` + schema-v3 `reservation_vectors` sidecar metadataを使います。existing scalar provider dataはmigration / rewriteなしで読めます。
 
-safe vector modelがv1前に完成しなければ、v1はv0.5 scalar modelを維持し、後からcompatible extensionまたは必要に応じmajor-version extensionとして追加できます。
+詳細は[Atomic heterogeneous usage vector](vector-usage.ja.md)と[Vector MCP integration](vector-mcp-integration.ja.md)を参照。
 
 ### その他open capability
 
-#76 / #81 / #82も、以前post-v1と呼んだからという理由だけでv1から自動除外しません。low-riskで明確な価値があり、second accounting authorityを作らずfail-closedを弱めない場合だけv1候補にします。
+#81が次v0.8 decision targetです。#76 / #82は後続completion-ladder decisionです。second accounting authorityを作らずfail-closedを弱めないlow-risk / clearly usefulなものだけv1候補にします。
 
-first-class MCP Tasks integrationもupstream TypeScript protocol surface次第です。accounting lifecycle自体はすでに定義・proof済みです。
+first-class MCP Tasks integrationはupstream TypeScript protocol surface依存のままです。accounting lifecycle自体はすでにdefined / proof-testedです。
 
 ## Production-readiness evidence
 
@@ -154,18 +139,18 @@ cancellationは保守的です。cancel request / ACKだけではmetered cost 0�
 - production horizontal scaleでは必要なaccounting / flow stateをprovider-backed shared stateへ置く
 - Firestore lease-recovery support profileはbounded / synchronized host clockと適切な `expiryGraceMs` を要求
 
-## v0.6 release check
+## v0.7 release checks
 
-v0.6.0 source tag / releaseを作る前に:
+v0.7.0 source tag / release作成前に:
 
-1. 5 packageを同時に `0.6.0` へversioning
+1. 5 packageをまとめて`0.7.0`へversion alignment
 2. Node 20 / 22 / 24 normal CI
-3. Redis progressive conformance / lost-ACK integration、Cloudflare local-workerd progressive conformance / lost-growth-ACK、Firestore Emulator progressive conformance
-4. package tarball / content / version + clean-consumer verification
-5. 英日growth / state-machine / MCP / migration docs確認
+3. Redis scalar/progressive/vector conformance + lost-ACK integration、Cloudflare local workerd scalar/progressive/vector conformance + remote lost-vector-growth-ACK integration、Firestore Emulator scalar/progressive/vector conformance
+4. package tarball/content/version + clean-consumer verification（public vector conformance export含む）
+5. 英日vector / state-machine / MCP / provider-migration docs確認
 6. required check green後にimplementation PR merge
-7. v0.6.0 source tag / GitHub Releaseは別途明示承認がある場合だけ作成
-8. npm publicationは独立承認がない限り実行しない
+7. v0.7.0 tag / GitHub Releaseは別途explicit authorizationがある場合のみ
+8. npm publicationは独立authorizationがない限り実行しない
 
 ## 将来v1のrelease gate
 
@@ -186,14 +171,16 @@ GitHub source releaseとnpm publicationは別操作です。v0.6.0や将来v1.0�
 
 ## 現在の結論
 
-**次source release: v0.6.0。**
+**次source release preparation target: v0.7.0。**
 
-**v0.6.0 readiness: release preparation GO。normal CI / provider / package checks通過が条件。**
+**v0.7.0 readiness: normal CI / provider / package check条件でrelease preparationへGO。**
 
-**#83: optional progressive reservation growthとしてfuture v1 stable surfaceへ採用。**
+**#83: optional progressive reservation growthとしてfuture v1へ採用。**
 
-**#84: v0.7.0の次v1-scope decision target。**
+**#84: optional atomic heterogeneous vector usageとしてfuture v1へ採用。**
 
-**v1.0自体は新featureなしのstable promotion。**
+**#81: v0.8.0の次feature decision target。**
 
-**npm publication: 引き続きdeferred / separate。**
+**v1.0は新featureなしのlater stable promotion。**
+
+**npm publicationは引き続きdeferred / separate。**

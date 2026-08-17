@@ -8,6 +8,39 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.7.0] - 2026-08-17
+
+Seventh GitHub/source release preparation. npm publication remains intentionally separate and is not authorized by this change.
+
+### Added
+
+- Added atomic heterogeneous usage vectors through `VectorUsagePolicy`, `VectorUsageControl`, `VectorUsageLease`, and the optional `VectorUsageStore` capability while keeping the existing scalar `UsageStore` surface source-compatible.
+- Added per-dimension admission, growth, recovery, and settlement without summing unlike units. Scalar and vector reservations share one logical-operation replay domain.
+- Added reservation-wide vector growth replay fencing with stable `incrementId`, one opaque Store-issued cursor, authoritative quota-denial replay, lost-ACK exact retry, and terminal-state fail-closed behavior.
+- Added portable `runVectorUsageStoreConformance()` coverage for atomic partial-denial rollback, concurrency, scalar/vector operation collision, growth replay/conflicts, denied growth, pending/liable expiry, settlement bounds, and grow/settle races.
+- Added English/Japanese vector design and MCP lifecycle documentation.
+
+### Provider implementation / proof
+
+- Memory: tagged scalar/vector reference implementation with atomic reserve/grow/settle, per-dimension recovery, and ambiguous-growth retry proof.
+- Redis: additive `mode: "vector"` reservation JSON plus vector Lua transactions; existing mode-less records remain scalar. Real-Redis integration runs vector conformance and committed-growth ACK-loss replay.
+- Firestore: additive optional vector fields in schema-v1 reservation documents; one transaction covers all dimensions/budgets and the next cursor is created outside automatic transaction retries. Emulator/fault-injection coverage includes vector conformance and committed-growth ACK loss.
+- Cloudflare Durable Objects: schema v3 adds `reservation_vectors` without rewriting v1/v2 scalar accounting rows; `transactionSync` covers vector accounting and workerd integration exercises vector conformance plus remote committed-growth ACK-loss replay.
+
+### Safety / compatibility
+
+- Unlike dimensions are never converted into one scalar total. A budget key cannot belong to multiple dimensions in one vector reservation.
+- Every required dimension commits atomically or none commit; independent per-dimension reserve calls are not presented as equivalent.
+- Pending expiry releases every dimension; liable expiry conservatively retains every dimension. Settlement is bounded independently by total successfully reserved capacity for each dimension.
+- Existing third-party scalar `UsageStore` implementations remain compatible because vector accounting is an optional capability. Existing Redis/Firestore/Cloudflare scalar data remains readable without balance/lifecycle rewrites.
+- #84 is adopted for the future v1 stable surface as an optional capability; #81 becomes the next feature decision gate in v0.8.0.
+
+### Release boundary
+
+- All five package manifests are aligned at `0.7.0`.
+- The normal release gate remains Node 20/22/24, Redis, Cloudflare local workerd, Firestore Emulator, package tarball/content, and clean-consumer verification.
+- This preparation does **not** create a `v0.7.0` tag, GitHub Release, or npm publication.
+
 ## [0.6.0] - 2026-08-17
 
 Sixth GitHub/source release preparation. npm publication remains intentionally separate and is not authorized by this change.

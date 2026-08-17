@@ -31,6 +31,8 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Architecture](architecture.md) — reserve/liability/settlement, multi-budget atomicity, and crash/retry safety.
 - [MCP protocol conformance](mcp-conformance.md) — the current protocol/SDK baseline, fresh-request multi-round proof, and horizontal-scale/session-affinity assumptions.
 - [Progressive MCP growth](progressive-mcp-integration.md) — safe small-reserve/top-up/stop pattern for incrementally metered MCP work.
+- [Atomic heterogeneous usage vectors](vector-usage.md) — v0.7 contract for atomically reserving, growing, and settling unlike units in one logical operation.
+- [Vector MCP integration](vector-mcp-integration.md) — explicit MCP lifecycle for safely consuming vector capacity.
 - [MCP Tasks accounting](mcp-tasks-accounting.md) — the long-running task accounting state machine and its separation from business task/result replay.
 - [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
 - [Mutable quota limits](mutable-quota-limits.md) — same-key upgrade/downgrade/override semantics and policy-rollout consistency requirements.

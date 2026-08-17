@@ -10,11 +10,11 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 ## 現在のbaseline
 
-**v0.5.0はpre-v1 stabilization baselineとしてrelease済み**です。**v0.6.0がcurrent completion targetで、#83はdesign / implementation proof gateを通過し採用判断となりました。**
+**v0.6.0はcurrent pre-v1 stabilization baselineとしてrelease済み**です。**v0.7.0がcurrent completion targetで、#84はdesign / implementation proof gateを通過し採用判断となりました。**
 
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 
-base runtimeはbounded fixed reservationと、1 reservationに参加する全budgetへ1つのscalar quoted / actual unit countを適用するmodelを維持します。v0.6ではgrowth-capable Storeに限りsame reservationのoptional progressive growthを追加し、heterogeneous multi-dimensional usageは後続decisionです。
+base runtimeは既存scalar reservation pathを変更せず維持します。v0.6ではscalar reservationのoptional progressive growth、v0.7ではheterogeneous dimension向けの別optional atomic vector pathを追加します。どちらもthird-party Storeへmandatoryにしません。
 
 ## 「v1完成」の定義
 
@@ -38,7 +38,7 @@ v1.0前に次を完了します。
 | Release | 主対象 | preferred outcome | release gate |
 | --- | --- | --- | --- |
 | **v0.6.0** | #83 progressive reservation growth | **採用**: optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`、growth cursor + stable increment identity、atomic multi-budget / lost-ACK / provider conformance proof |
-| **v0.7.0** | #84 heterogeneous multi-dimensional usage | v0.6 decisionと安全にcomposeできるならatomic vector / per-dimension accountingをv1へ含める | one logical replay identity、dimension全体のatomic admission / settlement、deterministic retry / conflict、Store conformance。成立しなければ明示defer / exclude |
+| **v0.7.0** | #84 heterogeneous multi-dimensional usage | **採用**: optional v1 core/Store extension | separate `VectorUsageControl` / `VectorUsageStore`、one logical replay identity、per-dimension atomic admission / growth / settlement、deterministic retry / conflict、provider conformance |
 | **v0.8.0** | #81 operation reconciliation / status | read-only reconciliation capability + Store support matrixをv1へ含める | second reservation禁止、prove可能なauthoritative stateのみ、`unknown/indeterminate`明示、adapter別lost-ACK evidence。共通化できなければnarrower boundaryをfreeze |
 | **v0.9.0** | #76 operational snapshot + #82 threshold / exhaustion | bounded non-authoritative production observability / helper / canonical patternをv1へ含める | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離。stateful APIが重いならdocs / patternで完了可 |
 | **v0.10.0** | final completion / distribution / API freeze | 残るv1 scope decisionを全て閉じ、public distributionを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
@@ -69,11 +69,11 @@ v1へ入れるなら次を維持する必要があります。
 
 ### v0.7.0 — heterogeneous multi-dimensional usage (#84)
 
-#83とのcompositionを先に決めるため、#84はv0.7で判定します。
+**判断: future v1 stable surfaceへoptional capabilityとして採用。** scalar APIは変更せず、vector callerだけ`VectorUsageControl` / `VectorUsageStore`へopt-inします。
 
-request count、model token、compute seconds、provider work unitsなど、1 logical operationが異なるdimensionを同時消費するmodelを検討します。ただしrequired dimension全体で1 atomic admission / settlement domainを維持することが条件です。
+request count、model token、compute seconds、provider work unitなど異なるdimensionをsynthetic scalarへ変換せず1 logical operationで扱います。admission / growth / recovery / settlementはreservation全体の1 atomic domainを維持します。
 
-dimension別independent reserveがpartial commitし得る場合、それは同等代替ではありません。provider-neutral vector modelをsupported Store全体で安全かつ互換的に実装できなければ、v0.7でscalar accountingをv1 contractとして確定し、#84をv1外へ明示します。
+proof対象はscalar/vector operation collision、multi-dimension all-or-nothing admission、per-dimension settlement bound、vector全体の1 growth cursor、lost-ACK exact replay、partial growthなしのauthoritative denial、pending/liable expiry、growth/settlement raceです。Memory / Redis / Cloudflare Durable Objects / Firestoreでproofし、既存scalar Store実装のsource compatibilityを維持します。
 
 ### v0.8.0 — operation reconciliation / status (#81)
 
@@ -115,7 +115,7 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 | Issue | target decision | current direction |
 | --- | --- | --- |
 | #83 progressive reservation growth | **v0.6.0** | **採用**: optional progressive Store capability + `UsageLease.grow()` |
-| #84 heterogeneous multi-dimensional usage | **v0.7.0** | #83と安全にcomposeするatomic vector modelをproofできれば採用優先 |
+| #84 heterogeneous multi-dimensional usage | **v0.7.0** | **採用**: optional atomic vector Store capability + `VectorUsageControl` |
 | #81 operation reconciliation / status | **v0.8.0** | read-only capability vocabulary + Store support matrixを採用優先 |
 | #76 operational usage snapshot | **v0.9.0** | bounded non-authoritative helper / patternを採用優先 |
 | #82 threshold / exhaustion signals | **v0.9.0** | #76 semantics上のoptional scoped helper / patternを採用優先 |

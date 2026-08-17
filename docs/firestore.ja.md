@@ -266,3 +266,9 @@ next growth cursorはtransaction callbackの**外側**で生成します。Fires
 storage compatibilityはadditiveです。v0.6 reservation documentには`growthCursor`とlatest-growth replay metadataが追加される場合があります。既存v0.5 documentはvalid fixed reservationのままで、暗黙にgrowableへupgradeしません。collection resetやaccounting rewriteは不要です。
 
 既存`expiryGraceMs` clock-skew contractもgrowthへ適用します。configured grace内でactiveなreservationはgrow可能ですが、authoritative expiry / recovery後は全growth callをfail closedにします。testではgrown pending release、liable retention、Firestore transaction retry、commit-after-ACK-lossをsame stable increment identityでreplayする経路をcoverします。
+
+## Atomic heterogeneous vector usage (v0.7)
+
+`FirestoreUsageStore`はoptional `VectorUsageStore`を実装します。reservation documentへ`mode: "vector"`、dimension metadata、per-dimension actual、vector-growth replay metadataをoptional additive fieldとして保存します。v0.6までのmodeなしdocumentはscalarのままでrewrite不要です。
+
+vector admission / growth / settlement / expiry-recoveryはreservationと全participating budget documentを1 Firestore transactionで処理します。next vector growth cursorはtransaction callback外で生成するためautomatic retryでdouble-growしません。Emulator CIではportable vector conformanceとcommitted-growth ACK-loss replayも実行します。
