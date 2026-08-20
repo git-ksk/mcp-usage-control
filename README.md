@@ -68,6 +68,8 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.7.0` for the next GitHub/source release preparation. `v0.6.0` is the latest released source baseline; npm registry publication remains intentionally deferred.
 
+**Current execution order:** close out **v0.7.0** first; then **v0.8.0 / #81** reconciliation-status, **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, **v0.10.0 / #24 + #6** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
+
 ## v1 scope under consideration after v0.5
 
 The v1 API freeze is still not final. Following v0.6 progressive growth, v0.7 adopts atomic heterogeneous vector accounting as another optional future-v1 capability while keeping the base scalar `UsageStore` contract compatible.

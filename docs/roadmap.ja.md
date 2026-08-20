@@ -12,6 +12,8 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 **v0.6.0はcurrent pre-v1 stabilization baselineとしてrelease済み**です。**v0.7.0がcurrent completion targetで、#84はdesign / implementation proof gateを通過し採用判断となりました。**
 
+リポジトリ上の実行順序は明確に直列です。**まずv0.7.0をcloseoutし、その後 v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10/#24+#6 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
+
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 
 base runtimeは既存scalar reservation pathを変更せず維持します。v0.6ではscalar reservationのoptional progressive growth、v0.7ではheterogeneous dimension向けの別optional atomic vector pathを追加します。どちらもthird-party Storeへmandatoryにしません。
@@ -40,7 +42,7 @@ v1.0前に次を完了します。
 | **v0.6.0** | #83 progressive reservation growth | **採用**: optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`、growth cursor + stable increment identity、atomic multi-budget / lost-ACK / provider conformance proof |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **採用**: optional v1 core/Store extension | separate `VectorUsageControl` / `VectorUsageStore`、one logical replay identity、per-dimension atomic admission / growth / settlement、deterministic retry / conflict、provider conformance |
 | **v0.8.0** | #81 operation reconciliation / status | read-only reconciliation capability + Store support matrixをv1へ含める | second reservation禁止、prove可能なauthoritative stateのみ、`unknown/indeterminate`明示、adapter別lost-ACK evidence。共通化できなければnarrower boundaryをfreeze |
-| **v0.9.0** | #76 operational snapshot + #82 threshold / exhaustion | bounded non-authoritative production observability / helper / canonical patternをv1へ含める | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離。stateful APIが重いならdocs / patternで完了可 |
+| **v0.9.0** | #76 operational snapshot + #82 threshold / exhaustion + #99 dogfood integration diagnostics | bounded non-authoritative production observability / helper / canonical patternと明確なsettlement-outcome integration contractをv1へ含める | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離、canonical outcome vocabulary / normalization、invalid settlement vocabularyを識別できるbounded diagnostics。stateful APIが重いならdocs / patternで完了可 |
 | **v0.10.0** | final completion / distribution / API freeze | 残るv1 scope decisionを全て閉じ、public distributionを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
 | **v1.0.0** | stable promotion | 完成済みsurfaceをstable宣言 | 新featureなし。v0.10 completion criteria完了後にversion / changelog / release promotionのみ |
 
@@ -83,7 +85,7 @@ preferred outcomeはsmallなread-only status vocabulary + Store別capability mat
 
 全Store共通mandatory lookup APIを強制する必要はなく、adapter-specific capabilityの方が安全ならその形でv1 boundaryを確定します。
 
-### v0.9.0 — operational usability (#76, #82)
+### v0.9.0 — operational usability (#76, #82, #99)
 
 applicationごとに次の区別を再発明しなくてよい程度のoptional operational toolingを整えます。
 
@@ -91,6 +93,10 @@ applicationごとに次の区別を再発明しなくてよい程度のoptional 
 - lifecycle telemetry
 - authoritative scoped quota state
 - threshold / exhaustion notification
+- real consumer dogfoodで判明したintegration driftを防ぐcanonical settlement-outcome vocabulary / normalization guidanceとbounded diagnostics（#99）
+- principal、args、credential、request bodyを出さず、service unavailableとinvalid integration inputを区別できるprivacy-safe lifecycle counters
+
+#99で観測したGateway側の即時mapping bug（`invalid_browser_request` -> canonical `invalid_arguments`）はconsumer integration fixなので **v0.9を待たず修正可能** です。v0.9では、同じdriftを他consumerで起こしにくく・診断しやすくするMCPUsage側の再利用可能なcontract / diagnostics / operational visibilityを完成させます。
 
 これはbest-effort / non-authoritativeのままです。second ledgerを作らず、budget-window resetを推測せず、notification deliveryをenforcement correctnessへ入れません。
 
@@ -119,6 +125,7 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 | #81 operation reconciliation / status | **v0.8.0** | read-only capability vocabulary + Store support matrixを採用優先 |
 | #76 operational usage snapshot | **v0.9.0** | bounded non-authoritative helper / patternを採用優先 |
 | #82 threshold / exhaustion signals | **v0.9.0** | #76 semantics上のoptional scoped helper / patternを採用優先 |
+| #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | canonical integration vocabulary明確化、invalid outcomeとservice outageの診断分離、privacy-safe lifecycle visibility。consumer mapping bugは先行修正可 |
 | #24 Cloudflare deployed operational evidence | **v0.10.0** | real rotation完了 + honest v1 evidence boundary確定 |
 | #6 first npm publication | **v0.10.0** | v1前にfirst registry publish。ただしexplicit authorization必須 |
 | #77 / #78 / #79 / #85 | 解決済み | 後続全releaseへevidence継承 |

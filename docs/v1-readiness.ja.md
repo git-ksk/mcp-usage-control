@@ -10,6 +10,8 @@
 
 直近の次source release preparation targetは **v0.7.0** です。`v0.6.0` がlatest released source baselineです。
 
+v0.7 closeout後の実行順序は **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion** です。#99はGatewayMCPのreal dogfoodから追加されました。consumer側の即時mapping bugはv0.9前に修正可能ですが、再利用可能なMCPUsage contract / diagnosticsはv0.9 decision gateに置きます。
+
 v0.7で#84の判断を明示確定します。
 
 - existing scalar `UsageStore` / `UsageControl` semanticsはsource-compatibleのまま変更しない
@@ -73,7 +75,7 @@ Memoryがreference implementation。Redisは1 Lua transaction + additive vector 
 
 ### その他open capability
 
-#81が次v0.8 decision targetです。#76 / #82は後続completion-ladder decisionです。second accounting authorityを作らずfail-closedを弱めないlow-risk / clearly usefulなものだけv1候補にします。
+#81が次v0.8 decision targetです。#76 / #82 / #99はv0.9 operational-usability decisionです。#99ではcanonical settlement-outcome integration vocabulary、invalid integration inputとservice unavailableを区別できるbounded diagnostics、privacy-safe lifecycle visibilityを扱います。second accounting authorityを作らずfail-closedを弱めないlow-risk / clearly usefulなものだけv1候補にします。
 
 first-class MCP Tasks integrationはupstream TypeScript protocol surface依存のままです。accounting lifecycle自体はすでにdefined / proof-testedです。
 

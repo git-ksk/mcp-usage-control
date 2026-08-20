@@ -10,6 +10,8 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 The immediate next source release preparation target is **v0.7.0**. `v0.6.0` is the latest released source baseline.
 
+Current execution order after v0.7 closeout is **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion**. #99 was added from real GatewayMCP dogfood; its immediate consumer-side mapping bug may be fixed before v0.9, while the reusable MCPUsage contract/diagnostics remain part of the v0.9 decision gate.
+
 The v0.7 decision for #84 is explicit:
 
 - existing scalar `UsageStore` / `UsageControl` semantics remain source-compatible and unchanged;
@@ -73,7 +75,7 @@ See [Atomic heterogeneous usage vectors](vector-usage.md) and [Vector MCP integr
 
 ### Other open capabilities
 
-#81 is the next v0.8 decision target. #76 and #82 remain later completion-ladder decisions. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
+#81 is the next v0.8 decision target. #76, #82, and #99 are the v0.9 operational-usability decisions. #99 covers canonical settlement-outcome integration vocabulary, bounded diagnostics that distinguish invalid integration input from service unavailability, and privacy-safe lifecycle visibility. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
 
 First-class MCP Tasks integration likewise remains dependent on the upstream TypeScript protocol surface; the accounting lifecycle itself is already defined and proof-tested.
 
