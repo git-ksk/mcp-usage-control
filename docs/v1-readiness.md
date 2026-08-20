@@ -6,11 +6,11 @@ This document records the evidence accumulated toward a future v1.0. It is a **r
 
 No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
-## Status update — v0.7 atomic-vector decision
+## Status update — v0.7 closeout / v0.8 next decision
 
-The immediate next source release preparation target is **v0.7.0**. `v0.6.0` is the latest released source baseline.
+**v0.7.0 was released on 2026-08-17 and is closed out as the latest GitHub/source baseline.** The active decision target is now **v0.8.0 / #81**.
 
-Current execution order after v0.7 closeout is **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion**. #99 was added from real GatewayMCP dogfood; its immediate consumer-side mapping bug may be fixed before v0.9, while the reusable MCPUsage contract/diagnostics remain part of the v0.9 decision gate.
+Current execution order is **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion**. #99 was added from real GatewayMCP dogfood; its immediate consumer-side mapping bug may be fixed before v0.9, while the reusable MCPUsage contract/diagnostics remain part of the v0.9 decision gate.
 
 The v0.7 decision for #84 is explicit:
 
@@ -141,9 +141,9 @@ See [Mutable quota limits](mutable-quota-limits.md).
 - production horizontal scale requires shared provider-backed accounting/flow state where appropriate;
 - Firestore's supported lease-recovery profile requires bounded/synchronized host clocks and correctly sized `expiryGraceMs`.
 
-## v0.7 release checks
+## v0.7 release evidence
 
-Before creating any v0.7.0 source tag/release:
+The v0.7.0 source release was created from tagged commit `bf4a6dfcf21c92634e4ba9ede5dcd889b3867612` after the required release gates were green. The completed gate was:
 
 1. version all five packages together to `0.7.0`;
 2. run Node 20/22/24 normal CI;
@@ -151,8 +151,10 @@ Before creating any v0.7.0 source tag/release:
 4. run package tarball/content/version and clean-consumer verification, including the public vector conformance export;
 5. verify English/Japanese vector/state-machine/MCP/provider-migration documentation;
 6. merge the implementation PR only after required checks are green;
-7. create the v0.7.0 tag/GitHub Release only with separate explicit authorization;
+7. tag/release the exact tested commit as `v0.7.0`;
 8. keep npm publication separate unless independently authorized.
+
+The tag and GitHub Release were published on 2026-08-17. npm publication was not performed and remains deferred.
 
 ## Future v1 release gate
 
@@ -173,9 +175,9 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 ## Current decision
 
-**Next source release preparation target: v0.7.0.**
+**Current source baseline: v0.7.0 — RELEASED / CLOSED.**
 
-**v0.7.0 readiness: GO for release preparation, subject to normal CI/provider/package checks.**
+**Active decision target: v0.8.0 / #81 operation reconciliation/status.**
 
 **#83: ADOPTED for future v1 as optional progressive reservation growth.**
 

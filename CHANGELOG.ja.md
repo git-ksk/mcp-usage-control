@@ -8,6 +8,39 @@
 
 現在entryはありません。
 
+## [0.7.0] - 2026-08-17
+
+7回目のGitHub/source release。npm publicationは引き続き別操作で、実施していません。
+
+### Added
+
+- 既存scalar `UsageStore` surfaceのsource compatibilityを維持したまま、`VectorUsagePolicy`、`VectorUsageControl`、`VectorUsageLease`、optional `VectorUsageStore`によるatomic heterogeneous usage vectorを追加。
+- 異なるunitをsynthetic scalarへ加算せず、dimensionごとのadmission / growth / recovery / settlementを追加。scalar / vector reservationは同じlogical-operation replay domainを共有。
+- stable `incrementId`、1つのopaque Store-issued cursor、authoritative quota-denial replay、lost-ACK exact retry、terminal-state fail-closedを備えたreservation-wide vector growth replay fencingを追加。
+- atomic partial-denial rollback、concurrency、scalar/vector operation collision、growth replay/conflict、denied growth、pending/liable expiry、settlement bound、grow/settle raceをcoverするportable `runVectorUsageStoreConformance()`を追加。
+- vector designとMCP lifecycleの英日documentationを追加。
+
+### Provider implementation / proof
+
+- Memory: atomic reserve/grow/settle、per-dimension recovery、ambiguous-growth retry proofを持つscalar/vector reference implementation。
+- Redis: additiveな`mode: "vector"` reservation JSON + vector Lua transaction。既存mode-less recordはscalarのまま。real Redis integrationでvector conformance + committed-growth ACK-loss replayを実行。
+- Firestore: schema-v1 reservation documentへadditive optional vector fieldを追加。全dimension/budgetを1 transactionで扱い、automatic transaction retry外でnext cursorを生成。Emulator / fault-injectionでvector conformance + committed-growth ACK lossを検証。
+- Cloudflare Durable Objects: schema v3でv1/v2 scalar accounting rowを書き換えず`reservation_vectors`を追加。`transactionSync`でvector accountingを行い、workerd integrationでvector conformance + remote committed-growth ACK-loss replayを検証。
+
+### Safety / compatibility
+
+- 異なるdimensionを1 scalar totalへ変換しない。1 vector reservation内で同じbudget keyを複数dimensionへ所属させない。
+- 必要な全dimensionはatomicにcommit、またはnone commit。dimension別の独立reserveをatomic vector相当として扱わない。
+- pending expiryは全dimensionをrelease、liable expiryは全dimensionをconservative retain。settlementはdimensionごとのtotal successfully reserved capacity以内に制限。
+- vector accountingはoptional capabilityなので既存third-party scalar `UsageStore` implementationは互換。既存Redis / Firestore / Cloudflare scalar dataはbalance/lifecycle rewriteなしでreadable。
+- #84をoptional capabilityとしてfuture v1 stable surfaceへ採用。#81をv0.8.0の次decision gateとする。
+
+### Release boundary
+
+- 5 package manifestを`0.7.0`へ揃えた。
+- release gateとしてNode 20/22/24、Redis、Cloudflare local workerd、Firestore Emulator、package tarball/content、clean-consumer verificationを実行。
+- `v0.7.0`は2026-08-17にtag / GitHub source releaseとして公開済み。npm publicationはdeferredのまま別操作。
+
 ## [0.6.0] - 2026-08-17
 
 6回目のGitHub/source release preparation。npm publicationは引き続き別操作で、この変更では許可しません。

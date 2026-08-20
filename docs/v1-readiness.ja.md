@@ -6,11 +6,11 @@
 
 この文書だけでv1.0 tag、GitHub Release、npm publicationを実行しません。
 
-## Status update — v0.7 atomic-vector判断
+## Status update — v0.7 closeout / v0.8次decision
 
-直近の次source release preparation targetは **v0.7.0** です。`v0.6.0` がlatest released source baselineです。
+**v0.7.0は2026-08-17にreleaseされ、latest GitHub/source baselineとしてcloseout済み**です。現在のactive decision targetは **v0.8.0 / #81** です。
 
-v0.7 closeout後の実行順序は **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion** です。#99はGatewayMCPのreal dogfoodから追加されました。consumer側の即時mapping bugはv0.9前に修正可能ですが、再利用可能なMCPUsage contract / diagnosticsはv0.9 decision gateに置きます。
+現在の実行順序は **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion** です。#99はGatewayMCPのreal dogfoodから追加されました。consumer側の即時mapping bugはv0.9前に修正可能ですが、再利用可能なMCPUsage contract / diagnosticsはv0.9 decision gateに置きます。
 
 v0.7で#84の判断を明示確定します。
 
@@ -141,9 +141,9 @@ cancellationは保守的です。cancel request / ACKだけではmetered cost 0�
 - production horizontal scaleでは必要なaccounting / flow stateをprovider-backed shared stateへ置く
 - Firestore lease-recovery support profileはbounded / synchronized host clockと適切な `expiryGraceMs` を要求
 
-## v0.7 release checks
+## v0.7 release evidence
 
-v0.7.0 source tag / release作成前に:
+v0.7.0 source releaseは、required release gateがgreenになったtagged commit `bf4a6dfcf21c92634e4ba9ede5dcd889b3867612` から作成済みです。完了したgate:
 
 1. 5 packageをまとめて`0.7.0`へversion alignment
 2. Node 20 / 22 / 24 normal CI
@@ -173,9 +173,9 @@ GitHub source releaseとnpm publicationは別操作です。v0.6.0や将来v1.0�
 
 ## 現在の結論
 
-**次source release preparation target: v0.7.0。**
+**Current source baseline: v0.7.0 — RELEASED / CLOSED。**
 
-**v0.7.0 readiness: normal CI / provider / package check条件でrelease preparationへGO。**
+**Active decision target: v0.8.0 / #81 operation reconciliation / status。**
 
 **#83: optional progressive reservation growthとしてfuture v1へ採用。**
 
