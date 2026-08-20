@@ -10,9 +10,9 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 ## 現在のbaseline
 
-**v0.6.0はcurrent pre-v1 stabilization baselineとしてrelease済み**です。**v0.7.0がcurrent completion targetで、#84はdesign / implementation proof gateを通過し採用判断となりました。**
+**v0.7.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#84はdesign / implementation proof gateを通過し、optional future-v1 capabilityとして採用済みです。**現在のactive decision targetはv0.8.0 / #81です。**
 
-リポジトリ上の実行順序は明確に直列です。**まずv0.7.0をcloseoutし、その後 v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10/#24+#6 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
+リポジトリ上の実行順序は明確に直列です。**v0.7.0 closeout済み -> v0.8/#81（現在地） -> v0.9/#76+#82+#99 -> v0.10/#24+#6 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
 
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 

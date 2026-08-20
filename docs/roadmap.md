@@ -10,9 +10,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.6.0 is released** as the current pre-v1 stabilization baseline. **v0.7.0 is the current completion target and #84 has passed its design/implementation proof gate for adoption.**
+**v0.7.0 is released and closed out** as the current pre-v1 source baseline. #84 passed its design/implementation proof gate and is adopted as an optional future-v1 capability. **v0.8.0 / #81 is now the active decision target.**
 
-The repository execution order is intentionally linear: **finish v0.7.0 before starting the v0.8 decision gate; then v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
+The repository execution order is intentionally linear: **v0.7.0 closed -> v0.8/#81 (active) -> v0.9/#76+#82+#99 -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
