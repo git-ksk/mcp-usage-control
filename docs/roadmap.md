@@ -12,6 +12,8 @@ The project should deepen correctness and production usability at that boundary 
 
 **v0.6.0 is released** as the current pre-v1 stabilization baseline. **v0.7.0 is the current completion target and #84 has passed its design/implementation proof gate for adoption.**
 
+The repository execution order is intentionally linear: **finish v0.7.0 before starting the v0.8 decision gate; then v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
+
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
 The base runtime keeps the existing scalar reservation path unchanged. v0.6 adds optional progressive growth on scalar reservations, and v0.7 adds a separate optional atomic vector path for heterogeneous dimensions. Neither capability makes the base `UsageStore` contract mandatory for third-party Stores.
@@ -40,7 +42,7 @@ Each release below is a **decision gate**. A target feature is not forced into v
 | **v0.6.0** | #83 progressive reservation growth | **Adopted** as an optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`, growth cursor + stable increment identity, atomic multi-budget proof, lost-ACK replay fence, provider conformance |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **Adopted** as an optional v1 core/Store extension | Separate `VectorUsageControl` / `VectorUsageStore`, one logical replay identity, atomic per-dimension admission/growth/settlement, deterministic retry/conflict semantics, provider conformance |
 | **v0.8.0** | #81 operation reconciliation/status | Include a coherent read-only reconciliation capability and per-Store support matrix | No second reservation, authoritative/provable states only, explicit `unknown/indeterminate`, adapter-specific lost-ACK evidence; otherwise define and freeze the narrower supported boundary |
-| **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals | Include bounded non-authoritative production observability/tooling or canonical helpers | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement; documentation-only outcome is acceptable if a stateful API adds more risk than value |
+| **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals + #99 dogfood integration diagnostics | Include bounded non-authoritative production observability/tooling, canonical helpers, and a clear settlement-outcome integration contract | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement, canonical outcome vocabulary/normalization, bounded diagnostics for invalid settlement vocabulary; documentation-only outcome is acceptable if a stateful API adds more risk than value |
 | **v0.10.0** | Final completion / distribution / API freeze | Close all remaining v1-scope decisions and prove the public distribution | #24 Cloudflare real-operation boundary, #6 first npm publication, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |
 | **v1.0.0** | Stable promotion | Declare the completed surface stable | No new feature; version/changelog/release promotion only after v0.10 completion criteria are satisfied |
 
@@ -83,14 +85,18 @@ The preferred outcome is a small read-only status vocabulary plus an explicit pe
 
 A universal mandatory Store lookup is not required if adapter-specific capability is the safer design.
 
-### v0.9.0 — operational usability (#76, #82)
+### v0.9.0 — operational usability (#76, #82, #99)
 
 The preferred v1 surface includes enough optional operational tooling that applications do not have to reinvent the distinction between:
 
 - retained bookkeeping state;
 - lifecycle telemetry;
 - authoritative scoped quota state;
-- threshold/exhaustion notifications.
+- threshold/exhaustion notifications;
+- canonical settlement-outcome vocabulary/normalization guidance and bounded diagnostics for integration drift found through real consumer dogfood (#99);
+- privacy-safe lifecycle counters sufficient to distinguish service unavailability from invalid integration input without exposing principals, arguments, credentials, or request bodies.
+
+The immediate Gateway mapping bug observed in #99 (`invalid_browser_request` -> canonical `invalid_arguments`) is a consumer integration fix and does **not** need to wait for v0.9. v0.9 owns the reusable MCPUsage-side contract, diagnostics, and operational visibility that prevent or quickly identify the same drift in other consumers.
 
 This tooling remains best-effort/non-authoritative. It must not become a second ledger, infer budget-window resets, or make notification delivery part of enforcement correctness.
 
@@ -119,6 +125,7 @@ It must resolve:
 | #81 operation reconciliation/status | **v0.8.0** | Prefer inclusion as read-only capability vocabulary + Store support matrix |
 | #76 operational usage snapshot | **v0.9.0** | Prefer bounded non-authoritative helper/pattern |
 | #82 threshold/exhaustion signals | **v0.9.0** | Prefer optional scoped helper/pattern built on #76 semantics |
+| #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | Clarify canonical integration vocabulary, distinguish invalid outcome from service outage, and add privacy-safe lifecycle visibility; consumer mapping bug may be fixed earlier |
 | #24 Cloudflare deployed operational evidence | **v0.10.0** | Complete real rotation and finalize honest v1 evidence boundary |
 | #6 first npm publication | **v0.10.0** | First registry publish before v1, but only with explicit authorization |
 | #77/#78/#79/#85 | Resolved | Evidence carried forward into every later release |
