@@ -12,7 +12,7 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 **v0.8.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**現在のactive decision targetはv0.9.0 / #76 + #82 + #99です。**
 
-リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> v0.9/#76+#82+#99（active） -> v0.10/#24+#6 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
+リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> v0.9/#76+#82+#99（active） -> v0.10/#24+#6+#105+#106 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
 
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 
@@ -43,8 +43,8 @@ v1.0前に次を完了します。
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **採用**: optional v1 core/Store extension | separate `VectorUsageControl` / `VectorUsageStore`、one logical replay identity、per-dimension atomic admission / growth / settlement、deterministic retry / conflict、provider conformance |
 | **v0.8.0** | #81 operation reconciliation / status | **Adopted**: optional scalar v1 Store capability | 共通read-only status語彙、second reservation禁止、mismatch/unprovable stateはfail closed、Memory/Redis/Firestore + Cloudflare subpath、portable/provider evidence |
 | **v0.9.0** | #76 operational snapshot + #82 threshold / exhaustion + #99 dogfood integration diagnostics | bounded non-authoritative production observability / helper / canonical patternと明確なsettlement-outcome integration contractをv1へ含める | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離、canonical outcome vocabulary / normalization、invalid settlement vocabularyを識別できるbounded diagnostics。stateful APIが重いならdocs / patternで完了可 |
-| **v0.10.0** | final completion / distribution / API freeze | 残るv1 scope decisionを全て閉じ、public distributionを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
-| **v1.0.0** | stable promotion | 完成済みsurfaceをstable宣言 | 新featureなし。v0.10 completion criteria完了後にversion / changelog / release promotionのみ |
+| **v0.10.0** | final completion / distribution / compatibility freeze | 残るv1 scope decisionを全て閉じ、public distribution / runtime / storage compatibility boundaryを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、#105 supported Node.js floor、#106 persisted-store upgrade/migration/rollback contract、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
+| **v1.0.0** | stable promotion | 完成済みsurfaceをstable宣言 | 新featureなし。v0.10/#24+#6+#105+#106 completion criteria完了後にversion / changelog / release promotionのみ |
 
 SemVer上 `0.10.0` は通常の有効versionです。`0.9.0` の次が必ず `1.0.0` である必要はありません。
 
@@ -112,6 +112,8 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 
 - **Cloudflare #24:** real credential rotationを実施。real platform-limit / overload evidenceは自然に観測できればcaptureし、Issueを閉じるためだけにFree-plan quotaを意図的に枯渇させない。未観測ならv1 Cloudflare claimを実観測evidenceに合わせて明示scopeする
 - **npm #6:** separate explicit authorizationがある場合だけselected v0.10 tagをfirst npm publishし、provenance、registry metadata、package contents、registry clean installを検証
+- **Node support #105:** v1のsupported Node.js floorを明示決定し、`engines` / CI / support claim / clean-consumer evidenceを揃える。EOL runtimeのcompatibility testを暗黙のsupport promiseにしない
+- **persisted-state compatibility #106:** Redis / Firestore / Cloudflareのupgrade / migration / newer-schema fail-close / rollback保証を定義し、SemVer/API stabilityとstorage-state compatibility boundaryを混同しない
 - **public API / name freeze:** 5 package name、exports / subpath、error / state terminology、lifecycle semantics、compatibility statementを最終確認
 - **MCP Tasks:** upstream TypeScript Tasks surfaceが十分stableならfirst-class adapter採用を判定。まだexperimentalならaccounting semanticsは維持しつつv1 stable adapterから明示除外
 - **stateless MRTR alternative:** concrete benefit + equivalent one-time / lost-ACK proofがなければshared / durable compare-and-consumeをv1として確定し、alternativeはnon-v1 workへ分類
@@ -130,6 +132,8 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 | #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | canonical integration vocabulary明確化、invalid outcomeとservice outageの診断分離、privacy-safe lifecycle visibility。consumer mapping bugは先行修正可 |
 | #24 Cloudflare deployed operational evidence | **v0.10.0** | real rotation完了 + honest v1 evidence boundary確定 |
 | #6 first npm publication | **v0.10.0** | v1前にfirst registry publish。ただしexplicit authorization必須 |
+| #105 supported Node.js floor | **v0.10.0** | v1 runtime floorを決定し、publish前にengines / CI / docsを整合 |
+| #106 persisted-store migration/rollback contract | **v0.10.0** | provider upgrade/downgrade/schema compatibility semanticsをv1前にfreeze |
 | #77 / #78 / #79 / #85 | 解決済み | 後続全releaseへevidence継承 |
 
 原則は **「maybe v1」をv0.10より後へ残さない** です。proof付きで採用するか、v1 stable product外へ明示分類します。

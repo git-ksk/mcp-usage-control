@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-This reference describes the public API in the current source tree. All five package manifests are aligned at `0.4.0`. `v0.4.0` is the GitHub/source release prepared by this branch; npm registry publication remains intentionally deferred.
+This reference describes the public API in the current source tree. All five package manifests are aligned at `0.8.0`. **v0.8.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
 For behavioral/failure guarantees, read [Architecture](architecture.md) and [Store implementation contract](store-contract.md). For the stable/deferred v1 boundary, read [v1.0 readiness review](v1-readiness.md).
 

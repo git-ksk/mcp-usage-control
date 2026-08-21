@@ -1,4 +1,4 @@
-# Architecture — v0.1
+# Architecture — current source
 
 [English](architecture.md) | [日本語](architecture.ja.md)
 

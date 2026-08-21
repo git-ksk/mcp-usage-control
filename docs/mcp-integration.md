@@ -1,4 +1,4 @@
-# MCP integration — v0.1
+# MCP integration — current source
 
 [English](mcp-integration.md) | [日本語](mcp-integration.ja.md)
 

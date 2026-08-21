@@ -10,7 +10,7 @@
 
 `v0.8.0` がlatest released GitHub/source baselineでcloseout済みです。**v0.9.0 / #76 + #82 + #99がactive product decision targetです。**
 
-v0.8後の実行順序は **v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion** です。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.9 decision gateに置きます。
+v0.8後の実行順序は **v0.9/#76+#82+#99 -> v0.10/#24+#6+#105+#106 completion -> v1.0 stable promotion** です。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.9 decision gateに置きます。
 
 v0.8で#81の判断を明示確定します。
 
@@ -182,16 +182,18 @@ v0.7.0 source releaseは、required release gateがgreenになったtagged commi
 
 1. pre-v1 v0.x ladderで十分なoperational confidenceを得る
 2. #83を含む各deliberate v1-scope candidateを指定gateで明示accept / defer
-3. long-lived public package / subpath / API nameを最終review
-4. 必要と判断したbreaking contract changeをv1 tag前に実施
-5. `1.0.0` でfull package / integration matrix green
-6. explicit v1 source-release authorization
+3. supported Node.js floorを#105で明示freezeし、package `engines` / CI / security・support claim / clean-consumer evidenceを整合
+4. Redis / Firestore / Cloudflareのpersisted-state upgrade / newer-schema fail-close / migration / rollback semanticsを#106で明示freeze
+5. long-lived public package / subpath / API nameを最終review
+6. 必要と判断したbreaking contract changeをv1 tag前に実施
+7. `1.0.0` でfull package / integration / registry matrix green
+8. explicit v1 source-release authorization
 
 v0.6の直後に必ずv1へ進む必要も、future capabilityを全部v1前に完成させる必要もありません。stable boundaryは実需要とsafety evidenceに合わせます。
 
 ## Release / npm separation
 
-GitHub source releaseとnpm publicationは別操作です。v0.6.0や将来v1.0のsource releaseがreadyでも、それだけでnpm publishしません。
+GitHub source releaseとnpm publicationは別操作です。GitHub/source releaseがreadyという理由だけではnpm publishせず、#6をseparate explicit authorization付きfirst registry publication gateとして維持します。
 
 ## 現在の結論
 

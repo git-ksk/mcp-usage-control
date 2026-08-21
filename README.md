@@ -68,7 +68,7 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.8.0`. **v0.8.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.8.0 is released and closed out.** The active product target is now **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.10.0 / #24 + #6** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
+**Current execution order:** **v0.8.0 is released and closed out.** The active product target is now **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.10.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
 
 ## v1 scope under consideration after v0.5
 

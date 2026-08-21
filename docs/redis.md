@@ -1,4 +1,4 @@
-# Redis adapter — v0.1
+# Redis adapter — current source
 
 [English](redis.md) | [日本語](redis.ja.md)
 
@@ -6,7 +6,7 @@
 
 > **Current distribution status:** the package is not published to npm yet. Build/install the local core + Redis tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `redis@6.2.0`.
 
-v0.1 is tested with Redis 7, node-redis 6.2.x, and Node.js 20/22.
+The v0.8 source line is tested with Redis 7 and node-redis 6.2.x. The release matrix currently exercises Node.js 20/22/24; the supported Node.js floor for the future v1 line is intentionally decided in v0.10 (#105) rather than inferred from compatibility CI.
 
 ## Atomic multi-budget model
 

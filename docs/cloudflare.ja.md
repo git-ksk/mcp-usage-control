@@ -1,4 +1,4 @@
-# Cloudflare Durable Objects adapter — v0.1
+# Cloudflare Durable Objects adapter — current source
 
 [English](cloudflare.md) | [日本語](cloudflare.ja.md)
 
