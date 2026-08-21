@@ -186,6 +186,8 @@ jobs:
           grep -qx 'package/dist/vector-store-conformance.d.ts' <<<"$core_listing"
           grep -qx 'package/dist/weighted-credits.js' <<<"$core_listing"
           grep -qx 'package/dist/weighted-credits.d.ts' <<<"$core_listing"
+          grep -qx 'package/dist/windowed-budget-keys.js' <<<"$core_listing"
+          grep -qx 'package/dist/windowed-budget-keys.d.ts' <<<"$core_listing"
           mcp_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-mcp-${version}.tgz")"
           grep -qx 'package/dist/flow-store-conformance.js' <<<"$mcp_listing"
           grep -qx 'package/dist/flow-store-conformance.d.ts' <<<"$mcp_listing"

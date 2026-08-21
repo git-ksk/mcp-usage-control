@@ -48,7 +48,7 @@ interface Budget {
 }
 ```
 
-`key` must be non-empty and `limit` a non-negative safe integer. Window semantics are application policy; encode daily/monthly window identity into the key when needed.
+`key` must be non-empty and `limit` a non-negative safe integer. Window semantics are application policy. For common calendar day/month keys, use `createWindowedBudgetKey()`; custom billing windows can still construct the key explicitly.
 
 ### `UsageQuote` / `UsagePolicy`
 
@@ -118,6 +118,10 @@ Unknown tools deny with `unknown_tool` by default. An explicit `{ fallbackUnits 
 `plans.*.limits` is a named limit bag rather than a subscription database: the application chooses how those names map to one or more `Budget` objects in `budgets()`. `limit(name)` fails closed when a requested name is absent. `resolvePlan` may be supplied when trusted entitlement truth does not live in `request.principal.plan`.
 
 The helper accepts an **already-loaded object** only. JSON/YAML/file/Remote Config access is deliberately out of scope. Duplicate textual JSON keys cannot be detected after normal parsing has collapsed them, so loaders that require duplicate-key rejection must enforce that before calling this API.
+
+### `createWindowedBudgetKey()`
+
+For common calendar-day/month budget identities, use `createWindowedBudgetKey({ period, timeZone, namespace, clock? })`. `key({ scope, id, now? })` derives a deterministic encoded key. The configured timezone literal is part of accounting identity; changing timezone/namespace/period/scope format intentionally selects a different key rather than silently changing rollover semantics on existing state. See [Accounting-window budget keys](accounting-window-keys.md).
 
 ### `UsageStore`
 
