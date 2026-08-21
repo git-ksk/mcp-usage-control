@@ -10,7 +10,7 @@
 
 ## [0.8.0] - 2026-08-22
 
-8回目のGitHub/source release preparation。npm publicationは引き続き別操作で、この変更では許可しません。
+8回目のGitHub/source release。npm publicationは引き続き別操作で、実施していません。
 
 ### Added
 
@@ -39,7 +39,7 @@
 
 - 5 package manifestを`0.8.0`へ揃える。
 - normal release gateはNode 20/22/24、real Redis、Cloudflare local workerd、Firestore Emulator、package tarball/content、clean-consumer verification。
-- このpreparationでは`v0.8.0` tag、GitHub Release、npm publicationを作成しない。
+- `v0.8.0`は2026-08-22にtag / GitHub source releaseとして公開済み。npm publicationはdeferredのまま別操作。
 
 ## [0.7.0] - 2026-08-17
 

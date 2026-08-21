@@ -8,7 +8,7 @@
 
 ## Status update — v0.8 operation reconciliation decision
 
-`v0.7.0` はlatest released GitHub/source baselineのままです。**v0.8.0 / #81はdesign / implementation proof gateを通過し、current source-release preparation targetです。**
+`v0.8.0` がlatest released GitHub/source baselineでcloseout済みです。**v0.9.0 / #76 + #82 + #99がactive product decision targetです。**
 
 v0.8後の実行順序は **v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion** です。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.9 decision gateに置きます。
 
@@ -26,7 +26,7 @@ v0.8で#81の判断を明示確定します。
 
 ## 判定
 
-**v0.8.0 source-release preparationへGO。normal CI / package / provider integration gate通過が条件です。**
+**v0.8.0 source releaseは完了。次product decision gateはv0.9.0 / #76 + #82 + #99です。**
 
 v0.5-v0.7までのresolved correctness gateをcarry forwardし、#81はprovider-neutral contract、built-in Store support matrix、portable conformance、Cloudflare provider-specific reconciliation evidenceを持ちます。
 
@@ -148,6 +148,21 @@ cancellationは保守的です。cancel request / ACKだけではmetered cost 0�
 - production horizontal scaleでは必要なaccounting / flow stateをprovider-backed shared stateへ置く
 - Firestore lease-recovery support profileはbounded / synchronized host clockと適切な `expiryGraceMs` を要求
 
+## v0.8 release evidence
+
+v0.8.0 source releaseは、required release gateがgreenになったtagged commit `2877057c2015717f75decefd3f72c9731147fb8b` から作成済みです。implementation PR headとmerge後mainは同一Git treeで、release workflowもtagからpackage checkを再実行しました。完了したgate:
+
+1. 5 packageをまとめて`0.8.0`へversion alignment
+2. real Redisを含むNode 20 / 22 / 24 normal CI
+3. Memory / Redis / Firestoreのportable scalar operation-reconciliation conformance、Cloudflare local workerd reconciliation integration、既存scalar/progressive/vector provider suite
+4. Firestore Emulator / Cloudflare workerd integration
+5. public reconciliation conformance exportを含むpackage tarball/content/version + clean-consumer verification
+6. required CI / CodeQL green後にmerge
+7. tested contentを`v0.8.0`としてtag / GitHub Release
+8. npm publicationは独立authorizationがない限り実行しない
+
+tag / GitHub Releaseは2026-08-22に公開済み。npm publicationは実施せずdeferredのままです。
+
 ## v0.7 release evidence
 
 v0.7.0 source releaseは、required release gateがgreenになったtagged commit `bf4a6dfcf21c92634e4ba9ede5dcd889b3867612` から作成済みです。完了したgate:
@@ -180,9 +195,9 @@ GitHub source releaseとnpm publicationは別操作です。v0.6.0や将来v1.0�
 
 ## 現在の結論
 
-**Current released source baseline: v0.7.0 — RELEASED / CLOSED。**
+**Current released source baseline: v0.8.0 — RELEASED / CLOSED。**
 
-**Current source-release preparation target: v0.8.0 / #81 operation reconciliation / status — ADOPTED / GATED。**
+**Active product decision target: v0.9.0 / #76 + #82 + #99 — operational usability / dogfood diagnostics。**
 
 **#83: optional progressive reservation growthとしてfuture v1へ採用。**
 

@@ -66,9 +66,9 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは次のGitHub/source release preparation向けに `0.8.0` へ揃えます。`v0.7.0` はlatest released source baselineで、npm registry publicationは引き続き意図的にdeferredです。
+5 packageのmanifestは `0.8.0` で揃っています。**v0.8.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** **v0.8.0 / #81はdesign / implementation decision gateを通過し、採用判断です。** v0.8 source release後は **v0.9.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.10.0 / #24 + #6** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionへ進みます。
+**現在の実行順序:** **v0.8.0はrelease / closeout済み**です。active product targetは **v0.9.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.10.0 / #24 + #6** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。
 
 ## v0.5後に再評価するv1 scope
 
@@ -305,7 +305,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.8.0` がcurrent source-release preparation targetです。#81はread-only scalar optional Store capabilityとしてfuture v1 surfaceへ採用し、v0.8 release後は **v0.9.0 / #76 + #82 + #99** が次product decision targetです。tag / GitHub Release / npm publicationは別操作です。
+`v0.8.0` はcurrent source baselineとしてrelease / closeout済みです。#81はread-only scalar optional Store capabilityとしてfuture v1 surfaceへ採用し、**v0.9.0 / #76 + #82 + #99** がactive product decision targetです。future tag / GitHub Release / npm publicationは別操作です。
 
 **npm publicationは別途explicit authorizationが必要で、まだ実施していません。**
 

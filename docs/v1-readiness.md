@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Status update — v0.8 operation-reconciliation decision
 
-`v0.7.0` remains the latest released GitHub/source baseline. **v0.8.0 / #81 has passed its design/implementation proof gate and is the current source-release preparation target.**
+`v0.8.0` is the latest released GitHub/source baseline and is closed out. **v0.9.0 / #76 + #82 + #99 is the active product decision target.**
 
 After v0.8, the execution order is **v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion**. #99 came from real GatewayMCP dogfood; its immediate consumer-side mapping bug may land earlier while reusable MCPUsage diagnostics stay in the v0.9 decision gate.
 
@@ -26,7 +26,7 @@ The v0.8 decision for #81 is explicit:
 
 ## Verdict
 
-**GO for v0.8.0 source-release preparation, subject to the normal CI/package/provider-integration gate.**
+**v0.8.0 source release is COMPLETE. The next product decision gate is v0.9.0 / #76 + #82 + #99.**
 
 The resolved v0.5-v0.7 correctness gates remain carried forward, and #81 now has a provider-neutral contract, built-in Store support matrix, portable conformance, and Cloudflare provider-specific reconciliation evidence.
 
@@ -148,6 +148,21 @@ See [Mutable quota limits](mutable-quota-limits.md).
 - production horizontal scale requires shared provider-backed accounting/flow state where appropriate;
 - Firestore's supported lease-recovery profile requires bounded/synchronized host clocks and correctly sized `expiryGraceMs`.
 
+## v0.8 release evidence
+
+The v0.8.0 source release was created from tagged commit `2877057c2015717f75decefd3f72c9731147fb8b` after the required release gates were green. The implementation PR head and merged main commit had the same Git tree, and the release workflow then re-ran package checks from the tag. The completed gate included:
+
+1. version all five packages together to `0.8.0`;
+2. run Node 20/22/24 normal CI with real Redis;
+3. run portable scalar operation-reconciliation conformance for Memory/Redis/Firestore, Cloudflare local workerd reconciliation integration, and existing scalar/progressive/vector provider suites;
+4. run Firestore Emulator and Cloudflare workerd integration;
+5. run package tarball/content/version and clean-consumer verification, including the public reconciliation conformance export;
+6. merge only after required CI and CodeQL checks were green;
+7. tag/release the tested content as `v0.8.0`;
+8. keep npm publication separate unless independently authorized.
+
+The tag and GitHub Release were published on 2026-08-22. npm publication was not performed and remains deferred.
+
 ## v0.7 release evidence
 
 The v0.7.0 source release was created from tagged commit `bf4a6dfcf21c92634e4ba9ede5dcd889b3867612` after the required release gates were green. The completed gate was:
@@ -182,9 +197,9 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 ## Current decision
 
-**Current released source baseline: v0.7.0 — RELEASED / CLOSED.**
+**Current released source baseline: v0.8.0 — RELEASED / CLOSED.**
 
-**Current source-release preparation target: v0.8.0 / #81 operation reconciliation/status — ADOPTED / GATED.**
+**Active product decision target: v0.9.0 / #76 + #82 + #99 — operational usability / dogfood diagnostics.**
 
 **#83: ADOPTED for future v1 as optional progressive reservation growth.**
 
