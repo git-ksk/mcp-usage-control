@@ -211,6 +211,12 @@ Even when Firestore is a good fit, load-test production-like traffic if shared b
 
 See [API reference](api-reference.md) for options and [Architecture](architecture.md) for the full state machine.
 
+## Operation reconciliation (v0.8)
+
+`FirestoreUsageStore` implements optional scalar `OperationReconciliationStore`. `reconcileOperation()` performs a read-only Firestore transaction against the deterministic hashed reservation document and validates expected reserved units/budget hashes. It never invokes cleanup or writes recovery state.
+
+Expiry classification uses the existing `expiryGraceMs` / bounded host-clock contract. A terminal liable-expiry row that Firestore has already conservatively converted into a settled tombstone may be reported as `settled` because the schema intentionally does not retain separate historical expiry provenance; either result is terminal and never authorizes business replay. Firestore Emulator CI runs the portable reconciliation suite.
+
 ## Progressive reservation growth (v0.6)
 
 `FirestoreUsageStore` implements the optional progressive-growth contract with one Firestore transaction covering the reservation document and every participating budget document.

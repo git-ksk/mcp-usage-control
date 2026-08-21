@@ -42,6 +42,10 @@ store-level expiry recoveryとruntime lifecycle eventの両方が必要なら、
 
 Lua atomicityはpersistence / failover durabilityと同一ではありません。production利用前にHA、persistence、cleanup backlog、ACK ambiguity、single-slot scaling trade-offを確認してください。
 
+## Operation reconciliation (v0.8)
+
+`RedisUsageStore` implements optional scalar `OperationReconciliationStore` through a read-only Lua lookup. Expected retained units/budget identities must match or the lookup fails closed. Real-Redis CI runs the portable reconciliation conformance suite.
+
 ## Atomic vector usage (v0.7)
 
 `RedisUsageStore` implements optional `VectorUsageStore` with vector-specific Lua transactions. Existing mode-less reservation JSON remains scalar; vector metadata is additive and requires no key/balance migration. Real-Redis integration covers portable vector conformance and committed-growth acknowledgement-loss replay.

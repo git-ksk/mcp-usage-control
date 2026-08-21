@@ -8,6 +8,39 @@
 
 現在entryはありません。
 
+## [0.8.0] - 2026-08-22
+
+8回目のGitHub/source release preparation。npm publicationは引き続き別操作で、この変更では許可しません。
+
+### Added
+
+- base `UsageStore` のsource compatibilityを維持したまま、optional `OperationReconciliationStore`、`UsageOperationReconciliationInput`、共通 `absent` / `active` / `expired` / `settled` 語彙によるprovider-neutral scalar operation reconciliationを追加。
+- retained lifecycle status、expired stateのrepeated read-only観測、expected-state mismatchのfail-closeをcoverするportable `runOperationReconciliationStoreConformance()` / `assertOperationReconciliationStoreConformance()` を追加。
+- safe reattachment、retention horizon semantics、明示的indeterminate/fail-close、business-result replayとの境界を定義する英日documentationを追加。
+
+### Provider implementation / proof
+
+- Memory: `reconcileOperation()` はexpiry recoveryを実行せずaccountingを変更せず、retained in-process scalar stateだけをread。process restart後のhistorical absence制約を明示。
+- Redis: Redis `TIME` / `HGET` / `ZSCORE`を使うread-only Lua lookup。expected reserved units / budget hashを検証し、malformed settled/tombstone stateを`absent`へ変換せずfail closed。real Redis CIでportable reconciliation conformanceを実行。
+- Firestore: deterministic hashed reservation documentをread-only transactionでlookupし、cleanup/recovery writeなしでexpected retained units / budget hashを検証。既存bounded host-clock contractの下でEmulator CIにportable reconciliation conformanceを追加。
+- Cloudflare Durable Objects: 既存authenticated read-only reconciliation protocolをcore v0.8 result typeへ統合し、`reconcileRemoteCloudflareOperation()` を追加。`reconcileRemoteCloudflareReserve()` はv0.7互換aliasとして維持し、existing local/deployed lost-ACK proofをcarry forward。
+
+### Safety / compatibility
+
+- reconciliationはcapacity reserve/release、liability、renew、settle、replay state書換えを行わず、status proof専用。
+- `absent` はlookup時点でretained stateがないことだけを意味し、Store retention horizon後のhistorical proofやautomatic replay permissionにはしない。
+- backend/transport failure、corrupt/unsupported state、scalar/vector mode mismatch、trusted expected-state mismatchを`absent`へ変換せずindeterminate / fail closed。
+- mutable budget limitはhistorical operation identityではないため、budget key + expected retained scalar unitsを検証し、既存same-key mutable-limit contractを維持。
+- v0.8 generic capabilityは意図的にscalar-only。vector initial-reserve ambiguityは将来equivalentなread-only contractを別途proofしない限りfail closed。
+- business side-effect/result replayはapplication-ownedのままusage accountingと分離。
+- #81をoptional scalar Store capabilityとしてfuture v1 stable surfaceへ採用。#76/#82/#99を次のv0.9 product decision gateとする。
+
+### Release boundary
+
+- 5 package manifestを`0.8.0`へ揃える。
+- normal release gateはNode 20/22/24、real Redis、Cloudflare local workerd、Firestore Emulator、package tarball/content、clean-consumer verification。
+- このpreparationでは`v0.8.0` tag、GitHub Release、npm publicationを作成しない。
+
 ## [0.7.0] - 2026-08-17
 
 7回目のGitHub/source release。npm publicationは引き続き別操作で、実施していません。

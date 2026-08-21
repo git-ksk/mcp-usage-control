@@ -4,6 +4,8 @@
 
 optional reconciliation APIは、このambiguous case向けの **read-only lookup** を提供します。lookup自体はquotaをreserve / renew / release / settleしません。
 
+v0.8ではこのresult vocabularyをcore `UsageOperationReconciliation` と共有し、generic entry pointを `reconcileRemoteCloudflareOperation()` とします。従来の `reconcileRemoteCloudflareReserve()` はv0.7互換aliasとして引き続きexportします。
+
 ## Gateway設定
 
 reserve reconciliationが必要な場合はbase gatewayの代わりにreconciliable gateway wrapperを使います。
@@ -23,12 +25,12 @@ wrapperは通常の `reserve` / `mark_liable` / `renew` / `settle` を既存gate
 
 ## Client手順
 
-元のreserve inputをそのまま保持してください。`network` / `timeout` などambiguousな `CloudflareUsageTransportError` の後に明示的にreconcileします。
+reconcile対象のtrusted logical operation identity、期待するcurrent retained scalar units、budget identityを保持してください。initial reserve lost-ACK recoveryでは元reserve inputがそのまま該当します。`network` / `timeout` などambiguousな `CloudflareUsageTransportError` の後に明示的にreconcileします。
 
 ```ts
-import { reconcileRemoteCloudflareReserve } from 'mcp-usage-control-cloudflare/reconciliation';
+import { reconcileRemoteCloudflareOperation } from 'mcp-usage-control-cloudflare/reconciliation';
 
-const result = await reconcileRemoteCloudflareReserve(
+const result = await reconcileRemoteCloudflareOperation(
   {
     endpoint: process.env.MCP_USAGE_CLOUDFLARE_URL!,
     headers: () => ({
@@ -69,7 +71,7 @@ import {
   CloudflareUsageTransportError,
   RemoteCloudflareUsageStore,
 } from 'mcp-usage-control-cloudflare';
-import { reconcileRemoteCloudflareReserve } from 'mcp-usage-control-cloudflare/reconciliation';
+import { reconcileRemoteCloudflareOperation } from 'mcp-usage-control-cloudflare/reconciliation';
 
 const remoteOptions = {
   endpoint: process.env.MCP_USAGE_CLOUDFLARE_URL!,
@@ -97,7 +99,7 @@ try {
     (error.code === 'network' || error.code === 'timeout');
   if (!ambiguous) throw error;
 
-  const reconciled = await reconcileRemoteCloudflareReserve(remoteOptions, reserveInput);
+  const reconciled = await reconcileRemoteCloudflareOperation(remoteOptions, reserveInput);
 
   if (reconciled.status === 'active' && reconciled.state === 'pending') {
     const lease = control.resumeLease({
@@ -156,7 +158,7 @@ lookup requestで送信するのはopaqueな `cf1.<sha256>` reservation IDだけ
 retained reservationが見つかった場合、clientは次を検証します。
 
 - reservation IDが元operationと一致する。
-- `reservedUnits` が元reserve attemptと一致する。
+- `reservedUnits` がcallerのexpected retained scalar unitsと一致する。
 - 保存済みhashed budget identifierが元budget setと完全一致する。
 
 raw request / budget値はcaller側で `ReservationRecord` を復元するためだけに使います。

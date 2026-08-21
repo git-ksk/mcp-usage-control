@@ -57,6 +57,12 @@ store.retireBudgetKey('day:user:42:2026-08-13');
 
 Zero-unit reservations do not create retained budget-key entries.
 
+## Operation reconciliation (v0.8)
+
+`MemoryUsageStore` implements optional `OperationReconciliationStore`. `reconcileOperation()` reads retained scalar operation state without running expiry recovery or changing quota state. It validates the expected logical operation identity, reserved units, and budget keys, and returns the common `absent` / `active` / `expired` / `settled` vocabulary.
+
+Because Memory state is process-local, `absent` after restart is never historical proof that an operation did not previously exist. Scalar reconciliation rejects retained vector reservations.
+
 ## Production guidance
 
 Use a shared/durable store when any of the following apply:

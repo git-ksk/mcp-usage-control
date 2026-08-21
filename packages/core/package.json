@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Concurrency-safe usage enforcement primitives for MCP tool execution.",
   "type": "module",
   "license": "Apache-2.0",
@@ -36,6 +36,10 @@
     "dist/progressive-store-conformance.js.map",
     "dist/progressive-store-conformance.d.ts",
     "dist/progressive-store-conformance.d.ts.map",
+    "dist/reconciliation-conformance.js",
+    "dist/reconciliation-conformance.js.map",
+    "dist/reconciliation-conformance.d.ts",
+    "dist/reconciliation-conformance.d.ts.map",
     "dist/vector-store-conformance.js",
     "dist/vector-store-conformance.js.map",
     "dist/vector-store-conformance.d.ts",

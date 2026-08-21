@@ -38,7 +38,7 @@ const authorize = createCloudflareBearerTokenAuthorizer({
 
 For zero-downtime rotation, first copy the current token into the previous-token slot, then replace the current token, move callers to the new token, and finally remove the previous token. Keep the overlap short. Applications with stronger identity requirements can continue supplying their own `authorize(request)` implementation; the helper is optional and does not change the gateway contract.
 
-For applications that need to recover an ambiguous `reserve()` after a timeout/network failure, the optional `mcp-usage-control-cloudflare/reconciliation` subpath provides an authenticated read-only lookup. Use `createReconciliableCloudflareUsageStoreGateway()` and `reconcileRemoteCloudflareReserve()` explicitly; do not hide ambiguous reserve results behind generic retry middleware.
+For applications that need to recover an ambiguous `reserve()` after a timeout/network failure, the optional `mcp-usage-control-cloudflare/reconciliation` subpath provides an authenticated read-only lookup. Use `createReconciliableCloudflareUsageStoreGateway()` and the v0.8 `reconcileRemoteCloudflareOperation()` entry point explicitly; `reconcileRemoteCloudflareReserve()` remains as a v0.7-compatible alias. Do not hide ambiguous reserve results behind generic retry middleware.
 
 Historical window cleanup is also explicit. The optional `mcp-usage-control-cloudflare/maintenance` subpath exposes a separate authenticated endpoint that prunes only application-selected historical budget keys in bounded batches. Protected/current keys and budgets referenced by active reservations are not deleted.
 
@@ -89,7 +89,7 @@ const authorize = createCloudflareBearerTokenAuthorizer({
 
 無停止rotationでは、まず現在tokenをprevious slotへコピーし、その後current tokenを新tokenへ置換し、callerを新tokenへ切り替え、最後にprevious tokenを削除します。overlap期間は短く保ってください。より強いidentity要件があるapplicationは従来どおり独自の `authorize(request)` を利用でき、このhelperはoptionalでgateway contractを変更しません。
 
-`reserve()` のtimeout / network failure後にambiguous resultを復元する必要があるapplication向けに、optionalな `mcp-usage-control-cloudflare/reconciliation` subpathがauthenticated read-only lookupを提供します。`createReconciliableCloudflareUsageStoreGateway()` と `reconcileRemoteCloudflareReserve()` を明示的に利用し、ambiguous reserveをgeneric retry middlewareで隠さないでください。
+`reserve()` のtimeout / network failure後にambiguous resultを復元する必要があるapplication向けに、optionalな `mcp-usage-control-cloudflare/reconciliation` subpathがauthenticated read-only lookupを提供します。`createReconciliableCloudflareUsageStoreGateway()` とv0.8の `reconcileRemoteCloudflareOperation()` を明示的に利用してください。`reconcileRemoteCloudflareReserve()` はv0.7互換aliasとして維持します。ambiguous reserveをgeneric retry middlewareで隠さないでください。
 
 historical window cleanupも明示操作です。optionalな `mcp-usage-control-cloudflare/maintenance` subpathは、applicationがhistoricalとして選択したbudget keyだけをbounded batchでpruneする別authenticated endpointを提供します。protected/current keyとactive reservationが参照中のbudgetは削除しません。
 
@@ -105,6 +105,10 @@ adapterはalarmをscheduleせず、Durable Objectを意図的に常駐させま�
 - [Observability](../../docs/observability.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 - [Security](../../SECURITY.ja.md)
+
+## Operation reconciliation (v0.8)
+
+The reconciliation subpath now uses the core `UsageOperationReconciliation` vocabulary. Cloudflare keeps the provider-specific authenticated lookup boundary instead of making reconciliation mandatory on the base remote Store API.
 
 ## Atomic vector usage (v0.7)
 

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Firestore } from '@google-cloud/firestore';
 import {
   assertUsageStoreConformance,
+  runOperationReconciliationStoreConformance,
   runProgressiveUsageStoreConformance,
   runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
@@ -58,6 +59,19 @@ async function testPortableConformance() {
     concurrency: 8,
   });
 
+  assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
+}
+
+async function testReconciliationConformance() {
+  const report = await runOperationReconciliationStoreConformance({
+    createStore(scenario) {
+      return storeFor(`reconcile_${scenario.replaceAll('-', '_')}`);
+    },
+    async waitForLeaseExpiry(ttlMs) {
+      await sleep(ttlMs + 120);
+    },
+    leaseTtlMs: 80,
+  });
   assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
 }
 
@@ -244,6 +258,7 @@ async function testIdempotentSettlement() {
 
 const tests = [
   ['portable UsageStore conformance', testPortableConformance],
+  ['operation reconciliation conformance', testReconciliationConformance],
   ['progressive UsageStore conformance', testProgressiveConformance],
   ['vector UsageStore conformance', testVectorConformance],
   ['multi-budget atomicity', testMultiBudgetAtomicity],

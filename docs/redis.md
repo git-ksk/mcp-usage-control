@@ -185,6 +185,12 @@ CI uses real Redis 7 for:
 - observability is best-effort/non-durable and not the quota ledger;
 - no built-in billing, payment, authentication, or analytics backend.
 
+## Operation reconciliation (v0.8)
+
+`RedisUsageStore` implements optional scalar `OperationReconciliationStore`. The lookup runs one read-only Lua script using Redis `TIME`, `HGET`, and `ZSCORE`; it never reserves/releases capacity or changes liability, lease, settlement, or replay state. Expected reserved units and hashed budget identities must match retained state or the call fails closed.
+
+Real-Redis CI runs the portable operation-reconciliation conformance suite. A settled reservation missing its tombstone index is treated as invalid/indeterminate state rather than being misreported as `absent`.
+
 ## Progressive reservation growth (v0.6)
 
 `RedisUsageStore` implements the optional progressive-growth contract. One `GROW_SCRIPT` Lua transaction validates the active reservation, exact original budget-key set, growth cursor, replay identity, and every current budget limit before mutating accounting state.

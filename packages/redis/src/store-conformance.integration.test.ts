@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient } from 'redis';
 import {
   assertUsageStoreConformance,
+  runOperationReconciliationStoreConformance,
   runProgressiveUsageStoreConformance,
   runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
@@ -40,6 +41,24 @@ integration('RedisUsageStore portable conformance', () => {
 
     expect(report.passed).toBe(true);
     expect(report.cases.every(result => result.passed)).toBe(true);
+  });
+
+  it('passes the scalar operation reconciliation contract', async () => {
+    const report = await runOperationReconciliationStoreConformance({
+      createStore(scenario) {
+        return new RedisUsageStore(client, {
+          prefix: `${runId}-reconcile-${scenario}`,
+          hashTag: `${runId}-reconcile-${scenario}`,
+        });
+      },
+      async waitForLeaseExpiry(ttlMs) {
+        await new Promise(resolve => setTimeout(resolve, ttlMs + 80));
+      },
+      leaseTtlMs: 60,
+    });
+
+    expect(report.cases.filter(result => !result.passed)).toEqual([]);
+    expect(report.passed).toBe(true);
   });
 
   it('passes the progressive reservation growth contract', async () => {

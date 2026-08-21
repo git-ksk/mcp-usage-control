@@ -222,6 +222,38 @@ interface SettlementResult {
 
 Identical replay is idempotent while the Store retains the tombstone. A conflicting replay with different units or outcome fails.
 
+### `UsageOperationReconciliationInput` / `UsageOperationReconciliation` / `OperationReconciliationStore` (v0.8)
+
+```ts
+interface UsageOperationReconciliationInput {
+  request: UsageRequest;
+  units: number;
+  budgets: readonly Budget[];
+}
+
+type UsageOperationReconciliation =
+  | { status: 'absent'; reservationId: string }
+  | { status: 'active'; state: 'pending' | 'liable'; reservation: ReservationRecord }
+  | { status: 'expired'; state: 'pending' | 'liable'; reservationId: string; expiredAt: number }
+  | {
+      status: 'settled';
+      reservationId: string;
+      reservedUnits: number;
+      actualUnits: number;
+      tombstoneExpiresAt: number;
+    };
+
+interface OperationReconciliationStore extends UsageStore {
+  reconcileOperation(
+    input: UsageOperationReconciliationInput,
+  ): Promise<UsageOperationReconciliation>;
+}
+```
+
+This is an optional **scalar-only, read-only** Store capability. It proves retained usage-enforcement state without allocating a second reservation or changing liability/lease/settlement state. The input must use the trusted logical operation identity, expected currently retained scalar units, and expected budget keys. Mutable budget limits are not historical identity and are not required to match an old value.
+
+`absent` means no retained state is visible now; after a Store retention horizon it is not proof that the operation never existed. Any transport/backend failure, corrupt/unsupported state, or identity/quote mismatch rejects rather than becoming `absent`; callers treat such uncertainty as indeterminate and fail closed. See [Operation reconciliation/status](operation-reconciliation.md).
+
 ### `MemoryUsageStore`
 
 ```ts
@@ -300,9 +332,11 @@ import {
 } from 'mcp-usage-control/conformance';
 ```
 
-The portable runner covers provider-neutral behavior including multi-budget atomicity, concurrent admission, replay scope, liability idempotency, renewal, settlement replay/conflict, invalid-settlement non-corruption, and pending/liable expiry.
+The base portable runner covers provider-neutral behavior including multi-budget atomicity, concurrent admission, replay scope, liability idempotency, renewal, settlement replay/conflict, invalid-settlement non-corruption, and pending/liable expiry.
 
-Passing it establishes **behavioral compatibility**, not persistence/HA, authoritative-time, failover, or lost-ACK safety. Those require backend-specific evidence.
+v0.8 also exports `runOperationReconciliationStoreConformance()` and `assertOperationReconciliationStoreConformance()` for Stores implementing optional `OperationReconciliationStore`. That suite covers `absent -> pending -> liable -> settled`, read-only expired observation, and fail-closed expected-state mismatch.
+
+Passing these establishes **behavioral compatibility**, not persistence/HA, authoritative-time, failover, or lost-ACK safety. Those require backend-specific evidence.
 
 ## `mcp-usage-control-mcp`
 
@@ -525,7 +559,7 @@ Exports the Durable Object implementation, including `UsageControlDurableObject`
 
 ### `mcp-usage-control-cloudflare/reconciliation`
 
-Exports explicit read-only reserve-ACK reconciliation helpers for supported ambiguous remote reserve outcomes. Reconciliation must not create additional quota.
+Exports explicit authenticated read-only scalar operation reconciliation helpers. `reconcileRemoteCloudflareOperation()` is the v0.8 provider-neutral operation-status entry point. `reconcileRemoteCloudflareReserve()` remains as the v0.7-compatible alias for ambiguous initial-reserve acknowledgement recovery. Reconciliation must not create additional quota.
 
 ### `mcp-usage-control-cloudflare/maintenance`
 

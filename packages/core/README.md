@@ -113,3 +113,7 @@ authentication、payment / billing、MCP SDK integration、provider-backed produ
 For one logical operation that consumes unlike units, use `VectorUsagePolicy` + `VectorUsageControl` with a Store that implements optional `VectorUsageStore`. Each dimension keeps its own units and hierarchical budgets; unlike units are never summed. Vector admission, progressive growth, expiry/recovery, and settlement are atomic across the complete dimension set.
 
 Store authors can validate the optional capability with `runVectorUsageStoreConformance()` from `mcp-usage-control/conformance`.
+
+## Operation reconciliation (v0.8)
+
+`OperationReconciliationStore` is an optional scalar-only read capability. `MemoryUsageStore` implements it, and `mcp-usage-control/conformance` exports `runOperationReconciliationStoreConformance()` / `assertOperationReconciliationStoreConformance()` for third-party Stores. Unknown/unprovable state rejects and remains fail closed; reconciliation never authorizes business replay. See [Operation reconciliation/status](../../docs/operation-reconciliation.md).

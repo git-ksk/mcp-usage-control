@@ -72,6 +72,10 @@ See the public guides and reference:
 - [Source / local tarballから使う](../../docs/using-from-source.ja.md)
 - [Release policy](../../docs/releasing.md)
 
+## Operation reconciliation (v0.8)
+
+`FirestoreUsageStore` implements optional scalar `OperationReconciliationStore` with a read-only Firestore transaction. It validates the deterministic operation document, retained units, and hashed budget identities without invoking cleanup/recovery writes. Emulator CI runs the portable reconciliation conformance suite.
+
 ## Atomic vector usage (v0.7)
 
 `FirestoreUsageStore` implements optional `VectorUsageStore`. Vector metadata uses additive optional reservation-document fields, so existing scalar documents remain valid without rewrite. Admission/growth/settlement use one Firestore transaction and emulator tests cover portable vector conformance plus committed-growth acknowledgement loss.

@@ -185,6 +185,12 @@ CIの実Redis 7 test:
 - observabilityはbest-effort / non-durableでquota ledgerではない。
 - billing、payment、authentication、analytics backendは内蔵しません。
 
+## Operation reconciliation (v0.8)
+
+`RedisUsageStore` はoptional scalar `OperationReconciliationStore` を実装します。lookupはRedis `TIME` / `HGET` / `ZSCORE`だけを使うread-only Lua scriptで、capacity reserve/release、liability、lease、settlement、replay stateを変更しません。expected reserved units / hashed budget identityがretained stateと一致しなければfail closedします。
+
+real Redis CIでportable operation-reconciliation conformanceを実行します。settled reservationにtombstone indexが欠ける場合は`absent`へ誤変換せずinvalid / indeterminate stateとして扱います。
+
 ## Progressive reservation growth（v0.6）
 
 `RedisUsageStore`はoptional progressive-growth contractを実装します。1本の`GROW_SCRIPT` Lua transaction内でactive reservation、original budget-key set完全一致、growth cursor、replay identity、全current budget limitを検証してからaccounting stateを変更します。

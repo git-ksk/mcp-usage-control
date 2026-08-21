@@ -1,8 +1,9 @@
 import {
   UsageStateError,
   type Budget,
-  type ReservationRecord,
   type UsageRequest,
+  type UsageOperationReconciliation,
+  type UsageOperationReconciliationInput,
 } from 'mcp-usage-control';
 import {
   CloudflareUsageTransportError,
@@ -30,32 +31,8 @@ export type RemoteCloudflareReconciliationOptions = Pick<
   'endpoint' | 'headers' | 'fetch' | 'timeoutMs'
 >;
 
-export interface CloudflareReserveReconciliationInput {
-  request: UsageRequest;
-  units: number;
-  budgets: readonly Budget[];
-}
-
-export type CloudflareReserveReconciliation =
-  | { status: 'absent'; reservationId: string }
-  | {
-      status: 'active';
-      state: 'pending' | 'liable';
-      reservation: ReservationRecord;
-    }
-  | {
-      status: 'expired';
-      state: 'pending' | 'liable';
-      reservationId: string;
-      expiredAt: number;
-    }
-  | {
-      status: 'settled';
-      reservationId: string;
-      reservedUnits: number;
-      actualUnits: number;
-      tombstoneExpiresAt: number;
-    };
+export type CloudflareReserveReconciliationInput = UsageOperationReconciliationInput;
+export type CloudflareReserveReconciliation = UsageOperationReconciliation;
 
 /**
  * Drop-in gateway wrapper that preserves the normal usage-store protocol and
@@ -120,13 +97,14 @@ export function createReconciliableCloudflareUsageStoreGateway(
 }
 
 /**
- * Reconciles one ambiguous reserve attempt. This function performs a single
- * read-only lookup and never retries or creates a reservation.
+ * Reconciles one retained scalar logical operation. This function performs a
+ * single read-only lookup and never retries or creates a reservation. It is also
+ * the v0.8 generic entry point for ambiguous initial-reserve acknowledgement recovery.
  */
-export async function reconcileRemoteCloudflareReserve(
+export async function reconcileRemoteCloudflareOperation(
   options: RemoteCloudflareReconciliationOptions,
-  input: CloudflareReserveReconciliationInput,
-): Promise<CloudflareReserveReconciliation> {
+  input: UsageOperationReconciliationInput,
+): Promise<UsageOperationReconciliation> {
   const prepared = await prepareReconciliation(input);
   const reply = await postLookup(options, prepared.reservationId);
 
@@ -174,6 +152,14 @@ export async function reconcileRemoteCloudflareReserve(
     actualUnits: reply.actualUnits,
     tombstoneExpiresAt: reply.tombstoneExpiresAt,
   };
+}
+
+/** Backward-compatible v0.7 name for initial-reserve acknowledgement reconciliation. */
+export async function reconcileRemoteCloudflareReserve(
+  options: RemoteCloudflareReconciliationOptions,
+  input: CloudflareReserveReconciliationInput,
+): Promise<CloudflareReserveReconciliation> {
+  return reconcileRemoteCloudflareOperation(options, input);
 }
 
 interface PreparedReconciliation {
@@ -285,13 +271,13 @@ function verifyLookupIdentity(
     throw new UsageStateError('Cloudflare reconciliation returned a different reservation');
   }
   if (reply.reservedUnits !== units) {
-    throw new UsageStateError('Cloudflare reconciliation reservedUnits did not match the attempted reserve');
+    throw new UsageStateError('Cloudflare reconciliation reservedUnits did not match expected retained state');
   }
   if (
     reply.budgetIds.length !== prepared.budgetIds.length ||
     reply.budgetIds.some((id, index) => id !== prepared.budgetIds[index])
   ) {
-    throw new UsageStateError('Cloudflare reconciliation budgets did not match the attempted reserve');
+    throw new UsageStateError('Cloudflare reconciliation budgets did not match expected retained state');
   }
 }
 

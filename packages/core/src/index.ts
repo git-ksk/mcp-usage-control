@@ -171,6 +171,43 @@ export interface SettlementResult {
   outcome: string;
 }
 
+export interface UsageOperationReconciliationInput {
+  /** The exact trusted logical operation identity of the scalar reservation being reconciled. */
+  request: UsageRequest;
+  /** The expected currently retained scalar reserved units. */
+  units: number;
+  /** Expected budget identities. Limits are current policy inputs, not historical retained state. */
+  budgets: readonly Budget[];
+}
+
+/**
+ * Read-only authoritative status for one retained scalar logical operation.
+ *
+ * `absent` means only that the Store has no retained state at lookup time. It is
+ * not proof that the operation never existed once the Store's retention horizon
+ * may have elapsed, so callers must not turn `absent` into an automatic replay.
+ */
+export type UsageOperationReconciliation =
+  | { status: 'absent'; reservationId: string }
+  | {
+      status: 'active';
+      state: 'pending' | 'liable';
+      reservation: ReservationRecord;
+    }
+  | {
+      status: 'expired';
+      state: 'pending' | 'liable';
+      reservationId: string;
+      expiredAt: number;
+    }
+  | {
+      status: 'settled';
+      reservationId: string;
+      reservedUnits: number;
+      actualUnits: number;
+      tombstoneExpiresAt: number;
+    };
+
 export interface UsageStore {
   reserve(input: {
     request: UsageRequest;
@@ -181,6 +218,13 @@ export interface UsageStore {
   markLiable(input: MarkLiableInput): Promise<MarkLiableResult>;
   renew(input: RenewInput): Promise<RenewResult>;
   settle(input: SettleInput): Promise<SettlementResult>;
+}
+
+/** Optional scalar-only read capability; it never admits, renews, releases, or settles usage. */
+export interface OperationReconciliationStore extends UsageStore {
+  reconcileOperation(
+    input: UsageOperationReconciliationInput,
+  ): Promise<UsageOperationReconciliation>;
 }
 
 export interface GrowReservationInput {
@@ -1048,7 +1092,7 @@ interface InternalVectorReservation extends InternalReservationBase, VectorReser
 
 type InternalReservation = InternalScalarReservation | InternalVectorReservation;
 
-export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore {
+export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore, OperationReconciliationStore {
   private readonly used = new Map<string, number>();
   private readonly reservations = new Map<string, InternalReservation>();
   private readonly operations = new Map<string, string>();
@@ -1102,6 +1146,69 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
       }
     }
     return this.used.delete(budgetKey);
+  }
+
+  async reconcileOperation(
+    input: UsageOperationReconciliationInput,
+  ): Promise<UsageOperationReconciliation> {
+    assertNonNegativeInteger(input.units, 'units');
+    const budgets = canonicalizeBudgets(input.budgets);
+    validateRequestIdentity(input.request);
+
+    const now = Date.now();
+    const reservationId = operationKeyFor(input.request);
+    const reservation = this.reservations.get(reservationId);
+    if (!reservation) return { status: 'absent', reservationId };
+    if (reservation.mode !== 'scalar') {
+      throw new UsageStateError('Scalar operation reconciliation cannot target a vector reservation');
+    }
+    if (
+      reservation.reservedUnits !== input.units ||
+      !sameBudgetKeys(reservation.budgetKeys, budgets)
+    ) {
+      throw new UsageStateError('Operation reconciliation input does not match retained reservation state');
+    }
+
+    if (reservation.state === 'pending' || reservation.state === 'liable') {
+      if (reservation.expiresAt <= now) {
+        return {
+          status: 'expired',
+          state: reservation.state,
+          reservationId: reservation.id,
+          expiredAt: reservation.expiresAt,
+        };
+      }
+      return {
+        status: 'active',
+        state: reservation.state,
+        reservation: cloneReservationRecord(reservation),
+      };
+    }
+
+    if (
+      reservation.tombstoneExpiresAt !== undefined &&
+      reservation.tombstoneExpiresAt <= now
+    ) {
+      return { status: 'absent', reservationId };
+    }
+    if (reservation.outcome === 'lease_expired_after_execution_started') {
+      return {
+        status: 'expired',
+        state: 'liable',
+        reservationId: reservation.id,
+        expiredAt: reservation.expiresAt,
+      };
+    }
+    if (reservation.actualUnits === undefined || reservation.tombstoneExpiresAt === undefined) {
+      throw new UsageStateError('Settled reservation is missing reconciliation state');
+    }
+    return {
+      status: 'settled',
+      reservationId: reservation.id,
+      reservedUnits: reservation.reservedUnits,
+      actualUnits: reservation.actualUnits,
+      tombstoneExpiresAt: reservation.tombstoneExpiresAt,
+    };
   }
 
   async reserve(input: {

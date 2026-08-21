@@ -375,3 +375,17 @@ A vector Store must keep all required dimensions in one atomic transaction domai
 Vector growth composes the v0.6 stable-increment/cursor contract across the whole vector: exact retry after acknowledgement loss replays the authoritative result, quota denial rotates the cursor without consuming capacity, and a fresh increment on a stale cursor fails closed. Settlement reports every dimension exactly once and is bounded independently by that dimension's total successfully reserved capacity.
 
 Use `runVectorUsageStoreConformance()` from `mcp-usage-control/conformance` before claiming Store compatibility. See [Atomic heterogeneous usage vectors](vector-usage.md).
+
+## Optional scalar operation reconciliation contract (v0.8)
+
+`OperationReconciliationStore` is an optional read-only extension to `UsageStore`. It exposes retained scalar operation status without changing accounting state:
+
+```ts
+interface OperationReconciliationStore extends UsageStore {
+  reconcileOperation(input: UsageOperationReconciliationInput): Promise<UsageOperationReconciliation>;
+}
+```
+
+Implementations must not reserve/release capacity, mark liability, renew, settle, or rewrite replay state during reconciliation. They must validate the trusted logical operation identity plus expected retained scalar units and budget identities. Backend/transport failure, corrupt state, unsupported vector state, and identity mismatch remain indeterminate and fail closed rather than becoming `absent`.
+
+Stores implementing this capability should run `runOperationReconciliationStoreConformance()` / `assertOperationReconciliationStoreConformance()` and still provide backend-specific lost-ACK, time, durability, and failover evidence. The v0.8 portable contract is scalar-only; `VectorUsageStore` does not inherit a generic reconciliation claim. See [Operation reconciliation/status](operation-reconciliation.md).

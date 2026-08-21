@@ -6,6 +6,7 @@ import {
   type BudgetRemaining,
   type GrowReservationInput,
   type MarkLiableInput,
+  type OperationReconciliationStore,
   type ProgressiveUsageStore,
   type MarkLiableResult,
   type RenewInput,
@@ -16,6 +17,8 @@ import {
   type StoreReserveResult,
   type UsageObserver,
   type UsageRequest,
+  type UsageOperationReconciliation,
+  type UsageOperationReconciliationInput,
   type UsageStore,
   type UsageDimension,
   type UsageDimensionActual,
@@ -36,6 +39,7 @@ import {
   GROW_VECTOR_SCRIPT,
   MARK_LIABLE_SCRIPT,
   RENEW_SCRIPT,
+  RECONCILE_OPERATION_SCRIPT,
   RESERVE_SCRIPT,
   RESERVE_VECTOR_SCRIPT,
   SETTLE_SCRIPT,
@@ -81,7 +85,7 @@ interface RedisRecoverySummary {
 
 const RESERVATION_ID_PATTERN = /^r2\.([a-f0-9]{64})$/;
 
-export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore {
+export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore, OperationReconciliationStore {
   private readonly prefix: string;
   private readonly hashTag: string;
   private readonly cleanupBatchSize: number;
@@ -106,6 +110,96 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore 
     }
     assertPositiveInteger(this.cleanupBatchSize, 'cleanupBatchSize');
     assertPositiveInteger(this.idempotencyTtlMs, 'idempotencyTtlMs');
+  }
+
+  async reconcileOperation(
+    input: UsageOperationReconciliationInput,
+  ): Promise<UsageOperationReconciliation> {
+    assertNonNegativeInteger(input.units, 'units');
+    const budgets = canonicalizeBudgets(input.budgets);
+    validateRequestIdentity(input.request);
+    const operationKey = digest(
+      JSON.stringify([
+        input.request.principal.tenantId ?? null,
+        input.request.principal.id,
+        input.request.tool,
+        input.request.operationId,
+      ]),
+    );
+    const reservationId = `r2.${operationKey}`;
+    const expectedBudgetHashes = budgets.map(budget => digest(budget.key));
+    const keys = this.keys();
+    const reply = parseReply(
+      await this.client.eval(RECONCILE_OPERATION_SCRIPT, {
+        keys: [keys.reservations, keys.tombstones],
+        arguments: [reservationId],
+      }),
+    );
+
+    if (reply[0] === 'absent') return { status: 'absent', reservationId };
+    if (reply[0] === 'mode_mismatch') {
+      throw new UsageStateError('Scalar operation reconciliation cannot target a vector reservation');
+    }
+    if (reply[0] === 'invalid_state') {
+      throw new UsageStateError('Redis reservation had invalid reconciliation state');
+    }
+
+    if (reply[0] === 'active' || reply[0] === 'expired') {
+      const state = reply[1];
+      const reservedUnits = parseInteger(reply[2], 'reservedUnits');
+      const expiresAt = parseInteger(reply[3], 'expiresAt');
+      const hashes = parseStringArray(reply[4], 'budget hashes');
+      const growthCursor = reply[5] ?? '';
+      if (
+        (state !== 'pending' && state !== 'liable') ||
+        reservedUnits !== input.units ||
+        !sameStringArray(hashes, expectedBudgetHashes)
+      ) {
+        throw new UsageStateError('Operation reconciliation input does not match retained reservation state');
+      }
+      if (reply[0] === 'expired') {
+        return { status: 'expired', state, reservationId, expiredAt: expiresAt };
+      }
+      return {
+        status: 'active',
+        state,
+        reservation: {
+          id: reservationId,
+          operationId: input.request.operationId,
+          principalId: input.request.principal.id,
+          ...(input.request.principal.tenantId === undefined
+            ? {}
+            : { tenantId: input.request.principal.tenantId }),
+          ...(input.request.principal.plan === undefined
+            ? {}
+            : { plan: input.request.principal.plan }),
+          tool: input.request.tool,
+          budgetKeys: budgets.map(budget => budget.key),
+          reservedUnits,
+          expiresAt,
+          ...(growthCursor.length === 0 ? {} : { growthCursor }),
+        },
+      };
+    }
+
+    if (reply[0] === 'settled') {
+      const reservedUnits = parseInteger(reply[1], 'reservedUnits');
+      const actualUnits = parseInteger(reply[2], 'actualUnits');
+      const tombstoneExpiresAt = parseInteger(reply[3], 'tombstoneExpiresAt');
+      const hashes = parseStringArray(reply[4], 'budget hashes');
+      if (reservedUnits !== input.units || !sameStringArray(hashes, expectedBudgetHashes)) {
+        throw new UsageStateError('Operation reconciliation input does not match retained reservation state');
+      }
+      return {
+        status: 'settled',
+        reservationId,
+        reservedUnits,
+        actualUnits,
+        tombstoneExpiresAt,
+      };
+    }
+
+    throw new UsageStateError('Redis reconciliation reply was invalid');
   }
 
   async reserve(input: {
@@ -997,6 +1091,24 @@ function parseGrowthBalances(
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function parseStringArray(value: string | undefined, name: string): string[] {
+  if (value === undefined) throw new UsageStateError(`Redis reply omitted ${name}`);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new UsageStateError(`Redis reply had invalid ${name}`);
+  }
+  if (!Array.isArray(parsed) || !parsed.every(item => typeof item === 'string')) {
+    throw new UsageStateError(`Redis reply had invalid ${name}`);
+  }
+  return parsed;
+}
+
+function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function parseReply(value: unknown): string[] {

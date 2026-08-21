@@ -4,6 +4,8 @@
 
 The optional reconciliation API provides a **read-only** lookup for that case. It never creates, renews, releases, or settles quota state.
 
+v0.8 shares this result vocabulary with core `UsageOperationReconciliation` and exposes `reconcileRemoteCloudflareOperation()` as the generic entry point. The former `reconcileRemoteCloudflareReserve()` name remains exported as a v0.7-compatible alias.
+
 ## Gateway setup
 
 Use the reconciliable gateway wrapper instead of the base gateway when explicit reserve reconciliation is required:
@@ -23,12 +25,12 @@ The wrapper delegates normal `reserve`, `mark_liable`, `renew`, and `settle` req
 
 ## Client procedure
 
-Keep the exact original reserve input. After an ambiguous `CloudflareUsageTransportError` such as `network` or `timeout`, explicitly reconcile it:
+Keep the trusted logical operation identity, expected currently retained scalar units, and budget identities. For initial reserve lost-ACK recovery, this is the exact original reserve input. After an ambiguous `CloudflareUsageTransportError` such as `network` or `timeout`, explicitly reconcile it:
 
 ```ts
-import { reconcileRemoteCloudflareReserve } from 'mcp-usage-control-cloudflare/reconciliation';
+import { reconcileRemoteCloudflareOperation } from 'mcp-usage-control-cloudflare/reconciliation';
 
-const result = await reconcileRemoteCloudflareReserve(
+const result = await reconcileRemoteCloudflareOperation(
   {
     endpoint: process.env.MCP_USAGE_CLOUDFLARE_URL!,
     headers: () => ({
@@ -69,7 +71,7 @@ import {
   CloudflareUsageTransportError,
   RemoteCloudflareUsageStore,
 } from 'mcp-usage-control-cloudflare';
-import { reconcileRemoteCloudflareReserve } from 'mcp-usage-control-cloudflare/reconciliation';
+import { reconcileRemoteCloudflareOperation } from 'mcp-usage-control-cloudflare/reconciliation';
 
 const remoteOptions = {
   endpoint: process.env.MCP_USAGE_CLOUDFLARE_URL!,
@@ -97,7 +99,7 @@ try {
     (error.code === 'network' || error.code === 'timeout');
   if (!ambiguous) throw error;
 
-  const reconciled = await reconcileRemoteCloudflareReserve(remoteOptions, reserveInput);
+  const reconciled = await reconcileRemoteCloudflareOperation(remoteOptions, reserveInput);
 
   if (reconciled.status === 'active' && reconciled.state === 'pending') {
     const lease = control.resumeLease({
@@ -156,7 +158,7 @@ The lookup request sends only the opaque `cf1.<sha256>` reservation ID. It does 
 When a retained reservation is found, the client verifies:
 
 - the reservation ID matches the original operation;
-- `reservedUnits` matches the original attempted reserve;
+- `reservedUnits` matches the caller's expected retained scalar units;
 - the stored hashed budget identifiers exactly match the original budget set.
 
 Raw request and budget values are used only on the caller side to reconstruct `ReservationRecord`.

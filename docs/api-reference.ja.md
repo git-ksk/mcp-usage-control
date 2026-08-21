@@ -222,6 +222,38 @@ interface SettlementResult {
 
 tombstone retention中のidentical replayはidempotentです。units / outcomeが異なるconflicting replayはfailします。
 
+### `UsageOperationReconciliationInput` / `UsageOperationReconciliation` / `OperationReconciliationStore` (v0.8)
+
+```ts
+interface UsageOperationReconciliationInput {
+  request: UsageRequest;
+  units: number;
+  budgets: readonly Budget[];
+}
+
+type UsageOperationReconciliation =
+  | { status: 'absent'; reservationId: string }
+  | { status: 'active'; state: 'pending' | 'liable'; reservation: ReservationRecord }
+  | { status: 'expired'; state: 'pending' | 'liable'; reservationId: string; expiredAt: number }
+  | {
+      status: 'settled';
+      reservationId: string;
+      reservedUnits: number;
+      actualUnits: number;
+      tombstoneExpiresAt: number;
+    };
+
+interface OperationReconciliationStore extends UsageStore {
+  reconcileOperation(
+    input: UsageOperationReconciliationInput,
+  ): Promise<UsageOperationReconciliation>;
+}
+```
+
+optionalな **scalar-only / read-only** Store capabilityです。2個目のreservationを作成したり、liability / lease / settlement stateを変更したりせず、retained usage-enforcement stateだけを証明します。inputにはtrusted logical operation identity、期待するcurrent retained scalar units、expected budget keyを使います。mutable budget limitはhistorical identityではないため、過去値との一致を要求しません。
+
+`absent` は現在retained stateが見えないことだけを意味し、Store retention horizon後は「operationが過去に存在しなかった」証明ではありません。transport/backend failure、corrupt/unsupported state、identity/quote mismatchは`absent`へ変換せずrejectし、callerはindeterminateとしてfail closedします。詳しくは [Operation reconciliation / status](operation-reconciliation.ja.md) を参照してください。
+
 ### `MemoryUsageStore`
 
 ```ts
@@ -300,7 +332,9 @@ import {
 } from 'mcp-usage-control/conformance';
 ```
 
-portable runnerはmulti-budget atomicity、concurrent admission、replay scope、liability idempotency、renewal、settlement replay / conflict、invalid-settlement non-corruption、pending / liable expiryなどprovider-neutral behaviorを確認します。
+base portable runnerはmulti-budget atomicity、concurrent admission、replay scope、liability idempotency、renewal、settlement replay / conflict、invalid-settlement non-corruption、pending / liable expiryなどprovider-neutral behaviorを確認します。
+
+v0.8ではoptional `OperationReconciliationStore`向けに `runOperationReconciliationStoreConformance()` / `assertOperationReconciliationStoreConformance()` もexportします。`absent -> pending -> liable -> settled`、expired stateのread-only観測、expected-state mismatchのfail-closeを確認します。
 
 合格は **behavioral compatibility** の証明であり、persistence / HA、authoritative time、failover、lost-ACK safetyはbackend固有evidenceが別途必要です。
 
@@ -521,7 +555,7 @@ Durable Object implementationをexportし、`UsageControlDurableObject` とdeplo
 
 ### `mcp-usage-control-cloudflare/reconciliation`
 
-supported ambiguous remote reserve outcome向けexplicit read-only reserve-ACK reconciliation helper。reconciliationで追加quotaを作りません。
+authenticated read-only scalar operation reconciliation helperをexportします。`reconcileRemoteCloudflareOperation()` がv0.8のprovider-neutral operation-status entry pointで、`reconcileRemoteCloudflareReserve()` はambiguous initial-reserve ACK recovery向けv0.7互換aliasとして維持します。reconciliationで追加quotaを作りません。
 
 ### `mcp-usage-control-cloudflare/maintenance`
 

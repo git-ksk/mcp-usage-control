@@ -6,36 +6,37 @@
 
 この文書だけでv1.0 tag、GitHub Release、npm publicationを実行しません。
 
-## Status update — v0.7 closeout / v0.8次decision
+## Status update — v0.8 operation reconciliation decision
 
-**v0.7.0は2026-08-17にreleaseされ、latest GitHub/source baselineとしてcloseout済み**です。現在のactive decision targetは **v0.8.0 / #81** です。
+`v0.7.0` はlatest released GitHub/source baselineのままです。**v0.8.0 / #81はdesign / implementation proof gateを通過し、current source-release preparation targetです。**
 
-現在の実行順序は **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion** です。#99はGatewayMCPのreal dogfoodから追加されました。consumer側の即時mapping bugはv0.9前に修正可能ですが、再利用可能なMCPUsage contract / diagnosticsはv0.9 decision gateに置きます。
+v0.8後の実行順序は **v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion** です。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.9 decision gateに置きます。
 
-v0.7で#84の判断を明示確定します。
+v0.8で#81の判断を明示確定します。
 
-- existing scalar `UsageStore` / `UsageControl` semanticsはsource-compatibleのまま変更しない
-- heterogeneous usageは`VectorUsageControl` / `VectorUsageLease` / optional `VectorUsageStore`としてfuture v1へ **採用**
-- 異なるunitをsynthetic scalarへ加算しない
-- 1 logical operationに必要な全dimension / budgetを1 authoritative Store transaction domainでadmit / grow / recover / settleする
-- scalar / vector reservationは同じoperation-idempotency domainを共有
-- vector全体で1 Store-issued growth cursorを使い、v0.6 stable increment / lost-ACK semanticsをcompose
-- pending expiryは全dimensionをrelease、liable expiryは全dimensionをconservative retain、terminal vectorはgrowth replayをreject
-- portable vector conformanceに加え、Redis / Cloudflare Durable Objects / Firestoreでcommitted vector growth ACK-loss fault injectionを持つ
+- scalar operation reconciliationをoptional future-v1 Store capabilityとして **採用**
+- base `UsageStore` のsource compatibilityを維持
+- 共通read-only `absent` / `active` / `expired` / `settled` 語彙を採用
+- backend/transport failure、unsupported/corrupt state、trusted-input mismatchを`absent`へ変換せずindeterminate / fail closed
+- reconciliation中にsecond reservation、liability、renew、settle、recovery、replay state mutationを行わない
+- Memory / Redis / Firestoreでoptional interfaceを実装し、Cloudflareはauthenticated reconciliation subpathで同じcore vocabularyを提供
+- portable scalar reconciliation conformanceを追加し、provider-specific lost-ACK / time / durability / failover evidenceを別途維持
+- v0.8 reconciliationはscalar-only。generic vector initial-reserve ambiguityはfail closedのまま
+- business-result replay / business-side idempotencyはapplication-ownedのまま
 
 ## 判定
 
-**v0.7.0 source-release preparationへGO。normal CI / package / provider integration gate通過が条件です。**
+**v0.8.0 source-release preparationへGO。normal CI / package / provider integration gate通過が条件です。**
 
-#84はprovider-neutral contractとbuilt-in Store proofを持ち、v0.5 / v0.6までのresolved correctness gateもcarry forwardします。
+v0.5-v0.7までのresolved correctness gateをcarry forwardし、#81はprovider-neutral contract、built-in Store support matrix、portable conformance、Cloudflare provider-specific reconciliation evidenceを持ちます。
 
-**v1.0 readinessは引き続きprovisionalです。** #83 progressive growthと#84 atomic heterogeneous vector accountingをoptional future-v1 capabilityとして採用しました。#81 operation reconciliation/statusがv0.8.0の次feature decision gateです。
+**v1.0 readinessは引き続きprovisionalです。** #83 / #84 / #81をoptional future-v1 capabilityとして採用し、**#76 / #82 / #99が次のv0.9 product decision gate**です。
 
-## v0.7 accounting boundary
+## v0.8 accounting boundary
 
 application pathは互換な2系統になります。
 
-- **scalar path** — `UsagePolicy` -> `UsageControl` -> `UsageStore`。optional `ProgressiveUsageStore` growthあり
+- **scalar path** — `UsagePolicy` -> `UsageControl` -> `UsageStore`。optional `ProgressiveUsageStore` growth + optional scalar `OperationReconciliationStore` read-only statusあり
 - **vector path** — `VectorUsagePolicy` -> `VectorUsageControl` -> optional `VectorUsageStore`
 
 共通stable invariant:
@@ -73,9 +74,15 @@ Memoryがreference implementation。Redisは1 Lua transaction + additive vector 
 
 詳細は[Atomic heterogeneous usage vector](vector-usage.ja.md)と[Vector MCP integration](vector-mcp-integration.ja.md)を参照。
 
+### #81 — operation reconciliation / status — v0.8で採用
+
+v0.8ではoptional scalar read-only capabilityを採用します。Memory / Redis / Firestoreは `OperationReconciliationStore` を実装し、Cloudflareは `reconcileRemoteCloudflareOperation()` で同じresult vocabularyを提供しつつv0.7 reserve-specific aliasも維持します。reconciliationはcapacityを作らず、business replayも許可しません。unknown / prove不能stateはrejectしてfail closedのままです。portable conformanceでretained lifecycle status、expired state repeated readのnon-mutation、expected-state mismatchを検証します。
+
+詳細は [Operation reconciliation / status](operation-reconciliation.ja.md) を参照。
+
 ### その他open capability
 
-#81が次v0.8 decision targetです。#76 / #82 / #99はv0.9 operational-usability decisionです。#99ではcanonical settlement-outcome integration vocabulary、invalid integration inputとservice unavailableを区別できるbounded diagnostics、privacy-safe lifecycle visibilityを扱います。second accounting authorityを作らずfail-closedを弱めないlow-risk / clearly usefulなものだけv1候補にします。
+#76 / #82 / #99はv0.9 operational-usability decisionです。#99ではcanonical settlement-outcome integration vocabulary、invalid integration inputとservice unavailableを区別できるbounded diagnostics、privacy-safe lifecycle visibilityを扱います。second accounting authorityを作らずfail-closedを弱めないlow-risk / clearly usefulなものだけv1候補にします。
 
 first-class MCP Tasks integrationはupstream TypeScript protocol surface依存のままです。accounting lifecycle自体はすでにdefined / proof-testedです。
 
@@ -173,15 +180,17 @@ GitHub source releaseとnpm publicationは別操作です。v0.6.0や将来v1.0�
 
 ## 現在の結論
 
-**Current source baseline: v0.7.0 — RELEASED / CLOSED。**
+**Current released source baseline: v0.7.0 — RELEASED / CLOSED。**
 
-**Active decision target: v0.8.0 / #81 operation reconciliation / status。**
+**Current source-release preparation target: v0.8.0 / #81 operation reconciliation / status — ADOPTED / GATED。**
 
 **#83: optional progressive reservation growthとしてfuture v1へ採用。**
 
 **#84: optional atomic heterogeneous vector usageとしてfuture v1へ採用。**
 
-**#81: v0.8.0の次feature decision target。**
+**#81: optional scalar read-only operation reconciliationとしてfuture v1へ採用。**
+
+**次product decision target: v0.9.0 / #76 + #82 + #99。**
 
 **v1.0は新featureなしのlater stable promotion。**
 

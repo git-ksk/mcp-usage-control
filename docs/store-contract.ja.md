@@ -358,3 +358,17 @@ vector Storeは`reserveVector()` / `growVectorReservation()` / recovery / `settl
 vector growthはv0.6 stable increment / cursor contractをvector全体へcomposeします。ACK loss後のexact retryはauthoritative resultをreplayし、quota denialはcapacityを消費せずcursorをrotateし、stale cursor上のfresh incrementはfail closedです。settlementは全dimensionをexactly once報告し、dimensionごとのtotal successfully reserved capacity以内に制限します。
 
 Store compatibilityをclaimする前に`mcp-usage-control/conformance`の`runVectorUsageStoreConformance()`を実行してください。詳細は[Atomic heterogeneous usage vector](vector-usage.ja.md)を参照。
+
+## Optional scalar operation reconciliation contract (v0.8)
+
+`OperationReconciliationStore` は `UsageStore` のoptional read-only extensionです。accounting stateを変更せずretained scalar operation statusを返します。
+
+```ts
+interface OperationReconciliationStore extends UsageStore {
+  reconcileOperation(input: UsageOperationReconciliationInput): Promise<UsageOperationReconciliation>;
+}
+```
+
+reconciliation中にcapacity reserve/release、liability確定、renew、settle、replay state書換えを行ってはいけません。trusted logical operation identity、expected retained scalar units、budget identityを検証します。backend/transport failure、corrupt state、unsupported vector state、identity mismatchは`absent`へ変換せずindeterminate / fail closedのまま扱います。
+
+このcapabilityを実装するStoreは `runOperationReconciliationStoreConformance()` / `assertOperationReconciliationStoreConformance()` を実行し、backend固有のlost-ACK / time / durability / failover evidenceも別途必要です。v0.8 portable contractはscalar-onlyで、`VectorUsageStore`へgeneric reconciliation claimを暗黙継承しません。詳細は [Operation reconciliation / status](operation-reconciliation.ja.md)。
