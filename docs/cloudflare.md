@@ -186,6 +186,12 @@ Coverage includes:
 - gateway authentication;
 - observer failure isolation.
 
+## Operation reconciliation (v0.8)
+
+`mcp-usage-control-cloudflare/reconciliation` adopts the common v0.8 scalar operation-status vocabulary. `reconcileRemoteCloudflareOperation()` is the generic read-only entry point; existing `reconcileRemoteCloudflareReserve()` remains as a v0.7-compatible alias. The authenticated lookup never creates a reservation or releases, renews, or settles usage.
+
+See [Operation reconciliation/status](operation-reconciliation.md) and [Cloudflare reserve ACK reconciliation](cloudflare-reserve-reconciliation.md) for the fail-closed boundary.
+
 ## Current limitations
 
 - every budget in one reservation uses the same quoted/actual unit count, matching core v0.1;

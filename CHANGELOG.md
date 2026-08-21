@@ -8,6 +8,39 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.8.0] - 2026-08-22
+
+Eighth GitHub/source release preparation. npm publication remains intentionally separate and is not authorized by this change.
+
+### Added
+
+- Added provider-neutral scalar operation reconciliation through optional `OperationReconciliationStore`, `UsageOperationReconciliationInput`, and the common `absent` / `active` / `expired` / `settled` result vocabulary while keeping base `UsageStore` source-compatible.
+- Added portable `runOperationReconciliationStoreConformance()` / `assertOperationReconciliationStoreConformance()` coverage for retained lifecycle status, repeated read-only expired observation, and fail-closed expected-state mismatch.
+- Added bilingual operation-reconciliation documentation defining safe reattachment, retention-horizon semantics, explicit indeterminate/fail-closed behavior, and the boundary from business-result replay.
+
+### Provider implementation / proof
+
+- Memory: `reconcileOperation()` reads retained in-process scalar state without running expiry recovery or mutating accounting; process restart remains an explicit historical-absence limitation.
+- Redis: a read-only Lua lookup uses Redis `TIME`, `HGET`, and `ZSCORE`; expected reserved units and budget hashes are verified, and malformed settled/tombstone state fails closed instead of becoming `absent`. Real-Redis CI runs portable reconciliation conformance.
+- Firestore: a read-only transaction looks up the deterministic hashed reservation document and validates expected retained units/budget hashes without cleanup/recovery writes. Emulator CI runs portable reconciliation conformance under the existing bounded-host-clock contract.
+- Cloudflare Durable Objects: the existing authenticated read-only reconciliation protocol now returns the core v0.8 result type through `reconcileRemoteCloudflareOperation()`; `reconcileRemoteCloudflareReserve()` remains as a v0.7-compatible alias and existing local/deployed lost-ACK proof carries forward.
+
+### Safety / compatibility
+
+- Reconciliation never reserves/releases capacity, marks liability, renews, settles, or rewrites replay state. It is status proof only.
+- `absent` means only that no state is retained at lookup time; it is not historical proof after a Store retention horizon and never automatically authorizes replay.
+- Backend/transport failure, corrupt/unsupported state, scalar/vector mode mismatch, and trusted expected-state mismatch reject and remain indeterminate/fail closed rather than being mapped to `absent`.
+- Mutable budget limits are not historical operation identity: reconciliation verifies budget keys plus expected retained scalar units, preserving the existing same-key mutable-limit contract.
+- The v0.8 generic capability is intentionally scalar-only. Vector initial-reserve ambiguity remains fail closed unless a future provider-specific mechanism proves an equivalent read-only contract.
+- Business side-effect/result replay remains application-owned and separate from usage accounting.
+- #81 is adopted for the future v1 stable surface as an optional scalar Store capability. #76/#82/#99 become the next v0.9 product decision gate.
+
+### Release boundary
+
+- All five package manifests are aligned at `0.8.0`.
+- The normal release gate remains Node 20/22/24, real Redis, Cloudflare local workerd, Firestore Emulator, package tarball/content, and clean-consumer verification.
+- This preparation does **not** create the `v0.8.0` tag, GitHub Release, or npm publication.
+
 ## [0.7.0] - 2026-08-17
 
 Seventh GitHub/source release. npm publication remains intentionally separate and was not performed.

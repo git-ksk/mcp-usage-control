@@ -555,3 +555,36 @@ record.lastVectorGrowth = {
 redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
 return { 'accepted', nextGrowthCursor, cjson.encode(previous), cjson.encode(current), cjson.encode(remainingByHashes) }
 `;
+
+
+export const RECONCILE_OPERATION_SCRIPT = String.raw`
+local reservationId = ARGV[1]
+local redisTime = redis.call('TIME')
+local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
+local raw = redis.call('HGET', KEYS[1], reservationId)
+if not raw then return { 'absent' } end
+local record = cjson.decode(raw)
+if record.mode == 'vector' then return { 'mode_mismatch' } end
+local state = record.state
+local reservedUnits = tonumber(record.reservedUnits)
+local expiresAt = tonumber(record.expiresAt)
+local budgetHashes = cjson.encode(record.budgetHashes or {})
+local growthCursor = record.growthCursor or ''
+if state == 'pending' or state == 'liable' then
+  if expiresAt <= now then
+    return { 'expired', state, tostring(reservedUnits), tostring(expiresAt), budgetHashes, growthCursor }
+  end
+  return { 'active', state, tostring(reservedUnits), tostring(expiresAt), budgetHashes, growthCursor }
+end
+if state ~= 'settled' then return { 'invalid_state' } end
+local tombstoneScore = redis.call('ZSCORE', KEYS[2], record.operationKey)
+if not tombstoneScore then return { 'invalid_state' } end
+local tombstoneExpiresAt = tonumber(tombstoneScore)
+if tombstoneExpiresAt <= now then return { 'absent' } end
+if record.outcome == 'lease_expired_after_execution_started' then
+  return { 'expired', 'liable', tostring(reservedUnits), tostring(expiresAt), budgetHashes, growthCursor }
+end
+local actualUnits = tonumber(record.actualUnits)
+if not actualUnits then return { 'invalid_state' } end
+return { 'settled', tostring(reservedUnits), tostring(actualUnits), tostring(tombstoneExpiresAt), budgetHashes }
+`;

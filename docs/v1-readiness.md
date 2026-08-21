@@ -6,36 +6,37 @@ This document records the evidence accumulated toward a future v1.0. It is a **r
 
 No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
-## Status update — v0.7 closeout / v0.8 next decision
+## Status update — v0.8 operation-reconciliation decision
 
-**v0.7.0 was released on 2026-08-17 and is closed out as the latest GitHub/source baseline.** The active decision target is now **v0.8.0 / #81**.
+`v0.7.0` remains the latest released GitHub/source baseline. **v0.8.0 / #81 has passed its design/implementation proof gate and is the current source-release preparation target.**
 
-Current execution order is **v0.8/#81 -> v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion**. #99 was added from real GatewayMCP dogfood; its immediate consumer-side mapping bug may be fixed before v0.9, while the reusable MCPUsage contract/diagnostics remain part of the v0.9 decision gate.
+After v0.8, the execution order is **v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion**. #99 came from real GatewayMCP dogfood; its immediate consumer-side mapping bug may land earlier while reusable MCPUsage diagnostics stay in the v0.9 decision gate.
 
-The v0.7 decision for #84 is explicit:
+The v0.8 decision for #81 is explicit:
 
-- existing scalar `UsageStore` / `UsageControl` semantics remain source-compatible and unchanged;
-- heterogeneous usage is adopted as an **optional** future-v1 capability through `VectorUsageControl`, `VectorUsageLease`, and `VectorUsageStore`;
-- unlike units are never summed into one synthetic scalar;
-- every required dimension/budget for one logical operation admits, grows, recovers, and settles in one authoritative Store transaction domain;
-- scalar and vector reservations share one operation-idempotency domain;
-- one Store-issued vector growth cursor composes v0.6 stable-increment/lost-ACK semantics across all dimensions;
-- pending expiry releases every dimension, liable expiry conservatively retains every dimension, and terminal vectors reject growth replay;
-- Redis, Cloudflare Durable Objects, and Firestore have provider-specific committed-vector-growth acknowledgement-loss proof in addition to portable vector conformance.
+- adopt scalar operation reconciliation as an **optional** future-v1 Store capability;
+- keep the base `UsageStore` source-compatible;
+- use the common read-only `absent` / `active` / `expired` / `settled` result vocabulary;
+- make backend/transport failure, unsupported/corrupt state, and trusted-input mismatch indeterminate and fail closed rather than mapping them to `absent`;
+- never allocate a second reservation or mutate liability, renewal, settlement, recovery, or replay state during reconciliation;
+- support the optional interface in Memory, Redis, and Firestore, while Cloudflare exposes the same core vocabulary through its authenticated reconciliation subpath;
+- add portable scalar reconciliation conformance while retaining provider-specific lost-ACK, time, durability, and failover evidence;
+- keep v0.8 reconciliation scalar-only; generic vector initial-reserve ambiguity remains fail closed;
+- keep business-result replay and business-side idempotency application-owned.
 
 ## Verdict
 
-**GO for v0.7.0 source-release preparation, subject to the normal CI/package/provider-integration gate.**
+**GO for v0.8.0 source-release preparation, subject to the normal CI/package/provider-integration gate.**
 
-The previously resolved v0.5/v0.6 correctness gates remain carried forward, and #84 now has a provider-neutral contract plus built-in Store proof.
+The resolved v0.5-v0.7 correctness gates remain carried forward, and #81 now has a provider-neutral contract, built-in Store support matrix, portable conformance, and Cloudflare provider-specific reconciliation evidence.
 
-**v1.0 readiness remains intentionally provisional.** #83 progressive growth and #84 atomic heterogeneous vector accounting are adopted as optional future-v1 capabilities. #81 operation reconciliation/status is the next feature decision gate in v0.8.0.
+**v1.0 readiness remains intentionally provisional.** #83, #84, and #81 are adopted as optional future-v1 capabilities. **#76, #82, and #99 are the next v0.9 product decision gate.**
 
-## v0.7 accounting boundary
+## v0.8 accounting boundary
 
 The project now has two compatible application paths:
 
-- **scalar path** — `UsagePolicy` -> `UsageControl` -> `UsageStore`, with optional `ProgressiveUsageStore` growth;
+- **scalar path** — `UsagePolicy` -> `UsageControl` -> `UsageStore`, with optional `ProgressiveUsageStore` growth and optional scalar `OperationReconciliationStore` read-only status;
 - **vector path** — `VectorUsagePolicy` -> `VectorUsageControl` -> optional `VectorUsageStore`.
 
 Stable invariants across both paths:
@@ -73,9 +74,15 @@ Memory is the reference implementation. Redis uses one Lua transaction with addi
 
 See [Atomic heterogeneous usage vectors](vector-usage.md) and [Vector MCP integration](vector-mcp-integration.md).
 
+### #81 — operation reconciliation/status — ADOPTED in v0.8
+
+The v0.8 proof adopts an optional scalar read-only capability. Memory, Redis, and Firestore implement `OperationReconciliationStore`; Cloudflare exposes the same result vocabulary through `reconcileRemoteCloudflareOperation()` while retaining the v0.7 reserve-specific alias. Reconciliation never creates capacity or authorizes business replay. Unknown/unprovable state rejects and remains fail closed. The portable conformance runner covers retained lifecycle status, repeated expired-state reads without mutation, and expected-state mismatch.
+
+See [Operation reconciliation/status](operation-reconciliation.md).
+
 ### Other open capabilities
 
-#81 is the next v0.8 decision target. #76, #82, and #99 are the v0.9 operational-usability decisions. #99 covers canonical settlement-outcome integration vocabulary, bounded diagnostics that distinguish invalid integration input from service unavailability, and privacy-safe lifecycle visibility. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
+#76, #82, and #99 are the v0.9 operational-usability decisions. #99 covers canonical settlement-outcome integration vocabulary, bounded diagnostics that distinguish invalid integration input from service unavailability, and privacy-safe lifecycle visibility. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
 
 First-class MCP Tasks integration likewise remains dependent on the upstream TypeScript protocol surface; the accounting lifecycle itself is already defined and proof-tested.
 
@@ -175,15 +182,17 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 ## Current decision
 
-**Current source baseline: v0.7.0 — RELEASED / CLOSED.**
+**Current released source baseline: v0.7.0 — RELEASED / CLOSED.**
 
-**Active decision target: v0.8.0 / #81 operation reconciliation/status.**
+**Current source-release preparation target: v0.8.0 / #81 operation reconciliation/status — ADOPTED / GATED.**
 
 **#83: ADOPTED for future v1 as optional progressive reservation growth.**
 
 **#84: ADOPTED for future v1 as optional atomic heterogeneous vector usage.**
 
-**#81: next feature decision target in v0.8.0.**
+**#81: ADOPTED for future v1 as optional scalar read-only operation reconciliation.**
+
+**Next product decision target: v0.9.0 / #76 + #82 + #99.**
 
 **v1.0 remains a later stable promotion with no new feature.**
 

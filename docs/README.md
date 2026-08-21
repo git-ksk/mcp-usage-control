@@ -35,6 +35,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Vector MCP integration](vector-mcp-integration.md) — explicit MCP lifecycle for safely consuming vector capacity.
 - [MCP Tasks accounting](mcp-tasks-accounting.md) — the long-running task accounting state machine and its separation from business task/result replay.
 - [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
+- [Operation reconciliation/status](operation-reconciliation.md) — v0.8 read-only scalar operation-state vocabulary, fail-closed ambiguity boundary, Store support matrix, and portable conformance.
 - [Mutable quota limits](mutable-quota-limits.md) — same-key upgrade/downgrade/override semantics and policy-rollout consistency requirements.
 - [API reference](api-reference.md) — the current public source API and package entry points.
 - [Observability](observability.md) — lifecycle events, privacy, cardinality, and best-effort delivery.

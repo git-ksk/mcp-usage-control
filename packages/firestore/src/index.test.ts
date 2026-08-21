@@ -242,6 +242,80 @@ describe('FirestoreUsageStore', () => {
     expect(retry.accepted).toBe(true);
   });
 
+  it('reconciles scalar operation state read-only and validates the original quote shape', async () => {
+    const database = new FakeFirestore();
+    let now = 1_000;
+    const store = new FirestoreUsageStore(database, {
+      cleanupBatchSize: 0,
+      expiryGraceMs: 0,
+      now: () => now,
+    });
+    const req = request('reconcile-op');
+    const input = {
+      request: req,
+      units: 1,
+      budgets: [{ key: 'day:user-a', limit: 3 }],
+    };
+
+    expect(await store.reconcileOperation(input)).toMatchObject({ status: 'absent' });
+    const reserved = await store.reserve({ ...input, ttlMs: 100 });
+    expect(reserved.accepted).toBe(true);
+    if (!reserved.accepted) return;
+
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'active',
+      state: 'pending',
+    });
+    await store.markLiable({ reservationId: reserved.reservation.id });
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'active',
+      state: 'liable',
+    });
+
+    await store.settle({ reservationId: reserved.reservation.id, actualUnits: 1, outcome: 'completed' });
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'settled',
+      reservedUnits: 1,
+      actualUnits: 1,
+    });
+
+    await expect(
+      store.reconcileOperation({
+        ...input,
+        units: 2,
+        budgets: [{ key: 'day:user-a', limit: 3 }],
+      }),
+    ).rejects.toThrow(/does not match retained reservation state/);
+
+    now += 86_400_001;
+    expect(await store.reconcileOperation(input)).toMatchObject({ status: 'absent' });
+  });
+
+  it('reports expired active state without performing recovery writes', async () => {
+    const database = new FakeFirestore();
+    let now = 10_000;
+    const store = new FirestoreUsageStore(database, {
+      cleanupBatchSize: 0,
+      expiryGraceMs: 0,
+      now: () => now,
+    });
+    const req = request('reconcile-expired');
+    const input = {
+      request: req,
+      units: 1,
+      budgets: [{ key: 'reconcile:expiry', limit: 1 }],
+    };
+    const reserved = await store.reserve({ ...input, ttlMs: 50 });
+    expect(reserved.accepted).toBe(true);
+    now += 51;
+
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'expired',
+      state: 'pending',
+    });
+    expect(database.rows('muc_reservations')).toHaveLength(1);
+  });
+
   it('serializes parallel reservations against a shared tenant budget', async () => {
     const database = new FakeFirestore();
     const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });

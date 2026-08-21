@@ -66,11 +66,13 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは次のGitHub/source release preparation向けに `0.7.0` へ揃えます。`v0.6.0` はlatest released source baselineで、npm registry publicationは引き続き意図的にdeferredです。
+5 packageのmanifestは次のGitHub/source release preparation向けに `0.8.0` へ揃えます。`v0.7.0` はlatest released source baselineで、npm registry publicationは引き続き意図的にdeferredです。
+
+**現在の実行順序:** **v0.8.0 / #81はdesign / implementation decision gateを通過し、採用判断です。** v0.8 source release後は **v0.9.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.10.0 / #24 + #6** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionへ進みます。
 
 ## v0.5後に再評価するv1 scope
 
-**v1 API freezeはまだfinalではありません**。v0.6のprogressive growthに続き、v0.7ではbase scalar `UsageStore`互換を維持したままatomic heterogeneous vector accountingをoptional future-v1 capabilityとして採用します。
+**v1 API freezeはまだfinalではありません**。v0.6 progressive growth、v0.7 atomic heterogeneous vectorに続き、v0.8ではbase `UsageStore`互換を維持したままread-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用します。
 
 | 領域 | current status | 境界 |
 | --- | --- | --- |
@@ -82,6 +84,7 @@ remaining確認 -> paid work実行 -> counter加算
 | shared / durable MRTR compare-and-consume | **current v1 direction** | sticky MCP sessionなしのcross-instance resume |
 | progressive reservation growth (#83) | **v0.6で採用** | optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic / lost-ACK / provider proof |
 | heterogeneous multi-dimensional usage (#84) | **v0.7で採用** | optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
+| operation reconciliation/status (#81) | **v0.8で採用** | optional scalar `OperationReconciliationStore`; read-only `absent` / `active` / `expired` / `settled`、mismatch / unknownはfail closed、Store別support matrix |
 | first-class MCP Tasks adapter | **upstream stabilization次第** | accounting semanticsは定義済み、stable adapter未宣言 |
 | new stateless MRTR claim mode | **必要性が出るまでdeferred** | shared one-time claimより明確な利点なし |
 | billing / financial ledger / workflow replay | **out of scope** | enforcement外 |
@@ -287,6 +290,7 @@ raw tool arguments / exception messageは自動収集しません。`projectUsag
 - [Architecture](docs/architecture.ja.md)
 - [Memory Storeの長期運用](docs/memory-store.ja.md)
 - [Store実装contract](docs/store-contract.ja.md)
+- [Operation reconciliation / status](docs/operation-reconciliation.ja.md)
 - [Redis](docs/redis.ja.md)
 - [Cloudflare](docs/cloudflare.ja.md)
 - [Firestore](docs/firestore.ja.md)
@@ -301,7 +305,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.7.0` がcurrent source-release preparation targetです。#83と#84はfuture v1 surfaceへoptional capabilityとして採用し、#81が次のv0.8 decision targetです。tag / GitHub Release / npm publicationは別操作です。
+`v0.8.0` がcurrent source-release preparation targetです。#81はread-only scalar optional Store capabilityとしてfuture v1 surfaceへ採用し、v0.8 release後は **v0.9.0 / #76 + #82 + #99** が次product decision targetです。tag / GitHub Release / npm publicationは別操作です。
 
 **npm publicationは別途explicit authorizationが必要で、まだ実施していません。**
 

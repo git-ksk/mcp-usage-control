@@ -71,6 +71,7 @@ protectTool()
 - [Vector MCP integration](vector-mcp-integration.ja.md) — MCPでvector capacityを安全に使うexplicit lifecycle pattern。 — incrementally metered MCP workでのsmall reserve / top-up / safe stop pattern。
 - [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
+- [Operation reconciliation / status](operation-reconciliation.ja.md) — v0.8 read-only scalar operation state語彙、fail-closed ambiguity boundary、Store別support matrix、portable conformance
 - [Mutable quota limit](mutable-quota-limits.ja.md) — same-key upgrade / downgrade / override semanticsとpolicy rollout consistency
 - [API reference](api-reference.ja.md) — current sourceのpublic API / package entry point
 - [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics

@@ -98,6 +98,61 @@ integration('RedisUsageStore', () => {
     expect(results.filter(result => !result.allowed && result.reason === 'quota_exceeded')).toHaveLength(99);
   });
 
+  it('reconciles scalar operation state without mutating Redis accounting state', async () => {
+    const store = new RedisUsageStore(client);
+    const req = request('reconcile-op');
+    const input = {
+      request: req,
+      units: 1,
+      budgets: [{ key: 'month:user-1:2026-08', limit: 2 }],
+    };
+
+    expect(await store.reconcileOperation(input)).toMatchObject({ status: 'absent' });
+    const reserved = await store.reserve({ ...input, ttlMs: 5_000 });
+    expect(reserved.accepted).toBe(true);
+    if (!reserved.accepted) return;
+
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'active',
+      state: 'pending',
+    });
+    await store.markLiable({ reservationId: reserved.reservation.id });
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'active',
+      state: 'liable',
+    });
+    await store.settle({
+      reservationId: reserved.reservation.id,
+      actualUnits: 1,
+      outcome: 'completed',
+    });
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'settled',
+      reservedUnits: 1,
+      actualUnits: 1,
+    });
+  });
+
+  it('rejects reconciliation when retained scalar quote shape does not match', async () => {
+    const store = new RedisUsageStore(client);
+    const req = request('reconcile-mismatch');
+    const reserved = await store.reserve({
+      request: req,
+      units: 1,
+      budgets: [{ key: 'month:user-1:2026-08', limit: 2 }],
+      ttlMs: 5_000,
+    });
+    expect(reserved.accepted).toBe(true);
+
+    await expect(
+      store.reconcileOperation({
+        request: req,
+        units: 2,
+        budgets: [{ key: 'month:user-1:2026-08', limit: 2 }],
+      }),
+    ).rejects.toThrow(/does not match retained reservation state/);
+  });
+
   it('atomically protects an overlapping shared tenant budget across 100 users', async () => {
     const control = new UsageControl(new RedisUsageStore(client), multiPolicy(1));
     const results = await Promise.all(

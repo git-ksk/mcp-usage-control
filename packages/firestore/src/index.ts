@@ -5,6 +5,7 @@ import {
   type BudgetRemaining,
   type GrowReservationInput,
   type MarkLiableInput,
+  type OperationReconciliationStore,
   type ProgressiveUsageStore,
   type MarkLiableResult,
   type RenewInput,
@@ -14,6 +15,8 @@ import {
   type StoreGrowResult,
   type StoreReserveResult,
   type UsageRequest,
+  type UsageOperationReconciliation,
+  type UsageOperationReconciliationInput,
   type UsageStore,
   type UsageDimension,
   type UsageDimensionActual,
@@ -234,7 +237,7 @@ const EXPIRED_LIABLE_OUTCOME = 'lease_expired_after_execution_started';
  * are SHA-256 hashed before becoming document IDs; hashing reduces accidental identifier
  * exposure but is not encryption.
  */
-export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageStore {
+export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageStore, OperationReconciliationStore {
   private readonly prefix: string;
   private readonly idempotencyTtlMs: number;
   private readonly cleanupBatchSize: number;
@@ -263,6 +266,77 @@ export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageSt
     assertNonNegativeInteger(this.cleanupBatchSize, 'cleanupBatchSize');
     assertNonNegativeInteger(this.cleanupIntervalMs, 'cleanupIntervalMs');
     assertNonNegativeInteger(this.expiryGraceMs, 'expiryGraceMs');
+  }
+
+  async reconcileOperation(
+    input: UsageOperationReconciliationInput,
+  ): Promise<UsageOperationReconciliation> {
+    assertNonNegativeInteger(input.units, 'units');
+    validateRequestIdentity(input.request);
+    const budgets = canonicalizeBudgets(input.budgets);
+    const expectedBudgetIds = budgets.map(budget => digest(budget.key));
+    const reservationId = reservationIdFor(input.request);
+    const reservationRef = this.reservations().doc(reservationId);
+    const now = this.nowMs();
+
+    const reservation = await this.runTransaction(async transaction =>
+      readReservation(await transaction.get(reservationRef)),
+    );
+    if (!reservation) return { status: 'absent', reservationId };
+    if (isVectorReservation(reservation)) {
+      throw new UsageStateError('Scalar operation reconciliation cannot target a vector reservation');
+    }
+    if (
+      reservation.reservedUnits !== input.units ||
+      !sameStringArray(reservation.budgetIds, expectedBudgetIds)
+    ) {
+      throw new UsageStateError('Operation reconciliation input does not match retained reservation state');
+    }
+
+    if (reservation.state === 'pending' || reservation.state === 'liable') {
+      if (this.isExpired(reservation, now)) {
+        return {
+          status: 'expired',
+          state: reservation.state,
+          reservationId,
+          expiredAt: reservation.expiresAtMs,
+        };
+      }
+      return {
+        status: 'active',
+        state: reservation.state,
+        reservation: {
+          id: reservationId,
+          operationId: input.request.operationId,
+          principalId: input.request.principal.id,
+          ...(input.request.principal.tenantId === undefined
+            ? {}
+            : { tenantId: input.request.principal.tenantId }),
+          ...(input.request.principal.plan === undefined
+            ? {}
+            : { plan: input.request.principal.plan }),
+          tool: input.request.tool,
+          budgetKeys: budgets.map(budget => budget.key),
+          reservedUnits: reservation.reservedUnits,
+          expiresAt: reservation.expiresAtMs,
+          ...(reservation.growthCursor === undefined
+            ? {}
+            : { growthCursor: reservation.growthCursor }),
+        },
+      };
+    }
+
+    if (this.isExpired(reservation, now)) return { status: 'absent', reservationId };
+    if (reservation.actualUnits === undefined) {
+      throw new UsageStateError('Settled reservation is missing reconciliation state');
+    }
+    return {
+      status: 'settled',
+      reservationId,
+      reservedUnits: reservation.reservedUnits,
+      actualUnits: reservation.actualUnits,
+      tombstoneExpiresAt: reservation.expiresAtMs,
+    };
   }
 
   async reserve(input: {

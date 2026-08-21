@@ -57,6 +57,12 @@ store.retireBudgetKey('day:user:42:2026-08-13');
 
 unitsが0のreservationはbudget keyをretained usage mapへ追加しません。
 
+## Operation reconciliation (v0.8)
+
+`MemoryUsageStore` はoptional `OperationReconciliationStore` を実装します。`reconcileOperation()` はexpiry recoveryを実行せず、quota stateを書き換えずにretained scalar operation stateをreadします。expected logical operation identity、reserved units、budget keyを検証し、共通の `absent` / `active` / `expired` / `settled` 語彙を返します。
+
+Memory stateはprocess-localなので、restart後の`absent`を「operationが過去に存在しなかった」historical proofとして扱えません。scalar reconciliationはretained vector reservationをrejectします。
+
 ## production guidance
 
 次のどれかに当てはまる場合はshared / durable storeを使用してください。

@@ -10,9 +10,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.7.0 is released and closed out** as the current pre-v1 source baseline. #84 passed its design/implementation proof gate and is adopted as an optional future-v1 capability. **v0.8.0 / #81 is now the active decision target.**
+**v0.7.0 is released and closed out** as the current pre-v1 source baseline. **v0.8.0 / #81 has passed its design/implementation proof gate and is the current source-release preparation target.** Read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability.
 
-The repository execution order is intentionally linear: **v0.7.0 closed -> v0.8/#81 (active) -> v0.9/#76+#82+#99 -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
+The repository execution order is intentionally linear: **v0.7.0 closed -> v0.8/#81 release preparation -> v0.9/#76+#82+#99 (next) -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
@@ -41,7 +41,7 @@ Each release below is a **decision gate**. A target feature is not forced into v
 | --- | --- | --- | --- |
 | **v0.6.0** | #83 progressive reservation growth | **Adopted** as an optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`, growth cursor + stable increment identity, atomic multi-budget proof, lost-ACK replay fence, provider conformance |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **Adopted** as an optional v1 core/Store extension | Separate `VectorUsageControl` / `VectorUsageStore`, one logical replay identity, atomic per-dimension admission/growth/settlement, deterministic retry/conflict semantics, provider conformance |
-| **v0.8.0** | #81 operation reconciliation/status | Include a coherent read-only reconciliation capability and per-Store support matrix | No second reservation, authoritative/provable states only, explicit `unknown/indeterminate`, adapter-specific lost-ACK evidence; otherwise define and freeze the narrower supported boundary |
+| **v0.8.0** | #81 operation reconciliation/status | **Adopted** as an optional scalar v1 Store capability | Common read-only status vocabulary, no second reservation, mismatch/unprovable state fail closed, Memory/Redis/Firestore support + Cloudflare reconciliation subpath, portable/provider evidence |
 | **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals + #99 dogfood integration diagnostics | Include bounded non-authoritative production observability/tooling, canonical helpers, and a clear settlement-outcome integration contract | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement, canonical outcome vocabulary/normalization, bounded diagnostics for invalid settlement vocabulary; documentation-only outcome is acceptable if a stateful API adds more risk than value |
 | **v0.10.0** | Final completion / distribution / API freeze | Close all remaining v1-scope decisions and prove the public distribution | #24 Cloudflare real-operation boundary, #6 first npm publication, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |
 | **v1.0.0** | Stable promotion | Declare the completed surface stable | No new feature; version/changelog/release promotion only after v0.10 completion criteria are satisfied |
@@ -79,11 +79,13 @@ The proof covers scalar/vector operation collision, all-or-nothing multi-dimensi
 
 ### v0.8.0 — operation reconciliation/status (#81)
 
-A complete failure-safe product should define what operators can safely learn after an ambiguous state-changing acknowledgement.
+**Decision: adopt for the future v1 stable surface as an optional scalar Store capability.** The base `UsageStore` remains source-compatible. `OperationReconciliationStore` adds a read-only `reconcileOperation()` capability for Stores that can prove retained scalar operation state; Cloudflare keeps the equivalent authenticated reconciliation subpath rather than forcing the method onto the remote base API.
 
-The preferred outcome is a small read-only status vocabulary plus an explicit per-Store capability matrix. Unsupported or unprovable states remain `unknown/indeterminate` and fail closed. Business result replay stays application-owned.
+The common vocabulary is `absent`, `active/pending`, `active/liable`, `expired/pending`, `expired/liable`, and `settled`. Backend/transport failure, corrupt or unsupported state, and trusted-input mismatch do not become a successful status; callers classify them as indeterminate and fail closed. `absent` means only that no state is retained now and never becomes automatic replay authorization after the retention horizon.
 
-A universal mandatory Store lookup is not required if adapter-specific capability is the safer design.
+Reconciliation is strictly read-only: it does not reserve or release capacity, mark liability, renew, settle, or rewrite replay state. Memory, Redis, and Firestore implement the optional interface; Cloudflare exposes the same core result vocabulary through `reconcileRemoteCloudflareOperation()`, while the v0.7 `reconcileRemoteCloudflareReserve()` name remains compatible. Portable conformance covers lifecycle status, repeated read-only expired observation, and expected-state mismatch; provider-specific ambiguity/time/durability evidence remains required.
+
+The v0.8 claim is intentionally scalar-only. Vector initial-reserve ambiguity stays fail closed unless a later release adds a separately proven vector reconciliation mechanism. Business-result replay remains application-owned and outside usage accounting.
 
 ### v0.9.0 — operational usability (#76, #82, #99)
 
@@ -122,7 +124,7 @@ It must resolve:
 | --- | --- | --- |
 | #83 progressive reservation growth | **v0.6.0** | **Adopted**: optional progressive Store capability + `UsageLease.grow()` |
 | #84 heterogeneous multi-dimensional usage | **v0.7.0** | **Adopted**: optional atomic vector Store capability + `VectorUsageControl` |
-| #81 operation reconciliation/status | **v0.8.0** | Prefer inclusion as read-only capability vocabulary + Store support matrix |
+| #81 operation reconciliation/status | **v0.8.0** | **Adopted**: optional scalar read-only capability vocabulary + Store support matrix |
 | #76 operational usage snapshot | **v0.9.0** | Prefer bounded non-authoritative helper/pattern |
 | #82 threshold/exhaustion signals | **v0.9.0** | Prefer optional scoped helper/pattern built on #76 semantics |
 | #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | Clarify canonical integration vocabulary, distinguish invalid outcome from service outage, and add privacy-safe lifecycle visibility; consumer mapping bug may be fixed earlier |

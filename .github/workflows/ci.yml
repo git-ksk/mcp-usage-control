@@ -180,6 +180,8 @@ jobs:
           grep -qx 'package/dist/store-conformance.d.ts' <<<"$core_listing"
           grep -qx 'package/dist/progressive-store-conformance.js' <<<"$core_listing"
           grep -qx 'package/dist/progressive-store-conformance.d.ts' <<<"$core_listing"
+          grep -qx 'package/dist/reconciliation-conformance.js' <<<"$core_listing"
+          grep -qx 'package/dist/reconciliation-conformance.d.ts' <<<"$core_listing"
           grep -qx 'package/dist/vector-store-conformance.js' <<<"$core_listing"
           grep -qx 'package/dist/vector-store-conformance.d.ts' <<<"$core_listing"
           mcp_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-mcp-${version}.tgz")"
@@ -222,6 +224,7 @@ jobs:
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
           import {
             assertUsageStoreConformance,
+            runOperationReconciliationStoreConformance,
             runProgressiveUsageStoreConformance,
             runVectorUsageStoreConformance,
           } from 'mcp-usage-control/conformance';
@@ -233,6 +236,7 @@ jobs:
           import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
           import {
             createReconciliableCloudflareUsageStoreGateway,
+            reconcileRemoteCloudflareOperation,
             reconcileRemoteCloudflareReserve,
           } from 'mcp-usage-control-cloudflare/reconciliation';
           import {
@@ -243,6 +247,7 @@ jobs:
             MemoryUsageStore,
             UsageControl,
             assertUsageStoreConformance,
+            runOperationReconciliationStoreConformance,
             runProgressiveUsageStoreConformance,
             FirestoreUsageStore,
             protectTool,
@@ -252,6 +257,7 @@ jobs:
             CloudflareUsageStore,
             RemoteCloudflareUsageStore,
             createReconciliableCloudflareUsageStoreGateway,
+            reconcileRemoteCloudflareOperation,
             reconcileRemoteCloudflareReserve,
             createCloudflareBudgetMaintenanceGateway,
             pruneRemoteCloudflareHistoricalBudgets,

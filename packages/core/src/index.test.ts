@@ -135,6 +135,88 @@ describe('UsageControl', () => {
     expect(duplicate).toEqual({ allowed: false, reason: 'duplicate_operation' });
   });
 
+  it('reconciles retained scalar operation state without changing accounting state', async () => {
+    const store = new MemoryUsageStore();
+    const input = {
+      request: request('reconcile-active'),
+      units: 1,
+      budgets: [{ key: 'monthly:user-1', limit: 1 }],
+    };
+
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'absent',
+    });
+
+    const control = new UsageControl(store, policy);
+    const admitted = await control.reserve(input.request);
+    expect(admitted.allowed).toBe(true);
+    if (!admitted.allowed) return;
+
+    const pending = await store.reconcileOperation(input);
+    expect(pending).toMatchObject({ status: 'active', state: 'pending' });
+    if (pending.status === 'active') {
+      expect(pending.reservation.id).toBe(admitted.lease.reservation.id);
+    }
+
+    await admitted.lease.markLiable();
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'active',
+      state: 'liable',
+    });
+
+    await admitted.lease.settle(1, 'completed');
+    expect(await store.reconcileOperation(input)).toMatchObject({
+      status: 'settled',
+      reservedUnits: 1,
+      actualUnits: 1,
+    });
+  });
+
+  it('reports an expired pending operation read-only before normal recovery runs', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-22T00:00:00Z'));
+    const store = new MemoryUsageStore();
+    const expiringPolicy: UsagePolicy = {
+      quote() {
+        return {
+          decision: 'allow',
+          units: 1,
+          budgets: [{ key: 'reconcile:expiry', limit: 1 }],
+          reservationTtlMs: 100,
+        };
+      },
+    };
+    const req = request('reconcile-expired');
+    const control = new UsageControl(store, expiringPolicy);
+    const admitted = await control.reserve(req);
+    expect(admitted.allowed).toBe(true);
+
+    vi.advanceTimersByTime(101);
+    expect(
+      await store.reconcileOperation({
+        request: req,
+        units: 1,
+        budgets: [{ key: 'reconcile:expiry', limit: 1 }],
+      }),
+    ).toMatchObject({ status: 'expired', state: 'pending' });
+  });
+
+  it('fails closed when reconciliation parameters do not match retained state', async () => {
+    const store = new MemoryUsageStore();
+    const control = new UsageControl(store, policy);
+    const req = request('reconcile-mismatch');
+    const admitted = await control.reserve(req);
+    expect(admitted.allowed).toBe(true);
+
+    await expect(
+      store.reconcileOperation({
+        request: req,
+        units: 2,
+        budgets: [{ key: 'monthly:user-1', limit: 2 }],
+      }),
+    ).rejects.toThrow(/does not match retained reservation state/);
+  });
+
   it('allows the same operation ID in a different tenant or tool scope', async () => {
     const widePolicy: UsagePolicy = {
       quote() {

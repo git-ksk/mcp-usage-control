@@ -257,6 +257,12 @@ Firestoreを選ぶ場合でも、共有budgetが重要な要件なら本番traff
 
 API optionは [API reference](api-reference.ja.md)、全体のstate machineは [Architecture](architecture.ja.md) を参照してください。
 
+## Operation reconciliation (v0.8)
+
+`FirestoreUsageStore` はoptional scalar `OperationReconciliationStore` を実装します。`reconcileOperation()` はdeterministic hashed reservation documentをread-only Firestore transactionで読み、expected reserved units / budget hashを検証します。cleanupを起動せず、recovery stateもwriteしません。
+
+expiry判定には既存の `expiryGraceMs` / bounded host-clock contractがそのまま適用されます。liable expiryをFirestoreがすでにconservativeなsettled tombstoneへ変換した後は、schemaが別のhistorical expiry provenanceを保持しないため`settled`として見える場合があります。どちらもterminalでbusiness replayを許可しません。Firestore Emulator CIでportable reconciliation suiteを実行します。
+
 ## Progressive reservation growth（v0.6）
 
 `FirestoreUsageStore`はoptional progressive-growth contractを、reservation documentと全participating budget documentを含む1 Firestore transactionで実装します。

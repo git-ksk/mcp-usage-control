@@ -66,13 +66,13 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.7.0`. **v0.7.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.8.0` for the next GitHub/source release preparation. `v0.7.0` is the latest released source baseline; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.7.0 is closed out.** The active decision target is now **v0.8.0 / #81** reconciliation-status, followed by **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, **v0.10.0 / #24 + #6** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
+**Current execution order:** **v0.8.0 / #81 has passed its design/implementation decision gate for adoption.** After the v0.8 source release, the active product target becomes **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, then **v0.10.0 / #24 + #6** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
 
 ## v1 scope under consideration after v0.5
 
-The v1 API freeze is still not final. Following v0.6 progressive growth, v0.7 adopts atomic heterogeneous vector accounting as another optional future-v1 capability while keeping the base scalar `UsageStore` contract compatible.
+The v1 API freeze is still not final. Following v0.6 progressive growth and v0.7 atomic heterogeneous vectors, v0.8 adopts read-only scalar operation reconciliation as another optional future-v1 Store capability while keeping the base `UsageStore` contract compatible.
 
 | Area | Current status | Boundary |
 | --- | --- | --- |
@@ -84,6 +84,7 @@ The v1 API freeze is still not final. Following v0.6 progressive growth, v0.7 ad
 | Shared/durable MRTR compare-and-consume | **current v1 direction** | Cross-instance resume without sticky MCP sessions |
 | Progressive reservation growth (#83) | **adopted in v0.6** | Optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic/lost-ACK/provider proof |
 | Heterogeneous multi-dimensional usage (#84) | **adopted in v0.7** | Optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
+| Operation reconciliation/status (#81) | **adopted in v0.8** | Optional scalar `OperationReconciliationStore`; read-only `absent`/`active`/`expired`/`settled` vocabulary, mismatch/unknown fail closed, provider-specific support matrix |
 | First-class MCP Tasks wire/runtime adapter | **scope depends on upstream stabilization** | Accounting semantics are defined; stable adapter is not yet claimed |
 | New stateless MRTR claim mode | **deferred unless justified** | No demonstrated advantage over shared one-time claim |
 | Billing / financial ledger / workflow replay | **out of scope** | Remains outside usage enforcement |
@@ -309,6 +310,7 @@ See [Observability](docs/observability.md).
 - [Architecture](docs/architecture.md)
 - [Memory store operations](docs/memory-store.md)
 - [Store implementation contract](docs/store-contract.md)
+- [Operation reconciliation/status](docs/operation-reconciliation.md)
 - [Redis](docs/redis.md)
 - [Cloudflare](docs/cloudflare.md)
 - [Firestore](docs/firestore.md)
@@ -323,7 +325,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.7.0` is released and closed out as the current source baseline. #83 and #84 are adopted as optional future-v1 capabilities; **#81 / v0.8.0 is the active decision target**. Future tag/Release creation and npm publication remain separate operations.
+`v0.8.0` is the current source-release preparation target. #81 is adopted as an optional scalar read-only future-v1 Store capability; **v0.9.0 / #76 + #82 + #99 is the next product decision target** after v0.8 release. Tag/Release creation and npm publication remain separate operations.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 
