@@ -8,6 +8,7 @@ import {
 
 export * from './observability.js';
 export * from './weighted-credits.js';
+export * from './windowed-budget-keys.js';
 
 export interface Principal {
   id: string;

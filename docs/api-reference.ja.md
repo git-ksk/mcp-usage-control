@@ -48,7 +48,7 @@ interface Budget {
 }
 ```
 
-`key` はnon-empty、`limit` はnon-negative safe integerです。daily / monthly windowはapplication policyの責務なので、必要ならwindow identityをkeyへ含めます。
+`key` はnon-empty、`limit` はnon-negative safe integerです。window semanticsはapplication policyの責務です。一般的な日次/月次keyには `createWindowedBudgetKey()` を使えます。契約更新日ベースなど独自windowでは、これまで通りapplication側でkeyを明示的に構築します。
 
 ### `UsageQuote` / `UsagePolicy`
 
@@ -118,6 +118,10 @@ const policy = createWeightedCreditsPolicy({
 `plans.*.limits` はsubscription databaseではなくnamed limit bagです。どのlimitをどの `Budget` に使うかはapplicationが `budgets()` で決めます。`limit(name)` は存在しないnameを指定するとfail closedします。trusted entitlement truthが `request.principal.plan` 以外にある場合は `resolvePlan` を指定できます。
 
 このhelperが受け取るのは**すでに読み込み済みのobject**だけです。JSON/YAML/file/Remote Configへのアクセスは意図的にscope外です。通常のJSON parse後はduplicate textual keyの情報が失われるため、duplicate-key rejectが必要ならconfig loader側でparse前/parse時に保証してください。
+
+### `createWindowedBudgetKey()`
+
+一般的な日次/月次budget identityには `createWindowedBudgetKey({ period, timeZone, namespace, clock? })` を使えます。`key({ scope, id, now? })` でdeterministicかつcomponent-safeなkeyを作ります。設定したtimezone文字列自体もaccounting identityへ含まれるため、timezone / namespace / period / scope形式を変えると既存stateのrollover semanticsを黙って変えるのではなく、意図的に別keyを選びます。詳しくは[利用枠の期間を表すbudget key](accounting-window-keys.ja.md)を参照してください。
 
 ### `UsageStore`
 

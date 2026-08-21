@@ -73,6 +73,7 @@ protectTool()
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
 - [Operation reconciliation / status](operation-reconciliation.ja.md) — v0.8 read-only scalar operation state語彙、fail-closed ambiguity boundary、Store別support matrix、portable conformance
 - [Mutable quota limit](mutable-quota-limits.ja.md) — same-key upgrade / downgrade / override semanticsとpolicy rollout consistency
+- [利用枠の期間を表すbudget key](accounting-window-keys.ja.md) — timezoneを明示した日次/月次keyの作り方と、config変更をaccounting identity migrationとして扱う理由
 - [API reference](api-reference.ja.md) — current sourceのpublic API / package entry point
 - [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics
 - [Roadmap](roadmap.ja.md) — current priorityとpost-v1 boundary
