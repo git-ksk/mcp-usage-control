@@ -77,6 +77,48 @@ interface UsagePolicy {
 
 Policy denial reasons may reach observability; use bounded non-secret reason codes rather than unrestricted diagnostic text.
 
+
+### Weighted credit policy helpers
+
+For the common case where MCP tools consume different amounts of one shared credit currency, `defineWeightedCreditPolicyConfig()` validates an already-loaded plain configuration object and `createWeightedCreditsPolicy()` builds a normal `UsagePolicy`. The helper owns only deterministic quote composition; entitlement lookup, configuration loading/distribution, accounting-window identity, and billing history stay application-owned.
+
+```ts
+import {
+  createWeightedCreditsPolicy,
+  defineWeightedCreditPolicyConfig,
+} from 'mcp-usage-control';
+
+const creditConfig = defineWeightedCreditPolicyConfig({
+  tools: {
+    search: 1,
+    summarize: 3,
+    ai_analyze: 5,
+    browser_action: 10,
+  },
+  plans: {
+    free: { limits: { monthly: 50 } },
+    plus: { limits: { monthly: 100 } },
+  },
+  unknownTool: 'deny',
+});
+
+const policy = createWeightedCreditsPolicy({
+  config: creditConfig,
+  budgets: ({ request, limit }) => ({
+    // Window/key construction is application-owned. Keep the plan name out of
+    // this identity so Free -> Plus does not reset already-consumed August usage.
+    key: `month:user:${request.principal.id}:2026-08`,
+    limit: limit('monthly'),
+  }),
+});
+```
+
+Unknown tools deny with `unknown_tool` by default. An explicit `{ fallbackUnits }` may be configured instead. Missing or unknown plans deny with `unknown_plan`. Tool units, named plan limits, fallback units, unknown configuration fields, and a fixed reservation TTL are validated eagerly. The configuration is snapshotted when the policy is created so later mutation of the caller's object cannot silently change active pricing.
+
+`plans.*.limits` is a named limit bag rather than a subscription database: the application chooses how those names map to one or more `Budget` objects in `budgets()`. `limit(name)` fails closed when a requested name is absent. `resolvePlan` may be supplied when trusted entitlement truth does not live in `request.principal.plan`.
+
+The helper accepts an **already-loaded object** only. JSON/YAML/file/Remote Config access is deliberately out of scope. Duplicate textual JSON keys cannot be detected after normal parsing has collapsed them, so loaders that require duplicate-key rejection must enforce that before calling this API.
+
 ### `UsageStore`
 
 ```ts

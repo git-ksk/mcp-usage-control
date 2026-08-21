@@ -77,6 +77,48 @@ interface UsagePolicy {
 
 policy denial reasonはobservabilityへ出る場合があるため、unrestricted diagnostic textではなくbounded non-secret reason codeを推奨します。
 
+
+### Weighted credit policy helper
+
+MCP toolごとに同じcredit通貨を異なる量だけ消費する一般的なケースでは、`defineWeightedCreditPolicyConfig()` で**読み込み済みplain config object**をvalidateし、`createWeightedCreditsPolicy()` で通常の `UsagePolicy` を組み立てられます。このhelperが担当するのはdeterministicなquote compositionだけです。entitlement解決、configの読み込み/配布、accounting window identity、過去usage/billing ledgerはapplication側の責務のままです。
+
+```ts
+import {
+  createWeightedCreditsPolicy,
+  defineWeightedCreditPolicyConfig,
+} from 'mcp-usage-control';
+
+const creditConfig = defineWeightedCreditPolicyConfig({
+  tools: {
+    search: 1,
+    summarize: 3,
+    ai_analyze: 5,
+    browser_action: 10,
+  },
+  plans: {
+    free: { limits: { monthly: 50 } },
+    plus: { limits: { monthly: 100 } },
+  },
+  unknownTool: 'deny',
+});
+
+const policy = createWeightedCreditsPolicy({
+  config: creditConfig,
+  budgets: ({ request, limit }) => ({
+    // window/key構築はapplication-owned。plan名をidentityへ入れないことで、
+    // Free -> Plusでも8月中に消費済みのusageをresetしない。
+    key: `month:user:${request.principal.id}:2026-08`,
+    limit: limit('monthly'),
+  }),
+});
+```
+
+未設定toolはdefaultで `unknown_tool` denyになります。必要な場合だけ `{ fallbackUnits }` を明示できます。planが未設定/unknownなら `unknown_plan` denyです。tool units、named plan limits、fallback units、unknown config field、固定reservation TTLは起動時にeager validationされます。またpolicy生成時にconfigをsnapshotするため、caller側objectを後からmutateしてactiveなcredit設定が勝手に変わることもありません。
+
+`plans.*.limits` はsubscription databaseではなくnamed limit bagです。どのlimitをどの `Budget` に使うかはapplicationが `budgets()` で決めます。`limit(name)` は存在しないnameを指定するとfail closedします。trusted entitlement truthが `request.principal.plan` 以外にある場合は `resolvePlan` を指定できます。
+
+このhelperが受け取るのは**すでに読み込み済みのobject**だけです。JSON/YAML/file/Remote Configへのアクセスは意図的にscope外です。通常のJSON parse後はduplicate textual keyの情報が失われるため、duplicate-key rejectが必要ならconfig loader側でparse前/parse時に保証してください。
+
 ### `UsageStore`
 
 ```ts
