@@ -119,6 +119,8 @@ Unknown tools deny with `unknown_tool` by default. An explicit `{ fallbackUnits 
 
 The helper accepts an **already-loaded object** only. JSON/YAML/file/Remote Config access is deliberately out of scope. Duplicate textual JSON keys cannot be detected after normal parsing has collapsed them, so loaders that require duplicate-key rejection must enforce that before calling this API.
 
+For a complete Free/Plus monthly-credit composition using this helper, see [Subscription-style MCP credits](subscription-credits.md).
+
 ### `createWindowedBudgetKey()`
 
 For common calendar-day/month budget identities, use `createWindowedBudgetKey({ period, timeZone, namespace, clock? })`. `key({ scope, id, now? })` derives a deterministic encoded key. The configured timezone literal is part of accounting identity; changing timezone/namespace/period/scope format intentionally selects a different key rather than silently changing rollover semantics on existing state. See [Accounting-window budget keys](accounting-window-keys.md).

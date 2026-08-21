@@ -6,6 +6,8 @@ Applications may change an effective quota while the same accounting bucket alre
 
 `mcp-usage-control` treats the supplied `budget.limit` as the **effective admission ceiling for that reserve attempt**. It does not store a permanent limit definition in the accounting bucket. The authoritative usage already attached to the same `budget.key` remains intact.
 
+For a complete Free/Plus monthly weighted-credit example, see [Subscription-style MCP credits](subscription-credits.md).
+
 ## Same key means same accounting bucket
 
 For one `budget.key`:

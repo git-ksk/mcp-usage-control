@@ -37,6 +37,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
 - [Operation reconciliation/status](operation-reconciliation.md) — v0.8 read-only scalar operation-state vocabulary, fail-closed ambiguity boundary, Store support matrix, and portable conformance.
 - [Mutable quota limits](mutable-quota-limits.md) — same-key upgrade/downgrade/override semantics and policy-rollout consistency requirements.
+- [Subscription-style MCP credits](subscription-credits.md) — canonical Free/Plus monthly weighted-credit composition, dynamic costs, and responsibility boundaries.
 - [Accounting-window budget keys](accounting-window-keys.md) — deterministic calendar-day/month key construction with explicit timezone and accounting-identity migration hazards.
 - [API reference](api-reference.md) — the current public source API and package entry points.
 - [Observability](observability.md) — lifecycle events, privacy, cardinality, and best-effort delivery.

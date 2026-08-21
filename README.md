@@ -305,6 +305,7 @@ See [Observability](docs/observability.md).
 - [Getting started](docs/getting-started.md)
 - [Use from source / local tarballs](docs/using-from-source.md)
 - [MCP integration](docs/mcp-integration.md)
+- [Subscription-style MCP credits](docs/subscription-credits.md)
 - [MCP protocol conformance](docs/mcp-conformance.md)
 - [MCP Tasks accounting](docs/mcp-tasks-accounting.md)
 - [Architecture](docs/architecture.md)

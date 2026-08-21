@@ -6,6 +6,8 @@
 
 `mcp-usage-control` は渡された `budget.limit` を、**そのreserve attemptに対するeffective admission ceiling** として扱います。accounting bucketへ永久的なlimit定義を保存する仕組みではありません。同じ `budget.key` に紐づくauthoritative usageはそのまま維持します。
 
+Free / Plusの月次weighted creditsを一連で確認する場合は [サブスク型MCP creditsの実装パターン](subscription-credits.ja.md) を参照してください。
+
 ## 同じkeyは同じaccounting bucket
 
 1つの `budget.key` に対して:

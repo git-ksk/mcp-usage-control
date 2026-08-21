@@ -285,6 +285,7 @@ raw tool arguments / exception messageは自動収集しません。`projectUsag
 - [はじめに](docs/getting-started.ja.md)
 - [Source / local tarballから使う](docs/using-from-source.ja.md)
 - [MCP integration](docs/mcp-integration.ja.md)
+- [サブスク型MCP creditsの実装パターン](docs/subscription-credits.ja.md)
 - [MCP protocol conformance](docs/mcp-conformance.ja.md)
 - [MCP Tasks の利用量 accounting](docs/mcp-tasks-accounting.ja.md)
 - [Architecture](docs/architecture.ja.md)
