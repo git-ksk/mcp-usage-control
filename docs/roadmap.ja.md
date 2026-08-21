@@ -10,9 +10,9 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 ## 現在のbaseline
 
-**v0.8.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**現在のactive decision targetはv0.9.0 / #76 + #82 + #99です。**
+**v0.8.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**現在のactive decision targetはv0.9.0 / #76 + #82 + #99です。** subscription credits導入ergonomicsの#108 + #109 + #110はv0.9隣接のconvenience workで、v1 blockerにはしません。
 
-リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> v0.9/#76+#82+#99（active） -> v0.10/#24+#6+#105+#106 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
+リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> v0.9/#76+#82+#99（active）+ non-blocking #108+#109+#110 credit-policy ergonomics -> v0.10/#24+#6+#105+#106 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
 
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 
@@ -42,7 +42,7 @@ v1.0前に次を完了します。
 | **v0.6.0** | #83 progressive reservation growth | **採用**: optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`、growth cursor + stable increment identity、atomic multi-budget / lost-ACK / provider conformance proof |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **採用**: optional v1 core/Store extension | separate `VectorUsageControl` / `VectorUsageStore`、one logical replay identity、per-dimension atomic admission / growth / settlement、deterministic retry / conflict、provider conformance |
 | **v0.8.0** | #81 operation reconciliation / status | **Adopted**: optional scalar v1 Store capability | 共通read-only status語彙、second reservation禁止、mismatch/unprovable stateはfail closed、Memory/Redis/Firestore + Cloudflare subpath、portable/provider evidence |
-| **v0.9.0** | #76 operational snapshot + #82 threshold / exhaustion + #99 dogfood integration diagnostics | bounded non-authoritative production observability / helper / canonical patternと明確なsettlement-outcome integration contractをv1へ含める | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離、canonical outcome vocabulary / normalization、invalid settlement vocabularyを識別できるbounded diagnostics。stateful APIが重いならdocs / patternで完了可 |
+| **v0.9.0** | #76 operational snapshot + #82 threshold / exhaustion + #99 dogfood integration diagnostics、隣接#108/#109/#110 subscription-credit ergonomics | bounded non-authoritative observability / diagnosticsを整えつつ、weighted credits / window keyのよくある導入をsubscription/pricing infrastructure化せず簡単にする | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離。#109/#110はdeterministicなpolicy composition helperに限定し、opinionatedになるならdocs-onlyで完了可。#108/#109/#110はv1 blockerにしない |
 | **v0.10.0** | final completion / distribution / compatibility freeze | 残るv1 scope decisionを全て閉じ、public distribution / runtime / storage compatibility boundaryを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、#105 supported Node.js floor、#106 persisted-store upgrade/migration/rollback contract、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
 | **v1.0.0** | stable promotion | 完成済みsurfaceをstable宣言 | 新featureなし。v0.10/#24+#6+#105+#106 completion criteria完了後にversion / changelog / release promotionのみ |
 
@@ -104,6 +104,14 @@ applicationごとに次の区別を再発明しなくてよい程度のoptional 
 
 stateful helperよりdocs / exampleの方が安全で単純なら、それをv1 product requirementの達成形として認めます。
 
+v0.9隣接のproduction ergonomicsとして次も追跡します。
+
+- **#108 subscription-style weighted-credit guide:** `plan allowance -> tool units -> window key -> reserve/settle` を英日で一連に説明し、同一window内plan変更とbilling/historyの責務境界も明示。
+- **#109 weighted-credit quote helper:** trustedな `tool -> units` mapping、unknown-toolの明示処理、caller-owned plan/budget resolverを組み合わせる小さなvalidated `UsagePolicy` helperを検討。
+- **#110 accounting-window key helper:** scope / window / time zone / clock inputからday/month keyをdeterministicに生成し、consumerの手書きkey rotationを減らす。ただしcalendar/business-window ownershipはapplication側のまま、plan名をkeyへ入れて同一window usageをresetする設計は避ける。
+
+これらは **non-blocking v0.9 ergonomics** です。entitlement truth、Remote Config / Stripe / RevenueCat直接読込、pricing catalog、billing ledger、subscription lifecycleをMCPUsageへ持ち込みません。helperがその境界を越えるならgeneric APIを維持し、#108のcanonical exampleで解決します。
+
 ### v0.10.0 — completion release
 
 v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
@@ -130,6 +138,9 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 | #76 operational usage snapshot | **v0.9.0** | bounded non-authoritative helper / patternを採用優先 |
 | #82 threshold / exhaustion signals | **v0.9.0** | #76 semantics上のoptional scoped helper / patternを採用優先 |
 | #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | canonical integration vocabulary明確化、invalid outcomeとservice outageの診断分離、privacy-safe lifecycle visibility。consumer mapping bugは先行修正可 |
+| #108 subscription-style weighted credits guide | **v0.9隣接 / non-blocking** | Free/Plus/月次credits導入と責務境界のcanonical guide |
+| #109 weighted-credit quote helper | **v0.9隣接 / non-blocking** | pricing/subscriptionを所有せずconsumer重複コードを減らせる小さなvalidated policy helperなら採用優先 |
+| #110 accounting-window key helper | **v0.9隣接 / non-blocking** | day/month keyをexplicit scope/time-zone入力からdeterministic生成し、plan変更でusageを誤resetしない |
 | #24 Cloudflare deployed operational evidence | **v0.10.0** | real rotation完了 + honest v1 evidence boundary確定 |
 | #6 first npm publication | **v0.10.0** | v1前にfirst registry publish。ただしexplicit authorization必須 |
 | #105 supported Node.js floor | **v0.10.0** | v1 runtime floorを決定し、publish前にengines / CI / docsを整合 |

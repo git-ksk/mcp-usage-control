@@ -10,9 +10,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.8.0 is released and closed out** as the current pre-v1 source baseline. #81 passed its design/implementation proof gate and read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability. **v0.9.0 / #76 + #82 + #99 is now the active decision target.**
+**v0.8.0 is released and closed out** as the current pre-v1 source baseline. #81 passed its design/implementation proof gate and read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability. **v0.9.0 / #76 + #82 + #99 is now the active decision target.** Subscription-credit ergonomics #108 + #109 + #110 are adjacent v0.9 convenience work and are not v1 blockers.
 
-The repository execution order is intentionally linear: **v0.8.0 closed -> v0.9/#76+#82+#99 (active) -> v0.10/#24+#6+#105+#106 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
+The repository execution order is intentionally linear: **v0.8.0 closed -> v0.9/#76+#82+#99 (active), with non-blocking #108+#109+#110 credit-policy ergonomics -> v0.10/#24+#6+#105+#106 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
@@ -42,7 +42,7 @@ Each release below is a **decision gate**. A target feature is not forced into v
 | **v0.6.0** | #83 progressive reservation growth | **Adopted** as an optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`, growth cursor + stable increment identity, atomic multi-budget proof, lost-ACK replay fence, provider conformance |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **Adopted** as an optional v1 core/Store extension | Separate `VectorUsageControl` / `VectorUsageStore`, one logical replay identity, atomic per-dimension admission/growth/settlement, deterministic retry/conflict semantics, provider conformance |
 | **v0.8.0** | #81 operation reconciliation/status | **Adopted** as an optional scalar v1 Store capability | Common read-only status vocabulary, no second reservation, mismatch/unprovable state fail closed, Memory/Redis/Firestore support + Cloudflare reconciliation subpath, portable/provider evidence |
-| **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals + #99 dogfood integration diagnostics | Include bounded non-authoritative production observability/tooling, canonical helpers, and a clear settlement-outcome integration contract | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement, canonical outcome vocabulary/normalization, bounded diagnostics for invalid settlement vocabulary; documentation-only outcome is acceptable if a stateful API adds more risk than value |
+| **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals + #99 dogfood integration diagnostics; adjacent #108/#109/#110 subscription-credit ergonomics | Include bounded non-authoritative production observability/tooling and a clear settlement-outcome contract; make common weighted-credit/window-key adoption easier without turning core into subscription/pricing infrastructure | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement; #109/#110 must stay deterministic policy-composition helpers and may resolve to documentation-only if abstraction becomes opinionated; #108/#109/#110 do not block v1 |
 | **v0.10.0** | Final completion / distribution / compatibility freeze | Close all remaining v1-scope decisions and prove the public distribution/runtime/storage compatibility boundary | #24 Cloudflare real-operation boundary, #6 first npm publication, #105 supported Node.js floor, #106 persisted-store upgrade/migration/rollback contract, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |
 | **v1.0.0** | Stable promotion | Declare the completed surface stable | No new feature; version/changelog/release promotion only after v0.10/#24+#6+#105+#106 completion criteria are satisfied |
 
@@ -104,6 +104,14 @@ This tooling remains best-effort/non-authoritative. It must not become a second 
 
 If a reusable stateful helper creates more complexity than value, a canonical documented pattern/examples may satisfy the v1 product requirement.
 
+Adjacent production ergonomics work:
+
+- **#108 subscription-style weighted-credit guide:** document the end-to-end `plan allowance -> tool units -> window key -> reserve/settle` pattern in English/Japanese, including same-window plan changes and billing/history boundaries.
+- **#109 weighted-credit quote helper:** evaluate a small validated `UsagePolicy` composition helper for trusted `tool -> units` mappings, explicit unknown-tool handling, and caller-owned plan/budget resolution.
+- **#110 accounting-window key helper:** evaluate deterministic day/month key construction (scope, window, time zone/clock input) so applications do not hand-roll key rotation, while keeping calendar/business-window ownership explicit and avoiding plan names in keys that would reset in-window usage.
+
+These are **non-blocking v0.9 ergonomics**. They must not make MCPUsage own entitlement truth, Remote Config/Stripe/RevenueCat access, pricing catalogs, billing ledgers, or subscription lifecycle. If a helper would cross that boundary, keep the generic API and satisfy the need through #108 examples instead.
+
 ### v0.10.0 — completion release
 
 v0.10 is the final pre-v1 completion line, not another feature-expansion cycle.
@@ -130,6 +138,9 @@ It must resolve:
 | #76 operational usage snapshot | **v0.9.0** | Prefer bounded non-authoritative helper/pattern |
 | #82 threshold/exhaustion signals | **v0.9.0** | Prefer optional scoped helper/pattern built on #76 semantics |
 | #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | Clarify canonical integration vocabulary, distinguish invalid outcome from service outage, and add privacy-safe lifecycle visibility; consumer mapping bug may be fixed earlier |
+| #108 subscription-style weighted credits guide | **v0.9 adjacent / non-blocking** | Canonical Free/Plus/monthly-credit adoption guide and responsibility boundary |
+| #109 weighted-credit quote helper | **v0.9 adjacent / non-blocking** | Prefer a small validated policy-composition helper only if it removes repeated consumer code without owning pricing/subscriptions |
+| #110 accounting-window key helpers | **v0.9 adjacent / non-blocking** | Prefer deterministic day/month key helpers with explicit scope/time-zone inputs; never silently reset usage on plan changes |
 | #24 Cloudflare deployed operational evidence | **v0.10.0** | Complete real rotation and finalize honest v1 evidence boundary |
 | #6 first npm publication | **v0.10.0** | First registry publish before v1, but only with explicit authorization |
 | #105 supported Node.js floor | **v0.10.0** | Decide supported v1 runtime floor and align engines/CI/docs before publication |
