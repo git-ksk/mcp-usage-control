@@ -199,7 +199,7 @@ GitHub source releaseとnpm publicationは別操作です。GitHub/source releas
 
 **Current released source baseline: v0.8.0 — RELEASED / CLOSED。**
 
-**Active product decision target: v0.9.0 / #76 + #82 + #99 — operational usability / dogfood diagnostics。**
+**Active product decision target: v0.9.0 / #76 + #82 + #99 — operational usability / dogfood diagnostics。** #108/#109/#110はsubscription-credit導入を簡単にするnon-blocking隣接workで、小さなhelper/docsとして進めてもv1 gateにはしません。
 
 **#83: optional progressive reservation growthとしてfuture v1へ採用。**
 

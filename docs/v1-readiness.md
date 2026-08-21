@@ -201,7 +201,7 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 **Current released source baseline: v0.8.0 — RELEASED / CLOSED.**
 
-**Active product decision target: v0.9.0 / #76 + #82 + #99 — operational usability / dogfood diagnostics.**
+**Active product decision target: v0.9.0 / #76 + #82 + #99 — operational usability / dogfood diagnostics.** #108/#109/#110 are non-blocking adjacent subscription-credit ergonomics work; they may land as small helpers/docs but do not gate v1.
 
 **#83: ADOPTED for future v1 as optional progressive reservation growth.**
 
