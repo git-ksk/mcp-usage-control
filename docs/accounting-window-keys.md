@@ -115,3 +115,8 @@ The helper does **not** implement:
 - billing/history ledgers.
 
 For a provider-specific or anniversary billing period, keep the window resolver application-owned and build the exact `Budget.key` explicitly. The Store should still receive only the resulting stable key and effective limit.
+
+## Related guides
+
+- [Subscription-style MCP credits](subscription-credits.md)
+- [Mutable quota limits](mutable-quota-limits.md)

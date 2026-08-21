@@ -308,6 +308,7 @@ replay protectionの範囲は次です。
 ## 次に読む
 
 - MCPサーバへ組み込む: [MCP integration](mcp-integration.ja.md)
+- Free / Plusのweighted creditsを組む: [サブスク型MCP creditsの実装パターン](subscription-credits.ja.md)
 - Storeを選ぶ: [Redis](redis.ja.md) / [Cloudflare](cloudflare.ja.md) / [Firestore](firestore.ja.md)
 - 内部設計を理解する: [Architecture](architecture.ja.md)
 - APIを確認する: [API reference](api-reference.ja.md)

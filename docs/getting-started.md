@@ -232,6 +232,7 @@ Before putting the library on an enforcement path:
 ## What to read next
 
 - Start an MCP integration: [MCP integration](mcp-integration.md)
+- Model Free/Plus weighted credits: [Subscription-style MCP credits](subscription-credits.md)
 - Choose a store: [Redis](redis.md) / [Cloudflare](cloudflare.md) / [Firestore](firestore.md)
 - Understand the design: [Architecture](architecture.md)
 - Look up the public API: [API reference](api-reference.md)

@@ -119,6 +119,8 @@ const policy = createWeightedCreditsPolicy({
 
 このhelperが受け取るのは**すでに読み込み済みのobject**だけです。JSON/YAML/file/Remote Configへのアクセスは意図的にscope外です。通常のJSON parse後はduplicate textual keyの情報が失われるため、duplicate-key rejectが必要ならconfig loader側でparse前/parse時に保証してください。
 
+Free / Plus月次creditsの完全なcomposition例は [サブスク型MCP creditsの実装パターン](subscription-credits.ja.md) を参照してください。
+
 ### `createWindowedBudgetKey()`
 
 一般的な日次/月次budget identityには `createWindowedBudgetKey({ period, timeZone, namespace, clock? })` を使えます。`key({ scope, id, now? })` でdeterministicかつcomponent-safeなkeyを作ります。設定したtimezone文字列自体もaccounting identityへ含まれるため、timezone / namespace / period / scope形式を変えると既存stateのrollover semanticsを黙って変えるのではなく、意図的に別keyを選びます。詳しくは[利用枠の期間を表すbudget key](accounting-window-keys.ja.md)を参照してください。

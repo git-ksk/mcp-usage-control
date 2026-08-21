@@ -10,9 +10,9 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 ## 現在のbaseline
 
-**v0.8.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**現在のactive decision targetはv0.9.0 / #76 + #82 + #99です。** subscription credits導入ergonomicsの#108 + #109 + #110はv0.9隣接のconvenience workで、v1 blockerにはしません。
+**v0.8.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**現在のactive decision targetはv0.9.0 / #76 + #82 + #99です。** subscription credits導入ergonomicsの#108 + #109 + #110はv0.9隣接のconvenience workとして完了済みで、v1 blockerにはしません。
 
-リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> v0.9/#76+#82+#99（active）+ non-blocking #108+#109+#110 credit-policy ergonomics -> v0.10/#24+#6+#105+#106 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
+リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> 隣接#108+#109+#110 credit-policy ergonomics完了 -> v0.9/#76+#82+#99（active） -> v0.10/#24+#6+#105+#106 + final freeze -> v1.0 stable promotion** と進めます。現在のconsumer dogfoodで見つかったbugは、このproduct-level ladderを変えず必要なら先行修正できます。
 
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 
@@ -104,11 +104,11 @@ applicationごとに次の区別を再発明しなくてよい程度のoptional 
 
 stateful helperよりdocs / exampleの方が安全で単純なら、それをv1 product requirementの達成形として認めます。
 
-v0.9隣接のproduction ergonomicsとして次も追跡します。
+v0.9隣接のproduction ergonomicsとして次を完了しました。
 
-- **#108 subscription-style weighted-credit guide:** `plan allowance -> tool units -> window key -> reserve/settle` を英日で一連に説明し、同一window内plan変更とbilling/historyの責務境界も明示。
-- **#109 weighted-credit quote helper:** trustedな `tool -> units` mapping、unknown-toolの明示処理、caller-owned plan/budget resolverを組み合わせる小さなvalidated `UsagePolicy` helperを検討。
-- **#110 accounting-window key helper:** scope / window / time zone / clock inputからday/month keyをdeterministicに生成し、consumerの手書きkey rotationを減らす。ただしcalendar/business-window ownershipはapplication側のまま、plan名をkeyへ入れて同一window usageをresetする設計は避ける。
+- **#108 subscription-style weighted-credit guide — 完了:** `plan allowance -> tool units -> window key -> reserve/settle` を英日で一連に説明し、同一window内plan変更とbilling/historyの責務境界も明示。
+- **#109 weighted-credit quote helper — 完了:** trustedな `tool -> units` mapping、unknown-toolの明示処理、caller-owned plan/budget resolverを組み合わせる小さなvalidated `UsagePolicy` helperを提供。
+- **#110 accounting-window key helper — 完了:** scope / window / time zone / clock inputからday/month keyをdeterministicに生成し、consumerの手書きkey rotationを減らす。ただしcalendar/business-window ownershipはapplication側のまま、plan名をkeyへ入れて同一window usageをresetする設計は避ける。
 
 これらは **non-blocking v0.9 ergonomics** です。entitlement truth、Remote Config / Stripe / RevenueCat直接読込、pricing catalog、billing ledger、subscription lifecycleをMCPUsageへ持ち込みません。helperがその境界を越えるならgeneric APIを維持し、#108のcanonical exampleで解決します。
 
@@ -138,9 +138,9 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 | #76 operational usage snapshot | **v0.9.0** | bounded non-authoritative helper / patternを採用優先 |
 | #82 threshold / exhaustion signals | **v0.9.0** | #76 semantics上のoptional scoped helper / patternを採用優先 |
 | #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | canonical integration vocabulary明確化、invalid outcomeとservice outageの診断分離、privacy-safe lifecycle visibility。consumer mapping bugは先行修正可 |
-| #108 subscription-style weighted credits guide | **v0.9隣接 / non-blocking** | Free/Plus/月次credits導入と責務境界のcanonical guide |
-| #109 weighted-credit quote helper | **v0.9隣接 / non-blocking** | pricing/subscriptionを所有せずconsumer重複コードを減らせる小さなvalidated policy helperなら採用優先 |
-| #110 accounting-window key helper | **v0.9隣接 / non-blocking** | day/month keyをexplicit scope/time-zone入力からdeterministic生成し、plan変更でusageを誤resetしない |
+| #108 subscription-style weighted credits guide | **完了 / v0.9隣接 / non-blocking** | Free/Plus/月次credits導入と責務境界のcanonical guide |
+| #109 weighted-credit quote helper | **完了 / v0.9隣接 / non-blocking** | pricing/subscriptionを所有せずconsumer重複コードを減らす小さなvalidated policy helperを提供 |
+| #110 accounting-window key helper | **完了 / v0.9隣接 / non-blocking** | day/month keyをexplicit scope/time-zone入力からdeterministic生成し、plan変更でusageを誤resetしないhelperを提供 |
 | #24 Cloudflare deployed operational evidence | **v0.10.0** | real rotation完了 + honest v1 evidence boundary確定 |
 | #6 first npm publication | **v0.10.0** | v1前にfirst registry publish。ただしexplicit authorization必須 |
 | #105 supported Node.js floor | **v0.10.0** | v1 runtime floorを決定し、publish前にengines / CI / docsを整合 |

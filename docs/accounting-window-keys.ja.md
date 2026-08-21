@@ -115,3 +115,8 @@ const policy = createWeightedCreditsPolicy({
 - billing/history ledger
 
 契約更新日ベースやprovider固有のperiodが必要な場合は、window resolverをapplication側に残し、`Budget.key` を明示的に組み立ててください。Storeへ渡すのは、最終的に決まったstable keyとeffective limitだけです。
+
+## 関連ドキュメント
+
+- [サブスク型MCP creditsの実装パターン](subscription-credits.ja.md)
+- [Mutable quota limit](mutable-quota-limits.ja.md)
