@@ -47,10 +47,12 @@ Do not use a public issue for a vulnerability that could enable quota bypass, do
 
 ## Questions about current limitations
 
-Known pre-alpha limitations include:
+Known pre-v1 limitations include:
 
-- one budget per reservation;
-- package names and public APIs are not stable;
+- package names and public APIs are not stable until the v0.10 freeze;
+- npm registry publication remains deferred until the separately authorized first publish tracked in #6;
+- stable first-class MCP Tasks wire/runtime integration remains deferred while the upstream surface is experimental;
+- generic operation reconciliation is scalar-only in v0.8; vector initial-reserve ambiguity remains fail closed unless separately proven;
 - strict provider-specific fencing after lease loss is outside the generic core;
 - billing, payment, authentication, and analytics backends are not built into core.
 

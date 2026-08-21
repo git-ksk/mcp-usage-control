@@ -68,7 +68,7 @@ remaining確認 -> paid work実行 -> counter加算
 
 5 packageのmanifestは `0.8.0` で揃っています。**v0.8.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** **v0.8.0はrelease / closeout済み**です。active product targetは **v0.9.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.10.0 / #24 + #6** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。
+**現在の実行順序:** **v0.8.0はrelease / closeout済み**です。active product targetは **v0.9.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.10.0 / #24 + #6 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。
 
 ## v0.5後に再評価するv1 scope
 

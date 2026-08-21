@@ -47,10 +47,12 @@ quota bypass、double spending、unauthorized access、cross-tenant leakage、in
 
 ## Current limitationについて
 
-既知のpre-alpha limitationには次があります。
+既知のpre-v1 limitationには次があります。
 
-- 1 reservationにつき1 budget
-- package名 / public APIがまだstableではない
+- package名 / public APIはv0.10 freezeまでstableではない
+- npm registry publicationは#6の明示authorization付きfirst publishまでdeferred
+- stableなfirst-class MCP Tasks wire/runtime integrationはupstream surfaceがexperimentalな間deferred
+- v0.8のgeneric operation reconciliationはscalar-onlyで、vector initial-reserve ambiguityは別proofがない限りfail closed
 - lease loss後の厳密なprovider-specific fencingはgeneric coreの責務外
 - billing、payment、authentication、analytics backendをcoreへ内蔵しない
 

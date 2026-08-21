@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 **v0.8.0 is released and closed out** as the current pre-v1 source baseline. #81 passed its design/implementation proof gate and read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability. **v0.9.0 / #76 + #82 + #99 is now the active decision target.**
 
-The repository execution order is intentionally linear: **v0.8.0 closed -> v0.9/#76+#82+#99 (active) -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
+The repository execution order is intentionally linear: **v0.8.0 closed -> v0.9/#76+#82+#99 (active) -> v0.10/#24+#6+#105+#106 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
@@ -43,8 +43,8 @@ Each release below is a **decision gate**. A target feature is not forced into v
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **Adopted** as an optional v1 core/Store extension | Separate `VectorUsageControl` / `VectorUsageStore`, one logical replay identity, atomic per-dimension admission/growth/settlement, deterministic retry/conflict semantics, provider conformance |
 | **v0.8.0** | #81 operation reconciliation/status | **Adopted** as an optional scalar v1 Store capability | Common read-only status vocabulary, no second reservation, mismatch/unprovable state fail closed, Memory/Redis/Firestore support + Cloudflare reconciliation subpath, portable/provider evidence |
 | **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals + #99 dogfood integration diagnostics | Include bounded non-authoritative production observability/tooling, canonical helpers, and a clear settlement-outcome integration contract | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement, canonical outcome vocabulary/normalization, bounded diagnostics for invalid settlement vocabulary; documentation-only outcome is acceptable if a stateful API adds more risk than value |
-| **v0.10.0** | Final completion / distribution / API freeze | Close all remaining v1-scope decisions and prove the public distribution | #24 Cloudflare real-operation boundary, #6 first npm publication, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |
-| **v1.0.0** | Stable promotion | Declare the completed surface stable | No new feature; version/changelog/release promotion only after v0.10 completion criteria are satisfied |
+| **v0.10.0** | Final completion / distribution / compatibility freeze | Close all remaining v1-scope decisions and prove the public distribution/runtime/storage compatibility boundary | #24 Cloudflare real-operation boundary, #6 first npm publication, #105 supported Node.js floor, #106 persisted-store upgrade/migration/rollback contract, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |
+| **v1.0.0** | Stable promotion | Declare the completed surface stable | No new feature; version/changelog/release promotion only after v0.10/#24+#6+#105+#106 completion criteria are satisfied |
 
 `0.10.0` is intentionally valid SemVer; there is no requirement that `0.9.0` be followed immediately by `1.0.0`.
 
@@ -112,6 +112,8 @@ It must resolve:
 
 - **Cloudflare #24:** execute real credential rotation; capture real platform-limit/overload evidence if naturally available, otherwise explicitly scope the v1 Cloudflare claim to observed evidence instead of manufacturing Free-plan exhaustion;
 - **npm #6:** perform the first npm publication for the selected v0.10 tag only with separate explicit authorization, then verify provenance, registry metadata, contents, and clean registry installation;
+- **Node support #105:** explicitly choose the v1 supported Node.js floor, align `engines`, CI/support claims, and clean-consumer evidence, and avoid treating EOL compatibility as an implicit support promise;
+- **persisted-state compatibility #106:** define Redis / Firestore / Cloudflare upgrade, migration, newer-schema fail-closed, and rollback guarantees so SemVer/API stability does not hide a separate storage-state compatibility boundary;
 - **public API/name freeze:** final review of all five package names, exports/subpaths, error/state terminology, lifecycle semantics, and compatibility statements;
 - **MCP Tasks:** if the upstream TypeScript Tasks integration surface is stable enough, decide whether to include a first-class adapter; otherwise explicitly exclude it from the v1 stable surface while retaining the already proven accounting semantics;
 - **stateless MRTR alternative:** unless concrete benefit and equivalent one-time/lost-ACK proof appear, explicitly keep the shared/durable compare-and-consume model as v1 and classify the alternative as non-v1 work;
@@ -130,6 +132,8 @@ It must resolve:
 | #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | Clarify canonical integration vocabulary, distinguish invalid outcome from service outage, and add privacy-safe lifecycle visibility; consumer mapping bug may be fixed earlier |
 | #24 Cloudflare deployed operational evidence | **v0.10.0** | Complete real rotation and finalize honest v1 evidence boundary |
 | #6 first npm publication | **v0.10.0** | First registry publish before v1, but only with explicit authorization |
+| #105 supported Node.js floor | **v0.10.0** | Decide supported v1 runtime floor and align engines/CI/docs before publication |
+| #106 persisted-store migration/rollback contract | **v0.10.0** | Freeze provider upgrade/downgrade/schema compatibility semantics before v1 |
 | #77/#78/#79/#85 | Resolved | Evidence carried forward into every later release |
 
 The rule is: **no “maybe v1” item survives past v0.10.** It is either adopted with proof or explicitly classified outside the v1 stable product.

@@ -10,7 +10,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 `v0.8.0` is the latest released GitHub/source baseline and is closed out. **v0.9.0 / #76 + #82 + #99 is the active product decision target.**
 
-After v0.8, the execution order is **v0.9/#76+#82+#99 -> v0.10 completion -> v1.0 stable promotion**. #99 came from real GatewayMCP dogfood; its immediate consumer-side mapping bug may land earlier while reusable MCPUsage diagnostics stay in the v0.9 decision gate.
+After v0.8, the execution order is **v0.9/#76+#82+#99 -> v0.10/#24+#6+#105+#106 completion -> v1.0 stable promotion**. #99 came from real GatewayMCP dogfood; its immediate consumer-side mapping bug may land earlier while reusable MCPUsage diagnostics stay in the v0.9 decision gate.
 
 The v0.8 decision for #81 is explicit:
 
@@ -182,18 +182,20 @@ The tag and GitHub Release were published on 2026-08-17. npm publication was not
 
 A future v1.0 release should happen only after:
 
-1. v0.5 stabilization/dogfood has produced enough operational confidence;
+1. the pre-v1 v0.x ladder has produced enough operational confidence;
 2. each deliberate v1-scope candidate has been explicitly accepted or deferred at its designated v0.x gate;
-3. long-lived public package/subpath/API names are reviewed one final time;
-4. any breaking contract change judged necessary is made before the v1 tag;
-5. the full package/integration matrix is green at `1.0.0`;
-6. explicit v1 source-release authorization is given.
+3. the supported Node.js floor is explicitly frozen (#105) and package `engines`, CI, security/support claims, and clean-consumer evidence agree;
+4. Redis / Firestore / Cloudflare persisted-state upgrade, newer-schema fail-closed, migration, and rollback semantics are explicitly frozen (#106);
+5. long-lived public package/subpath/API names are reviewed one final time;
+6. any breaking contract change judged necessary is made before the v1 tag;
+7. the full package/integration/registry matrix is green at `1.0.0`;
+8. explicit v1 source-release authorization is given.
 
 There is no requirement that v1 immediately follow v0.5, nor that every future capability be completed before v1. The stable boundary should reflect demonstrated product need and safety evidence.
 
 ## Release / npm separation
 
-GitHub source releases and npm publication remain separate operations. npm publication is still intentionally deferred and must not happen merely because v0.5.0 or a future v1.0 source release is ready.
+GitHub source releases and npm publication remain separate operations. npm publication is still intentionally deferred and must not happen merely because a GitHub/source release is ready; #6 remains the separately authorized first registry publication gate.
 
 ## Current decision
 

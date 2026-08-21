@@ -4,7 +4,7 @@
 
 ## Supported versions
 
-security fixのsupport対象はlatest GitHub/source minor lineです。このpolicyではv0.2.xをcurrent supported source-release lineとし、v0.1.xをsupersedeします。npm registry publishは別工程なので、GitHub/source releaseをsupportしていてもnpm公開はdeferできます。
+security fixのsupport対象はlatest GitHub/source minor lineです。このpolicyでは **v0.8.xをcurrent supported source-release line** とし、older v0.x source-release lineをsupersedeします。npm registry publishは別工程で、GitHub/source releaseをsupportしていてもnpm公開はdeferしたままです。future v1のsupported Node.js floorは#105でv0.10に明示決定します。
 
 ## 脆弱性の報告
 
