@@ -66,9 +66,9 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.8.0` for the next GitHub/source release preparation. `v0.7.0` is the latest released source baseline; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.8.0`. **v0.8.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.8.0 / #81 has passed its design/implementation decision gate for adoption.** After the v0.8 source release, the active product target becomes **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, then **v0.10.0 / #24 + #6** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
+**Current execution order:** **v0.8.0 is released and closed out.** The active product target is now **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.10.0 / #24 + #6** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
 
 ## v1 scope under consideration after v0.5
 
@@ -325,7 +325,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.8.0` is the current source-release preparation target. #81 is adopted as an optional scalar read-only future-v1 Store capability; **v0.9.0 / #76 + #82 + #99 is the next product decision target** after v0.8 release. Tag/Release creation and npm publication remain separate operations.
+`v0.8.0` is released and closed out as the current source baseline. #81 is adopted as an optional scalar read-only future-v1 Store capability; **v0.9.0 / #76 + #82 + #99 is the active product decision target**. Future tag/Release creation and npm publication remain separate operations.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 

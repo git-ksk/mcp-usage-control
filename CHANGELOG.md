@@ -10,7 +10,7 @@ No entries yet.
 
 ## [0.8.0] - 2026-08-22
 
-Eighth GitHub/source release preparation. npm publication remains intentionally separate and is not authorized by this change.
+Eighth GitHub/source release. npm publication remains intentionally separate and was not performed.
 
 ### Added
 
@@ -39,7 +39,7 @@ Eighth GitHub/source release preparation. npm publication remains intentionally 
 
 - All five package manifests are aligned at `0.8.0`.
 - The normal release gate remains Node 20/22/24, real Redis, Cloudflare local workerd, Firestore Emulator, package tarball/content, and clean-consumer verification.
-- This preparation does **not** create the `v0.8.0` tag, GitHub Release, or npm publication.
+- `v0.8.0` was tagged and published as a GitHub/source release on 2026-08-22. npm publication remains deferred and separate.
 
 ## [0.7.0] - 2026-08-17
 

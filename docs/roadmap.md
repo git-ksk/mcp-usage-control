@@ -10,9 +10,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.7.0 is released and closed out** as the current pre-v1 source baseline. **v0.8.0 / #81 has passed its design/implementation proof gate and is the current source-release preparation target.** Read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability.
+**v0.8.0 is released and closed out** as the current pre-v1 source baseline. #81 passed its design/implementation proof gate and read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability. **v0.9.0 / #76 + #82 + #99 is now the active decision target.**
 
-The repository execution order is intentionally linear: **v0.7.0 closed -> v0.8/#81 release preparation -> v0.9/#76+#82+#99 (next) -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
+The repository execution order is intentionally linear: **v0.8.0 closed -> v0.9/#76+#82+#99 (active) -> v0.10/#24+#6 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
