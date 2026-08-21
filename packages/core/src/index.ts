@@ -7,6 +7,7 @@ import {
 } from './observability.js';
 
 export * from './observability.js';
+export * from './weighted-credits.js';
 
 export interface Principal {
   id: string;
