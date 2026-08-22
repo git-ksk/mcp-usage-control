@@ -8,6 +8,29 @@
 
 現在entryはありません。
 
+## [0.9.0] - 2026-08-22
+
+9回目のGitHub/source release preparation。repository全体のsafety hardeningを主対象とします。このpreparation自体ではtag / GitHub Release / npm publicationを作成せず、main merge後のrelease操作として分離します。
+
+### Safety hardening
+
+- v0.9 repository auditの#116〜#127をclose。retained-budget growth integrity、安全なexpiry/timer arithmetic、mutation前validation、MCP unresolved growth保持、Firestore expired-liable reconciliation、Cloudflare remote/maintenance protocol validation、malformed policy fail-closed、vector maintenance quota integrity、Redis recovery overflow、pre-auth reconciliation buffering、strict boolean authorization、cross-capability regression matrixを固めました。
+- 新しいproduct surfaceを増やさず、既存scalar/vector accounting、replay、liability、expiry/recovery、fail-closed contractを維持したままprovider/capability交差部をhardeningしました。
+
+### Firestore release blocker
+
+- #143をrace invariantを弱めず解消。`vector-growth-vs-settle-race`ではsettlement完了を必須のまま維持し、growthが先にcommitした場合はsettlementがそのgrowthを観測する必要があります。
+- adapterのouter retryは、commitしていないことが明確なFirestore transaction abortであるgRPC `ABORTED` (`10`) / HTTP `409`だけに限定し、bounded jitter backoffを追加しました。
+- `UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT`などambiguous/provider failureはouter retry allow-listへ追加していません。
+- release容量が0のvector settlementではbudget read/writeを省略してcontention windowを短縮し、Firestore Emulatorへ24 iterationのgrowth-vs-settle専用stressを追加しました。
+
+### Release evidence / boundary
+
+- PR #144はsquash merge前にNode 20/22/24 CI/package matrix、Cloudflare local workerd integration、Firestore Emulator integrationがすべてgreenです。
+- 5 public package manifestをrelease preparation向けに`0.9.0`へ揃えます。
+- このpreparation merge後、normal release gateがgreenなら、同一main contentを`v0.9.0` tag / GitHub Releaseへ進めます。
+- first npm publicationは今回のv0.9 release executionとして別途明示authorization済みです。source releaseとは独立操作のまま維持し、registry / provenance verification成功後にのみ#6をcloseします。
+
 ## [0.8.0] - 2026-08-22
 
 8回目のGitHub/source release。npm publicationは引き続き別操作で、実施していません。
@@ -29,7 +52,7 @@
 
 - reconciliationはcapacity reserve/release、liability、renew、settle、replay state書換えを行わず、status proof専用。
 - `absent` はlookup時点でretained stateがないことだけを意味し、Store retention horizon後のhistorical proofやautomatic replay permissionにはしない。
-- backend/transport failure、corrupt/unsupported state、scalar/vector mode mismatch、trusted expected-state mismatchを`absent`へ変換せずindeterminate / fail closed。
+- backend/transport failure、corrupt/unsupported state、scalar/vector mode mismatch、trusted-input mismatchを`absent`へ変換せずindeterminate / fail closed。
 - mutable budget limitはhistorical operation identityではないため、budget key + expected retained scalar unitsを検証し、既存same-key mutable-limit contractを維持。
 - v0.8 generic capabilityは意図的にscalar-only。vector initial-reserve ambiguityは将来equivalentなread-only contractを別途proofしない限りfail closed。
 - business side-effect/result replayはapplication-ownedのままusage accountingと分離。
