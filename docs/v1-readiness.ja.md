@@ -6,11 +6,11 @@
 
 この文書だけでv1.0 tag、GitHub Release、npm publicationを実行しません。
 
-## Status update — v0.8 operation reconciliation decision
+## Status update — v0.9 safety-hardening closeout
 
-`v0.8.0` がlatest released GitHub/source baselineでcloseout済みです。**v0.9.0 / #116〜#127 safety hardeningがactive product decision targetです。次のv0.10.0で#76 + #82 + #99 operational usabilityへ進みます。**
+`v0.8.0` はlatest released GitHub/source baselineのままです。**v0.9.0 / #116〜#127 safety hardeningのsource gateは完了し、v0.10.0 / #76 + #82 + #99 が現在のactive operational-usability gateです。** v0.9 safety closeoutではpackage version bump / tag / GitHub Release / npm publicationを作成していません。
 
-v0.8後の実行順序は **v0.9/#116〜#127 safety hardening -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#6+#105+#106 completion -> v1.0 stable promotion** です。v0.8.1 releaseは不要で、pre-v1 minorを別々のdecision gateとして分けます。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.10 decision gateに置きます。
+v0.8後の実行順序は **v0.9/#116〜#127 safety hardening完了 -> v0.10/#76+#82+#99 operational usability進行 -> v0.11/#24+#6+#105+#106 completion -> v1.0 stable promotion** です。v0.8.1 releaseは不要で、pre-v1 minorを別々のdecision gateとして分けます。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.10 decision gateに置きます。
 
 v0.8で#81の判断を明示確定します。
 
@@ -26,11 +26,13 @@ v0.8で#81の判断を明示確定します。
 
 ## 判定
 
-**v0.8.0 source releaseは完了。次product decision gateはv0.9.0 / #116〜#127 safety hardeningで、その次のv0.10.0が#76 + #82 + #99を担当します。**
+**v0.8.0はlatest released source baselineのままで、v0.9.0 / #116〜#127 safety-hardening source gateは完了しました。現在のactive product decision gateは v0.10.0 / #76 + #82 + #99 です。**
 
 v0.5-v0.7までのresolved correctness gateをcarry forwardし、#81はprovider-neutral contract、built-in Store support matrix、portable conformance、Cloudflare provider-specific reconciliation evidenceを持ちます。
 
-**v1.0 readinessは引き続きprovisionalです。** #83 / #84 / #81をoptional future-v1 capabilityとして採用し、**#116〜#127をv0.9 safety gateとし、#76 / #82 / #99は別releaseのv0.10 operational-usability gateへ移します。**
+v0.9 closeout evidenceとして、#116〜#127の全Issue close、Node 20/22/24 matrix、live Redis 7、Firestore Emulator、local workerd、CodeQL、[cross-capability safety regression matrix](safety-regression-matrix.ja.md) のgreenを確認済みです。これはsource gateのevidenceであり、package version / tag / GitHub Release / npm publicationの実施を意味しません。
+
+**v1.0 readinessは引き続きprovisionalです。** #83 / #84 / #81をoptional future-v1 capabilityとして採用済みで、**#116〜#127はv0.9 safety gateを通過しました。#76 / #82 / #99が現在のv0.10 operational-usability gateです。**
 
 ## v0.8 accounting boundary
 
@@ -199,7 +201,7 @@ GitHub source releaseとnpm publicationは別操作です。GitHub/source releas
 
 **Current released source baseline: v0.8.0 — RELEASED / CLOSED。**
 
-**Active product decision target: v0.9.0 / #116〜#127 safety hardening。次はv0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics。** #108/#109/#110はsubscription-credit導入を簡単にするnon-blocking隣接workとして完了済みで、このhelper/docs surfaceはv1 gateにはしません。
+**完了済みsource gate: v0.9.0 / #116〜#127 safety hardening。現在のactive product decision target: v0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics。** #108/#109/#110はsubscription-credit導入を簡単にするnon-blocking隣接workとして完了済みで、このhelper/docs surfaceはv1 gateにはしません。
 
 **#83: optional progressive reservation growthとしてfuture v1へ採用。**
 
@@ -207,7 +209,7 @@ GitHub source releaseとnpm publicationは別操作です。GitHub/source releas
 
 **#81: optional scalar read-only operation reconciliationとしてfuture v1へ採用。**
 
-**次product decision target: v0.9.0 / #116〜#127 safety hardening、その後v0.10.0 / #76 + #82 + #99。**
+**次product decision target: v0.10.0 / #76 + #82 + #99 operational usability。**
 
 **v1.0は新featureなしのlater stable promotion。**
 
