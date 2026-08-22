@@ -378,7 +378,7 @@ describe('FirestoreUsageStore', () => {
     );
   });
 
-  it('retains full usage after an expired liable reservation', async () => {
+  it('preserves expired-liable reconciliation after recovery without using tombstone expiry', async () => {
     const database = new FakeFirestore();
     let now = 10_000;
     const store = new FirestoreUsageStore(database, {
@@ -386,26 +386,52 @@ describe('FirestoreUsageStore', () => {
       expiryGraceMs: 0,
       now: () => now,
     });
-
-    const first = await store.reserve({
-      request: request('liable'),
+    const req = request('liable');
+    const input = {
+      request: req,
       units: 1,
       budgets: [{ key: 'day:user-a', limit: 1 }],
-      ttlMs: 100,
-    });
+    };
+
+    const first = await store.reserve({ ...input, ttlMs: 100 });
     if (!first.accepted) throw new Error('expected reservation');
+    const originalLeaseExpiry = first.reservation.expiresAt;
     await store.markLiable({ reservationId: first.reservation.id });
 
     now = 10_101;
+    await expect(store.reconcileOperation(input)).resolves.toEqual({
+      status: 'expired',
+      state: 'liable',
+      reservationId: first.reservation.id,
+      expiredAt: originalLeaseExpiry,
+    });
+
     const recovered = await store.recoverExpired(10);
     expect(recovered).toMatchObject({ liableCount: 1, liableUnits: 1 });
-
-    const duplicate = await store.reserve({
-      request: request('liable'),
-      units: 1,
-      budgets: [{ key: 'day:user-a', limit: 1 }],
-      ttlMs: 100,
+    const recoveredDocument = database.read(
+      new FakeDocumentReference('muc_reservations', first.reservation.id),
+    );
+    expect(recoveredDocument).toMatchObject({
+      state: 'settled',
+      leaseExpiresAtMs: originalLeaseExpiry,
     });
+    expect(recoveredDocument?.expiresAtMs).not.toBe(originalLeaseExpiry);
+
+    await expect(store.reconcileOperation(input)).resolves.toEqual({
+      status: 'expired',
+      state: 'liable',
+      reservationId: first.reservation.id,
+      expiredAt: originalLeaseExpiry,
+    });
+    // Reconciliation remains read-only after recovery.
+    await expect(store.reconcileOperation(input)).resolves.toEqual({
+      status: 'expired',
+      state: 'liable',
+      reservationId: first.reservation.id,
+      expiredAt: originalLeaseExpiry,
+    });
+
+    const duplicate = await store.reserve({ ...input, ttlMs: 100 });
     expect(duplicate).toEqual({ accepted: false, reason: 'duplicate_operation' });
 
     const another = await store.reserve({
@@ -415,6 +441,38 @@ describe('FirestoreUsageStore', () => {
       ttlMs: 100,
     });
     expect(another).toMatchObject({ accepted: false, reason: 'quota_exceeded' });
+  });
+
+  it('fails closed for a legacy recovered-liable tombstone missing original lease expiry', async () => {
+    const database = new FakeFirestore();
+    let now = 20_000;
+    const store = new FirestoreUsageStore(database, {
+      cleanupBatchSize: 0,
+      expiryGraceMs: 0,
+      now: () => now,
+    });
+    const input = {
+      request: request('legacy-liable'),
+      units: 1,
+      budgets: [{ key: 'legacy-liable-budget', limit: 1 }],
+    };
+    const first = await store.reserve({ ...input, ttlMs: 100 });
+    if (!first.accepted) throw new Error('expected reservation');
+    await store.markLiable({ reservationId: first.reservation.id });
+    now = 20_101;
+    await store.recoverExpired(10);
+
+    const key = `muc_reservations/${first.reservation.id}`;
+    const recovered = database.read(
+      new FakeDocumentReference('muc_reservations', first.reservation.id),
+    );
+    if (!recovered) throw new Error('expected recovered tombstone');
+    delete recovered.leaseExpiresAtMs;
+    database.writeKey(key, recovered);
+
+    await expect(store.reconcileOperation(input)).rejects.toThrow(
+      /missing its original lease expiry/,
+    );
   });
 
   it('keeps settlement replay idempotent and rejects conflicting replay', async () => {
