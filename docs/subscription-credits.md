@@ -118,6 +118,8 @@ Every configured tool shares that one scalar credit bucket. Only the quoted `uni
 
 For example, `browser_action` reserves 10 credits from the same 100-credit Plus allowance that `search` consumes 1 credit from. The Store performs admission atomically, so two concurrent calls cannot both spend the same remaining credits.
 
+For a fixed-weight tool, the quoted weight is normally the charge for that operation. The `browser_action` example reserves 10 credits and settles 10 on normal success. Return fewer units through `successUnits` / `toolErrorUnits` / `errorUnits`, or through direct `settle(actualUnits, ...)`, only when the product explicitly defines dynamic-cost or refund semantics. Otherwise a consumer-side lower settlement would make the configured fixed weight cease to be the effective price.
+
 Use a production Store such as Redis, Cloudflare Durable Objects, or Firestore when enforcement state must survive process restart or be shared across application instances. `MemoryUsageStore` above is only the compact example.
 
 ## Entitlement lookup stays outside MCPUsage
@@ -211,7 +213,10 @@ const SAFE_MAX_CREDITS = 20;
 const dynamicPolicy: UsagePolicy = {
   async quote(request: UsageRequest) {
     const plan = await applicationEntitlements.currentPlan(request.principal.id);
-    const monthlyLimit = plan === 'plus' ? 100 : 50;
+    const monthlyLimit = plan === 'free' ? 50 : plan === 'plus' ? 100 : undefined;
+    if (monthlyLimit === undefined) {
+      return { decision: 'deny', reason: 'unknown_plan' };
+    }
 
     return {
       decision: 'allow',
@@ -251,15 +256,23 @@ The unused portion of the reservation is released at settlement. Do not reserve 
 If a realistic worst-case reservation is too large or the operation naturally grows in stages, use optional progressive reservation growth with a Store that implements `ProgressiveUsageStore`:
 
 ```ts
+const originalBudget = admission.remainingByBudget[0];
+if (!originalBudget) throw new Error('expected the original monthly budget');
+
 const currentPlan = await applicationEntitlements.currentPlan(dynamicRequest.principal.id);
-const currentMonthlyLimit = currentPlan === 'plus' ? 100 : 50;
+const currentMonthlyLimit =
+  currentPlan === 'free' ? 50 : currentPlan === 'plus' ? 100 : undefined;
+if (currentMonthlyLimit === undefined) {
+  throw new Error('unknown entitlement plan; stop before additional metered work');
+}
 
 const growth = await admission.lease.grow({
   incrementId: 'batch-0042',
   additionalUnits: 10,
   budgets: [
     {
-      key: monthlyKey.key({ scope: 'user', id: dynamicRequest.principal.id }),
+      // Pin the exact key selected at reserve time; do not re-derive it from wall clock here.
+      key: originalBudget.key,
       limit: currentMonthlyLimit,
     },
   ],
@@ -270,7 +283,11 @@ if (!growth.accepted) {
 }
 ```
 
-Each growth step must be authorized **before** the extra cost is incurred. Use a stable `incrementId`; if a growth acknowledgement is ambiguous, retry the exact same growth attempt rather than creating a second increment. See [Progressive MCP growth](progressive-mcp-integration.md).
+Each growth step must be authorized **before** the extra cost is incurred. Use a stable `incrementId`; if a growth acknowledgement is ambiguous, retry the exact same growth attempt rather than creating a second increment.
+
+For a long-running operation that crosses a calendar-window boundary, **do not re-derive the growth budget key from the current wall clock**. The growth contract requires the exact budget-key set selected by the original reservation. An operation reserved in August therefore keeps its August key for later growth even if the clock is now in September. The September key belongs to new September reservations. If entitlement changed meanwhile, you may still pass the current effective limit with that same pinned key.
+
+See [Progressive MCP growth](progressive-mcp-integration.md).
 
 ## Scalar credits or vector usage?
 
