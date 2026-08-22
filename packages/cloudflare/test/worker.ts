@@ -1,4 +1,8 @@
-import type { CloudflareDurableObjectNamespace } from '../src/index.js';
+import {
+  createCloudflareUsageStoreGateway,
+  type CloudflareDurableObjectNamespace,
+  type CloudflareGatewayAuthorize,
+} from '../src/index.js';
 import { createCloudflareBearerTokenAuthorizer } from '../src/auth.js';
 import { createCloudflareBudgetMaintenanceGateway } from '../src/maintenance.js';
 import { createReconciliableCloudflareUsageStoreGateway } from '../src/reconciliation.js';
@@ -34,6 +38,32 @@ export default {
       }
       if (pathname === '/test/platform-unavailable') {
         return jsonResponse({ error: 'simulated_platform_unavailable' }, 503);
+      }
+
+      const malformedAuthorize = (() => 'false') as unknown as CloudflareGatewayAuthorize;
+      if (pathname === '/test/auth-truthy-usage') {
+        return createCloudflareUsageStoreGateway({
+          namespace: env.USAGE_CONTROL,
+          domainName: 'auth-truthy-usage',
+          path: pathname,
+          authorize: malformedAuthorize,
+        })(request);
+      }
+      if (pathname === '/test/auth-truthy-reconciliation') {
+        return createReconciliableCloudflareUsageStoreGateway({
+          namespace: env.USAGE_CONTROL,
+          domainName: 'auth-truthy-reconciliation',
+          path: pathname,
+          authorize: malformedAuthorize,
+        })(request);
+      }
+      if (pathname === '/test/auth-truthy-maintenance') {
+        return createCloudflareBudgetMaintenanceGateway({
+          namespace: env.USAGE_CONTROL,
+          domainName: 'auth-truthy-maintenance',
+          path: pathname,
+          authorizeMaintenance: malformedAuthorize,
+        })(request);
       }
     }
 

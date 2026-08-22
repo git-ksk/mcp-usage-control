@@ -74,7 +74,7 @@ export function createReconciliableCloudflareUsageStoreGateway(
 
     let authorized = false;
     try {
-      authorized = await options.authorize(request);
+      authorized = (await options.authorize(request)) === true;
     } catch {
       authorized = false;
     }
