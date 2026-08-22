@@ -85,6 +85,69 @@ describe('remote Cloudflare historical budget maintenance', () => {
     expect(fetchCalled).toBe(false);
   });
 
+  it('applies timeoutMs while resolving asynchronous maintenance headers', async () => {
+    let fetchCalled = false;
+    await expect(
+      pruneRemoteCloudflareHistoricalBudgets(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store-maintenance',
+          timeoutMs: 20,
+          headers: () => new Promise<HeadersInit>(() => undefined),
+          fetch: async () => {
+            fetchCalled = true;
+            return new Response('{}');
+          },
+        },
+        { historicalBudgetKeys: ['historical-key'], protectedCurrentBudgetKeys: [] },
+      ),
+    ).rejects.toMatchObject({ code: 'timeout' });
+    expect(fetchCalled).toBe(false);
+  });
+
+  it('applies timeoutMs while reading a stalled maintenance response body', async () => {
+    await expect(
+      pruneRemoteCloudflareHistoricalBudgets(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store-maintenance',
+          timeoutMs: 20,
+          fetch: async () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start() {
+                  // Intentionally never enqueue or close.
+                },
+              }),
+              { status: 200, headers: { 'content-type': 'application/json' } },
+            ),
+        },
+        { historicalBudgetKeys: ['historical-key'], protectedCurrentBudgetKeys: [] },
+      ),
+    ).rejects.toMatchObject({ code: 'timeout' });
+  });
+
+  it.each([
+    [401, 'unauthorized'],
+    [403, 'unauthorized'],
+    [429, 'remote'],
+    [503, 'remote'],
+  ] as const)('preserves HTTP %i as bounded maintenance error metadata', async (status, code) => {
+    const secretBody = 'maintenance-upstream-secret';
+    let caught: unknown;
+    try {
+      await pruneRemoteCloudflareHistoricalBudgets(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store-maintenance',
+          fetch: async () => new Response(secretBody, { status }),
+        },
+        { historicalBudgetKeys: ['historical-key'], protectedCurrentBudgetKeys: [] },
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ code, status });
+    expect(String(caught)).not.toContain(secretBody);
+  });
+
   it('fails closed when the maintenance reply omits a candidate', async () => {
     await expect(
       pruneRemoteCloudflareHistoricalBudgets(
@@ -128,6 +191,6 @@ describe('remote Cloudflare historical budget maintenance', () => {
           protectedCurrentBudgetKeys: [],
         },
       ),
-    ).rejects.toMatchObject({ code: 'remote' });
+    ).rejects.toMatchObject({ code: 'remote', status: 503 });
   });
 });

@@ -215,6 +215,147 @@ describe('RemoteCloudflareUsageStore', () => {
     }
   });
 
+  it('rejects malformed successful replies for every remote store method as protocol failures', async () => {
+    const reservationId = `cf1.${'a'.repeat(64)}`;
+    const malformedResult = { expiresAt: 'oops', secret: 'must-not-leak' };
+    const createStore = () =>
+      new RemoteCloudflareUsageStore({
+        endpoint: 'https://usage.example.test/v1/usage-store',
+        fetch: async () =>
+          new Response(
+            JSON.stringify({
+              ok: true,
+              result: malformedResult,
+              recovery: {
+                aggregate: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
+              },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+      });
+
+    const invocations: Array<[
+      string,
+      (store: RemoteCloudflareUsageStore) => Promise<unknown>,
+    ]> = [
+      [
+        'reserve',
+        store =>
+          store.reserve({
+            request: { ...request, operationId: 'malformed-reserve' },
+            units: 1,
+            budgets: [{ key: 'budget-a', limit: 10 }],
+            ttlMs: 1_000,
+          }),
+      ],
+      [
+        'reserve_vector',
+        store =>
+          store.reserveVector({
+            request: { ...request, operationId: 'malformed-vector-reserve' },
+            dimensions: [
+              { key: 'requests', units: 1, budgets: [{ key: 'budget-a', limit: 10 }] },
+            ],
+            ttlMs: 1_000,
+          }),
+      ],
+      [
+        'grow',
+        store =>
+          store.growReservation({
+            reservationId,
+            incrementId: 'grow-1',
+            expectedGrowthCursor: 'g1.expected',
+            additionalUnits: 1,
+            budgets: [{ key: 'budget-a', limit: 10 }],
+          }),
+      ],
+      [
+        'grow_vector',
+        store =>
+          store.growVectorReservation({
+            reservationId,
+            incrementId: 'vector-grow-1',
+            expectedGrowthCursor: 'g1.expected',
+            dimensions: [
+              {
+                key: 'requests',
+                additionalUnits: 1,
+                budgets: [{ key: 'budget-a', limit: 10 }],
+              },
+            ],
+          }),
+      ],
+      ['mark_liable', store => store.markLiable({ reservationId })],
+      ['renew', store => store.renew({ reservationId, ttlMs: 1_000 })],
+      [
+        'settle',
+        store => store.settle({ reservationId, actualUnits: 1, outcome: 'done' }),
+      ],
+      [
+        'settle_vector',
+        store =>
+          store.settleVector({
+            reservationId,
+            actualByDimension: [{ key: 'requests', actualUnits: 1 }],
+            outcome: 'done',
+          }),
+      ],
+    ];
+
+    for (const [method, invoke] of invocations) {
+      let caught: unknown;
+      try {
+        await invoke(createStore());
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught, method).toMatchObject({ code: 'protocol', status: 200 });
+      expect(String(caught), method).not.toContain('must-not-leak');
+    }
+  });
+
+  it('rejects duplicate or missing reserve balances at the HTTP protocol boundary', async () => {
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body ?? '{}')) as {
+          input: { budgets: Array<{ id: string }> };
+        };
+        const first = body.input.budgets[0]!.id;
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            result: {
+              accepted: true,
+              expiresAt: Date.now() + 1_000,
+              remainingByBudget: [
+                { id: first, remaining: 8 },
+                { id: first, remaining: 8 },
+              ],
+            },
+            recovery: {
+              aggregate: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      },
+    });
+
+    await expect(
+      store.reserve({
+        request: { ...request, operationId: 'duplicate-balances' },
+        units: 1,
+        budgets: [
+          { key: 'budget-a', limit: 10 },
+          { key: 'budget-b', limit: 10 },
+        ],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toMatchObject({ code: 'protocol', status: 200 });
+  });
+
   it('does not blindly retry an ambiguous network failure', async () => {
     let calls = 0;
     const store = new RemoteCloudflareUsageStore({

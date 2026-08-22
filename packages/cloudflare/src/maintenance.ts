@@ -200,40 +200,59 @@ async function postMaintenance(
   const timeoutMs = options.timeoutMs ?? 10_000;
   assertPositiveInteger(timeoutMs, 'timeoutMs');
   assertPortableTimerDelay(timeoutMs, 'timeoutMs');
-  const headers = new Headers(await resolveHeaders(options.headers));
-  headers.set('content-type', 'application/json');
-  headers.set('accept', 'application/json');
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let response: Response;
+
   try {
-    response = await (options.fetch ?? fetch)(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ version: 1, method: 'prune_budgets', input }),
-      signal: controller.signal,
-    });
-  } catch {
-    if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
-    throw new CloudflareUsageTransportError('network');
+    let resolvedHeaders: HeadersInit | undefined;
+    try {
+      resolvedHeaders = await waitForAbort(resolveHeaders(options.headers), controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
+      throw error;
+    }
+
+    const headers = new Headers(resolvedHeaders);
+    headers.set('content-type', 'application/json');
+    headers.set('accept', 'application/json');
+
+    let response: Response;
+    try {
+      response = await waitForAbort(
+        (options.fetch ?? fetch)(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ version: 1, method: 'prune_budgets', input }),
+          signal: controller.signal,
+        }),
+        controller.signal,
+      );
+    } catch (error) {
+      if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
+      if (error instanceof CloudflareUsageTransportError) throw error;
+      throw new CloudflareUsageTransportError('network');
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new CloudflareUsageTransportError('unauthorized', response.status);
+    }
+    if (!response.ok) throw new CloudflareUsageTransportError('remote', response.status);
+
+    let payload: unknown;
+    try {
+      payload = await waitForAbort(response.json(), controller.signal);
+    } catch (error) {
+      if (controller.signal.aborted) throw new CloudflareUsageTransportError('timeout');
+      if (error instanceof CloudflareUsageTransportError) throw error;
+      throw new CloudflareUsageTransportError('protocol', response.status);
+    }
+    if (!isMaintenanceResponse(payload)) {
+      throw new CloudflareUsageTransportError('protocol', response.status);
+    }
+    return payload.result;
   } finally {
     clearTimeout(timer);
   }
-
-  if (response.status === 401 || response.status === 403) {
-    throw new CloudflareUsageTransportError('unauthorized');
-  }
-  if (!response.ok) throw new CloudflareUsageTransportError('remote');
-
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new CloudflareUsageTransportError('protocol');
-  }
-  if (!isMaintenanceResponse(payload)) throw new CloudflareUsageTransportError('protocol');
-  return payload.result;
 }
 
 function resolveMaintenanceStub(
@@ -334,6 +353,28 @@ async function resolveHeaders(
 ): Promise<HeadersInit | undefined> {
   if (typeof headers === 'function') return headers();
   return headers;
+}
+
+function waitForAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new Error('operation aborted'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(new Error('operation aborted'));
+    };
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    signal.addEventListener('abort', onAbort, { once: true });
+    void promise.then(
+      value => {
+        cleanup();
+        resolve(value);
+      },
+      error => {
+        cleanup();
+        reject(error);
+      },
+    );
+  });
 }
 
 function responseJson(body: unknown, status: number): Response {

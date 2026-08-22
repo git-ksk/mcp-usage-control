@@ -692,7 +692,9 @@ export class RemoteCloudflareUsageStore implements ProgressiveUsageStore, Vector
         if (error instanceof CloudflareUsageTransportError) throw error;
         throw new CloudflareUsageTransportError('protocol', response.status);
       }
-      if (!isEnvelope(payload)) throw new CloudflareUsageTransportError('protocol', response.status);
+      if (!isEnvelopeForRequest(payload, body)) {
+        throw new CloudflareUsageTransportError('protocol', response.status);
+      }
       return payload as CloudflareStoreEnvelope<T>;
     } finally {
       clearTimeout(timer);
@@ -1736,11 +1738,20 @@ function isHashedDimensions(value: unknown, mode: 'reserve' | 'growth'): boolean
   });
 }
 
-function isEnvelope(value: unknown): value is CloudflareStoreEnvelope<unknown> {
-  if (!isRecord(value) || typeof value.ok !== 'boolean' || !isRecoveryReport(value.recovery)) return false;
-  if (value.ok) return 'result' in value;
+function isEnvelopeForRequest(
+  value: unknown,
+  request: CloudflareHttpRequest,
+): value is CloudflareStoreEnvelope<unknown> {
+  if (!isRecord(value) || typeof value.ok !== 'boolean' || !isRecoveryReport(value.recovery)) {
+    return false;
+  }
+  if (!value.ok) return isStoreErrorCode(value.error);
+  return isSuccessfulReplyForRequest(value.result, request);
+}
+
+function isStoreErrorCode(value: unknown): value is CloudflareStoreErrorCode {
   return (
-    typeof value.error === 'string' &&
+    typeof value === 'string' &&
     [
       'not_found_or_expired',
       'settlement_conflict',
@@ -1751,8 +1762,323 @@ function isEnvelope(value: unknown): value is CloudflareStoreEnvelope<unknown> {
       'growth_not_supported',
       'vector_dimension_mismatch',
       'usage_mode_mismatch',
-    ].includes(value.error)
+    ].includes(value)
   );
+}
+
+function isSuccessfulReplyForRequest(value: unknown, request: CloudflareHttpRequest): boolean {
+  switch (request.method) {
+    case 'reserve':
+      return isReserveReplyForRequest(value, request.input.budgets.map(budget => budget.id));
+    case 'reserve_vector':
+      return isVectorReserveReplyForRequest(value, request.input.dimensions);
+    case 'grow':
+      return isGrowReplyForRequest(value, request.input);
+    case 'grow_vector':
+      return isVectorGrowReplyForRequest(value, request.input.dimensions);
+    case 'mark_liable':
+    case 'renew':
+      return isRecord(value) && isPositiveInteger(value.expiresAt);
+    case 'settle':
+      return isSettlementReplyForRequest(value, request.input.actualUnits);
+    case 'settle_vector':
+      return isVectorSettlementReplyForRequest(value, request.input.actualByDimension);
+  }
+}
+
+function isReserveReplyForRequest(value: unknown, expectedBudgetIds: readonly string[]): boolean {
+  if (!isRecord(value) || typeof value.accepted !== 'boolean') return false;
+  if (value.accepted) {
+    return (
+      isPositiveInteger(value.expiresAt) &&
+      isExactBudgetBalances(value.remainingByBudget, expectedBudgetIds)
+    );
+  }
+  if (value.reason === 'duplicate_operation') {
+    return (
+      (value.limitingBudgetId === undefined || isExpectedHash(value.limitingBudgetId, expectedBudgetIds)) &&
+      (value.remaining === undefined || isNonNegativeInteger(value.remaining))
+    );
+  }
+  return (
+    value.reason === 'quota_exceeded' &&
+    isExpectedHash(value.limitingBudgetId, expectedBudgetIds) &&
+    isNonNegativeInteger(value.remaining)
+  );
+}
+
+function isVectorReserveReplyForRequest(
+  value: unknown,
+  dimensions: readonly CloudflareHashedDimension[],
+): boolean {
+  if (!isRecord(value) || typeof value.accepted !== 'boolean') return false;
+  if (value.accepted) {
+    return (
+      isPositiveInteger(value.expiresAt) &&
+      isExactVectorBalances(value.remainingByBudget, dimensions)
+    );
+  }
+  if (value.reason === 'duplicate_operation') {
+    return (
+      (value.limitingDimensionId === undefined || isExpectedDimensionId(value.limitingDimensionId, dimensions)) &&
+      (value.limitingBudgetId === undefined || isExpectedVectorBudgetId(value.limitingBudgetId, dimensions)) &&
+      (value.remaining === undefined || isNonNegativeInteger(value.remaining))
+    );
+  }
+  return (
+    value.reason === 'quota_exceeded' &&
+    isExpectedVectorPair(value.limitingDimensionId, value.limitingBudgetId, dimensions) &&
+    isNonNegativeInteger(value.remaining)
+  );
+}
+
+function isGrowReplyForRequest(
+  value: unknown,
+  input: Extract<CloudflareHttpRequest, { method: 'grow' }>['input'],
+): boolean {
+  if (
+    !isRecord(value) ||
+    typeof value.accepted !== 'boolean' ||
+    typeof value.replayed !== 'boolean' ||
+    !isNonEmptyString(value.growthCursor)
+  ) {
+    return false;
+  }
+  const expectedBudgetIds = input.budgets.map(budget => budget.id);
+  if (!value.accepted) {
+    return (
+      value.reason === 'quota_exceeded' &&
+      isExpectedHash(value.limitingBudgetId, expectedBudgetIds) &&
+      isNonNegativeInteger(value.remaining)
+    );
+  }
+  if (
+    !isNonNegativeInteger(value.previousReservedUnits) ||
+    !isNonNegativeInteger(value.reservedUnits) ||
+    value.previousReservedUnits > Number.MAX_SAFE_INTEGER - input.additionalUnits ||
+    value.reservedUnits !== value.previousReservedUnits + input.additionalUnits
+  ) {
+    return false;
+  }
+  return isExactBudgetBalances(value.remainingByBudget, expectedBudgetIds);
+}
+
+function isVectorGrowReplyForRequest(
+  value: unknown,
+  dimensions: readonly CloudflareVectorGrowthDimension[],
+): boolean {
+  if (
+    !isRecord(value) ||
+    typeof value.accepted !== 'boolean' ||
+    typeof value.replayed !== 'boolean' ||
+    !isNonEmptyString(value.growthCursor)
+  ) {
+    return false;
+  }
+  if (!value.accepted) {
+    return (
+      value.reason === 'quota_exceeded' &&
+      isExpectedVectorGrowthPair(value.limitingDimensionId, value.limitingBudgetId, dimensions) &&
+      isNonNegativeInteger(value.remaining)
+    );
+  }
+  const expectedIds = dimensions.map(dimension => dimension.id);
+  const previous = reservedDimensionMap(value.previousReservedByDimension, expectedIds);
+  const current = reservedDimensionMap(value.reservedByDimension, expectedIds);
+  if (!previous || !current) return false;
+  for (const dimension of dimensions) {
+    const before = previous.get(dimension.id);
+    const after = current.get(dimension.id);
+    if (
+      before === undefined ||
+      after === undefined ||
+      before > Number.MAX_SAFE_INTEGER - dimension.additionalUnits ||
+      after !== before + dimension.additionalUnits
+    ) {
+      return false;
+    }
+  }
+  return isExactVectorGrowthBalances(value.remainingByBudget, dimensions);
+}
+
+function isSettlementReplyForRequest(value: unknown, expectedActualUnits: number): boolean {
+  if (
+    !isRecord(value) ||
+    !isNonNegativeInteger(value.reservedUnits) ||
+    !isNonNegativeInteger(value.actualUnits) ||
+    !isNonNegativeInteger(value.releasedUnits) ||
+    typeof value.replayed !== 'boolean'
+  ) {
+    return false;
+  }
+  return (
+    value.actualUnits === expectedActualUnits &&
+    value.reservedUnits >= value.actualUnits &&
+    value.releasedUnits === value.reservedUnits - value.actualUnits
+  );
+}
+
+function isVectorSettlementReplyForRequest(
+  value: unknown,
+  expectedActuals: readonly CloudflareVectorActualDimension[],
+): boolean {
+  if (!isRecord(value) || typeof value.replayed !== 'boolean' || !Array.isArray(value.dimensions)) {
+    return false;
+  }
+  if (value.dimensions.length !== expectedActuals.length) return false;
+  const expected = new Map(expectedActuals.map(item => [item.id, item.actualUnits] as const));
+  const seen = new Set<string>();
+  for (const raw of value.dimensions) {
+    if (
+      !isRecord(raw) ||
+      !isExpectedHash(raw.id, expectedActuals.map(item => item.id)) ||
+      seen.has(raw.id as string) ||
+      !isNonNegativeInteger(raw.reservedUnits) ||
+      !isNonNegativeInteger(raw.actualUnits) ||
+      !isNonNegativeInteger(raw.releasedUnits)
+    ) {
+      return false;
+    }
+    const id = raw.id as string;
+    seen.add(id);
+    const actual = expected.get(id);
+    if (
+      actual === undefined ||
+      raw.actualUnits !== actual ||
+      raw.reservedUnits < raw.actualUnits ||
+      raw.releasedUnits !== raw.reservedUnits - raw.actualUnits
+    ) {
+      return false;
+    }
+  }
+  return seen.size === expected.size;
+}
+
+function isExactBudgetBalances(value: unknown, expectedIds: readonly string[]): boolean {
+  if (!Array.isArray(value) || value.length !== expectedIds.length) return false;
+  const expected = new Set(expectedIds);
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (
+      !isRecord(raw) ||
+      typeof raw.id !== 'string' ||
+      !expected.has(raw.id) ||
+      seen.has(raw.id) ||
+      !isNonNegativeInteger(raw.remaining)
+    ) {
+      return false;
+    }
+    seen.add(raw.id);
+  }
+  return seen.size === expected.size;
+}
+
+function isExactVectorBalances(
+  value: unknown,
+  dimensions: readonly CloudflareHashedDimension[],
+): boolean {
+  return isExactVectorBalancePairs(
+    value,
+    dimensions.flatMap(dimension =>
+      dimension.budgets.map(budget => [dimension.id, budget.id] as const),
+    ),
+  );
+}
+
+function isExactVectorGrowthBalances(
+  value: unknown,
+  dimensions: readonly CloudflareVectorGrowthDimension[],
+): boolean {
+  return isExactVectorBalancePairs(
+    value,
+    dimensions.flatMap(dimension =>
+      dimension.budgets.map(budget => [dimension.id, budget.id] as const),
+    ),
+  );
+}
+
+function isExactVectorBalancePairs(
+  value: unknown,
+  expectedPairs: readonly (readonly [string, string])[],
+): boolean {
+  if (!Array.isArray(value) || value.length !== expectedPairs.length) return false;
+  const expected = new Set(expectedPairs.map(([dimensionId, budgetId]) => `${dimensionId}\u0000${budgetId}`));
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (
+      !isRecord(raw) ||
+      typeof raw.dimensionId !== 'string' ||
+      typeof raw.budgetId !== 'string' ||
+      !isNonNegativeInteger(raw.remaining)
+    ) {
+      return false;
+    }
+    const pair = `${raw.dimensionId}\u0000${raw.budgetId}`;
+    if (!expected.has(pair) || seen.has(pair)) return false;
+    seen.add(pair);
+  }
+  return seen.size === expected.size;
+}
+
+function reservedDimensionMap(
+  value: unknown,
+  expectedIds: readonly string[],
+): Map<string, number> | undefined {
+  if (!Array.isArray(value) || value.length !== expectedIds.length) return undefined;
+  const expected = new Set(expectedIds);
+  const result = new Map<string, number>();
+  for (const raw of value) {
+    if (
+      !isRecord(raw) ||
+      typeof raw.id !== 'string' ||
+      !expected.has(raw.id) ||
+      result.has(raw.id) ||
+      !isNonNegativeInteger(raw.reservedUnits)
+    ) {
+      return undefined;
+    }
+    result.set(raw.id, raw.reservedUnits);
+  }
+  return result.size === expected.size ? result : undefined;
+}
+
+function isExpectedHash(value: unknown, expectedIds: readonly string[]): value is string {
+  return typeof value === 'string' && HASH_PATTERN.test(value) && expectedIds.includes(value);
+}
+
+function isExpectedDimensionId(value: unknown, dimensions: readonly CloudflareHashedDimension[]): boolean {
+  return typeof value === 'string' && dimensions.some(dimension => dimension.id === value);
+}
+
+function isExpectedVectorBudgetId(value: unknown, dimensions: readonly CloudflareHashedDimension[]): boolean {
+  return (
+    typeof value === 'string' &&
+    dimensions.some(dimension => dimension.budgets.some(budget => budget.id === value))
+  );
+}
+
+function isExpectedVectorPair(
+  dimensionId: unknown,
+  budgetId: unknown,
+  dimensions: readonly CloudflareHashedDimension[],
+): boolean {
+  if (typeof dimensionId !== 'string' || typeof budgetId !== 'string') return false;
+  const dimension = dimensions.find(item => item.id === dimensionId);
+  return dimension !== undefined && dimension.budgets.some(budget => budget.id === budgetId);
+}
+
+function isExpectedVectorGrowthPair(
+  dimensionId: unknown,
+  budgetId: unknown,
+  dimensions: readonly CloudflareVectorGrowthDimension[],
+): boolean {
+  if (typeof dimensionId !== 'string' || typeof budgetId !== 'string') return false;
+  const dimension = dimensions.find(item => item.id === dimensionId);
+  return dimension !== undefined && dimension.budgets.some(budget => budget.id === budgetId);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
 }
 
 function isRecoveryReport(value: unknown): value is CloudflareRecoveryReport {
