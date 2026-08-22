@@ -22,12 +22,30 @@
     "README.md",
     "LICENSE"
   ],
-  "engines": { "node": ">=20" },
-  "repository": { "type": "git", "url": "git+https://github.com/git-ksk/mcp-usage-control.git", "directory": "packages/firestore" },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/git-ksk/mcp-usage-control.git",
+    "directory": "packages/firestore"
+  },
   "homepage": "https://github.com/git-ksk/mcp-usage-control#readme",
-  "bugs": { "url": "https://github.com/git-ksk/mcp-usage-control/issues" },
-  "keywords": ["mcp", "firestore", "firebase", "usage", "quota", "credits", "atomic"],
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/git-ksk/mcp-usage-control/issues"
+  },
+  "keywords": [
+    "mcp",
+    "firestore",
+    "firebase",
+    "usage",
+    "quota",
+    "credits",
+    "atomic"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
@@ -35,6 +53,10 @@
     "prepack": "node ../../scripts/pack-workspace-deps.mjs prepare",
     "postpack": "node ../../scripts/pack-workspace-deps.mjs restore"
   },
-  "dependencies": { "mcp-usage-control": "workspace:^" },
-  "devDependencies": { "@google-cloud/firestore": "8.7.0" }
+  "dependencies": {
+    "mcp-usage-control": "workspace:^"
+  },
+  "devDependencies": {
+    "@google-cloud/firestore": "8.7.0"
+  }
 }
