@@ -10,9 +10,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.8.0 is released and closed out** as the current pre-v1 source baseline. #81 passed its design/implementation proof gate and read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability. **v0.9.0 / #76 + #82 + #99 is now the active decision target.** Subscription-credit ergonomics #108 + #109 + #110 are completed adjacent v0.9 convenience work and remain non-blocking for v1.
+**v0.8.0 is released and closed out** as the current pre-v1 source baseline. #81 passed its design/implementation proof gate and read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability. **v0.9.0 is now the active decision target.** Its first implementation phase is the repository-wide safety-hardening set #116-#127 found during the 2026-08-22 audit; after those correctness/security gaps are closed, v0.9 continues with #76 + #82 + #99 operational usability. Subscription-credit ergonomics #108 + #109 + #110 are completed adjacent v0.9 convenience work and remain non-blocking for v1.
 
-The repository execution order is intentionally linear: **v0.8.0 closed -> adjacent #108+#109+#110 credit-policy ergonomics completed -> v0.9/#76+#82+#99 (active) -> v0.10/#24+#6+#105+#106 and final freeze -> v1.0 stable promotion.** Dogfood bugs that affect a consumer today may be fixed earlier without changing that product-level ladder.
+The repository execution order is intentionally linear: **v0.8.0 closed -> adjacent #108+#109+#110 credit-policy ergonomics completed -> v0.9 safety hardening #116-#127 -> v0.9/#76+#82+#99 operational usability -> v0.10/#24+#6+#105+#106 and final freeze -> v1.0 stable promotion.** This is an implementation-order rule, not a requirement to publish v0.8.1 before v0.9.0. The safety fixes may land directly in v0.9.0; the important constraint is that new v0.9 observability/tooling must not be built on top of known fail-open, quota-integrity, reconciliation, or cross-capability regressions.
 
 It carries the resolved Firestore ACK-loss and bounded clock-skew contracts, Node.js 20/22/24 full-matrix evidence, mutable same-key quota-limit semantics, portable Store conformance across Memory/Redis/Cloudflare/Firestore, and Cloudflare bearer-token rotation support.
 
@@ -42,7 +42,7 @@ Each release below is a **decision gate**. A target feature is not forced into v
 | **v0.6.0** | #83 progressive reservation growth | **Adopted** as an optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`, growth cursor + stable increment identity, atomic multi-budget proof, lost-ACK replay fence, provider conformance |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **Adopted** as an optional v1 core/Store extension | Separate `VectorUsageControl` / `VectorUsageStore`, one logical replay identity, atomic per-dimension admission/growth/settlement, deterministic retry/conflict semantics, provider conformance |
 | **v0.8.0** | #81 operation reconciliation/status | **Adopted** as an optional scalar v1 Store capability | Common read-only status vocabulary, no second reservation, mismatch/unprovable state fail closed, Memory/Redis/Firestore support + Cloudflare reconciliation subpath, portable/provider evidence |
-| **v0.9.0** | #76 operational snapshot + #82 threshold/exhaustion signals + #99 dogfood integration diagnostics; adjacent #108/#109/#110 subscription-credit ergonomics | Include bounded non-authoritative production observability/tooling and a clear settlement-outcome contract; make common weighted-credit/window-key adoption easier without turning core into subscription/pricing infrastructure | No second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement; #109/#110 must stay deterministic policy-composition helpers and may resolve to documentation-only if abstraction becomes opinionated; #108/#109/#110 do not block v1 |
+| **v0.9.0** | **Phase A:** audit hardening #116-#127. **Phase B:** #76 operational snapshot + #82 threshold/exhaustion signals + #99 dogfood integration diagnostics; adjacent #108/#109/#110 subscription-credit ergonomics | First restore/prove fail-closed and quota-integrity invariants across feature intersections, then include bounded non-authoritative production observability/tooling and a clear settlement-outcome contract | No known safety blocker carried into Phase B; malformed runtime decisions/auth must fail closed; maintenance must not invalidate active accounting; cross-capability regressions covered; then no second accounting truth, scoped authoritative values only, privacy/cardinality safety, helper failure isolated from enforcement |
 | **v0.10.0** | Final completion / distribution / compatibility freeze | Close all remaining v1-scope decisions and prove the public distribution/runtime/storage compatibility boundary | #24 Cloudflare real-operation boundary, #6 first npm publication, #105 supported Node.js floor, #106 persisted-store upgrade/migration/rollback contract, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |
 | **v1.0.0** | Stable promotion | Declare the completed surface stable | No new feature; version/changelog/release promotion only after v0.10/#24+#6+#105+#106 completion criteria are satisfied |
 
@@ -87,7 +87,19 @@ Reconciliation is strictly read-only: it does not reserve or release capacity, m
 
 The v0.8 claim is intentionally scalar-only. Vector initial-reserve ambiguity stays fail closed unless a later release adds a separately proven vector reconciliation mechanism. Business-result replay remains application-owned and outside usage accounting.
 
-### v0.9.0 — operational usability (#76, #82, #99)
+### v0.9.0 — safety hardening first, then operational usability (#116-#127, #76, #82, #99)
+
+**Implementation order inside v0.9 is deliberate.** The 2026-08-22 whole-repository audit found correctness/security gaps mostly at intersections between capabilities that were individually well-tested. These are v0.9 blockers, not a separate mandatory v0.8.1 release line.
+
+Phase A closes the audit set before new operational helpers are treated as the active implementation work:
+
+1. **Immediate safety blockers:** #123 active-vector budget pruning can restore quota capacity; #126 gateway authorization accepts truthy non-boolean values; #122 malformed policy decision discriminants can fail open.
+2. **Accounting/time/provider correctness:** #117 unsafe expiry/timer arithmetic, #116 Memory retained-budget capacity during growth, #120 Firestore expired-liable reconciliation semantics, #121 Cloudflare remote/maintenance protocol and timeout validation, #125 reconciliation pre-auth body buffering, #119 MCP flow-store unresolved-growth preservation, #124 Redis recovery aggregate overflow, and #118 runtime identity validation before mutation.
+3. **Regression gate:** #127 adds cross-capability safety coverage so `retention x growth`, `flow-store x growth`, `recovery x reconciliation`, `maintenance x vector`, and similar feature intersections are tested explicitly rather than relying only on vertical capability conformance.
+
+Phase A is complete only when the affected provider-specific tests/conformance pass and the fixes preserve the stable invariants below. npm publication is not part of this phase.
+
+Phase B then continues the original v0.9 operational-usability decisions:
 
 The preferred v1 surface includes enough optional operational tooling that applications do not have to reinvent the distinction between:
 
@@ -135,6 +147,18 @@ It must resolve:
 | #83 progressive reservation growth | **v0.6.0** | **Adopted**: optional progressive Store capability + `UsageLease.grow()` |
 | #84 heterogeneous multi-dimensional usage | **v0.7.0** | **Adopted**: optional atomic vector Store capability + `VectorUsageControl` |
 | #81 operation reconciliation/status | **v0.8.0** | **Adopted**: optional scalar read-only capability vocabulary + Store support matrix |
+| #123 Cloudflare active-vector pruning safety | **v0.9.0 Phase A blocker** | Prevent maintenance from deleting any budget referenced by active scalar or vector reservations; prove no quota capacity resurrection |
+| #126 Cloudflare authorization callback validation | **v0.9.0 Phase A blocker** | Only literal `true` authorizes; malformed callback results fail closed |
+| #122 runtime policy decision validation | **v0.9.0 Phase A blocker** | Unknown/malformed discriminants fail closed before Store mutation |
+| #117 time / timer arithmetic safety | **v0.9.0 Phase A** | Reject/chunk unsafe expiry and platform timer values before authoritative mutation or renew scheduling |
+| #116 Memory retained-budget growth capacity | **v0.9.0 Phase A** | Growth cannot bypass `maxRetainedBudgetKeys`, including zero-unit initial reserve |
+| #120 Firestore expired-liable reconciliation | **v0.9.0 Phase A** | Preserve provider-neutral `expired / liable` semantics after recovery |
+| #121 Cloudflare remote/maintenance protocol hardening | **v0.9.0 Phase A** | Method-specific reply validation and full-call timeout/status semantics |
+| #125 reconciliation pre-auth body handling | **v0.9.0 Phase A** | Authenticate before buffering/parsing untrusted request bodies |
+| #119 MCP unresolved growth round-trip | **v0.9.0 Phase A** | Preserve exact-retry fence through Memory/Redis flow-store suspend/resume |
+| #124 Redis recovery aggregate overflow | **v0.9.0 Phase A** | No unsafe aggregate can turn a committed cleanup/admission into client-side ACK ambiguity |
+| #118 runtime identity validation | **v0.9.0 Phase A** | Malformed JS runtime identity is rejected before hashing, provider calls, or accounting mutation |
+| #127 cross-capability safety regression matrix | **v0.9.0 Phase A gate** | Add explicit interaction tests for independently introduced capabilities |
 | #76 operational usage snapshot | **v0.9.0** | Prefer bounded non-authoritative helper/pattern |
 | #82 threshold/exhaustion signals | **v0.9.0** | Prefer optional scoped helper/pattern built on #76 semantics |
 | #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | Clarify canonical integration vocabulary, distinguish invalid outcome from service outage, and add privacy-safe lifecycle visibility; consumer mapping bug may be fixed earlier |
@@ -158,6 +182,10 @@ The rule is: **no “maybe v1” item survives past v0.10.** It is either adopte
 - pending expiry may release capacity, liable unknown usage remains conservative;
 - ambiguous state-changing outcomes are not blindly retried;
 - Store/platform failure does not become allow;
+- malformed runtime policy/auth callback results do not become allow;
+- maintenance/retention operations cannot delete or recreate accounting capacity still referenced by an active scalar or vector reservation;
+- validation/time/protocol failures must be detected before authoritative mutation where the caller can otherwise observe a clean precondition failure;
+- cross-capability interactions are part of the regression contract, not assumed from independent feature conformance;
 - observability/alerts never become enforcement authority;
 - business side-effect/result replay remains outside usage accounting;
 - provider-specific durability/time/HA limitations remain explicit rather than being hidden behind an over-strong generic claim.
