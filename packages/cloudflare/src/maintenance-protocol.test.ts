@@ -14,7 +14,8 @@ const missing = 'd'.repeat(64);
 
 class FakeStorage {
   readonly budgets = new Set([historical, current, active]);
-  readonly activeBudgetIds = new Set([active]);
+  readonly activeScalarBudgetIds = new Set([active]);
+  readonly activeVectorBudgetIds = new Set<string>();
   readonly deletes: string[] = [];
 
   readonly sql = {
@@ -25,10 +26,13 @@ class FakeStorage {
       if (normalized.startsWith('select id from budgets where id = ?')) {
         const id = String(bindings[0]);
         if (this.budgets.has(id)) rows = [{ id }];
+      } else if (normalized.startsWith('select 1 as found from reservations as r')) {
+        const id = String(bindings[0]);
+        if (this.activeVectorBudgetIds.has(id)) rows = [{ found: 1 }];
       } else if (normalized.startsWith('select 1 as found from reservations')) {
         const quoted = String(bindings[0]);
         const id = quoted.slice(1, -1);
-        if (this.activeBudgetIds.has(id)) rows = [{ found: 1 }];
+        if (this.activeScalarBudgetIds.has(id)) rows = [{ found: 1 }];
       } else if (normalized.startsWith('delete from budgets where id = ?')) {
         const id = String(bindings[0]);
         this.budgets.delete(id);
@@ -97,6 +101,21 @@ describe('Cloudflare historical budget pruning', () => {
 
     expect(result.blockedActiveIds).toEqual([active]);
     expect(fake.deletes).toEqual([]);
+  });
+
+  it('never deletes an active vector reservation budget', () => {
+    const fake = new FakeStorage();
+    fake.activeScalarBudgetIds.clear();
+    fake.activeVectorBudgetIds.add(active);
+
+    const result = pruneCloudflareBudgets(asStorage(fake), {
+      candidateBudgetIds: [active],
+      protectedBudgetIds: [],
+    });
+
+    expect(result.blockedActiveIds).toEqual([active]);
+    expect(fake.deletes).toEqual([]);
+    expect(fake.budgets.has(active)).toBe(true);
   });
 
   it('requires incremental batches no larger than the hard bound', () => {

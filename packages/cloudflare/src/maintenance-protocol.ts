@@ -57,7 +57,7 @@ export function pruneCloudflareBudgets(
         continue;
       }
 
-      const activeReference = storage.sql
+      const activeScalarReference = storage.sql
         .exec<ExistsRow>(
           `SELECT 1 AS found
            FROM reservations
@@ -67,7 +67,20 @@ export function pruneCloudflareBudgets(
           `\"${budgetId}\"`,
         )
         .toArray()[0];
-      if (activeReference) {
+      const activeVectorReference = storage.sql
+        .exec<ExistsRow>(
+          `SELECT 1 AS found
+           FROM reservations AS r
+           JOIN reservation_vectors AS rv ON rv.reservation_id = r.id
+           JOIN json_each(rv.dimensions_json) AS dimension
+           JOIN json_each(json_extract(dimension.value, '$.budgetIds')) AS budget
+           WHERE r.state IN ('pending', 'liable')
+             AND budget.value = ?
+           LIMIT 1`,
+          budgetId,
+        )
+        .toArray()[0];
+      if (activeScalarReference || activeVectorReference) {
         reply.blockedActiveIds.push(budgetId);
         continue;
       }
