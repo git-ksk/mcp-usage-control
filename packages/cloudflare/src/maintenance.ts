@@ -199,6 +199,7 @@ async function postMaintenance(
 
   const timeoutMs = options.timeoutMs ?? 10_000;
   assertPositiveInteger(timeoutMs, 'timeoutMs');
+  assertPortableTimerDelay(timeoutMs, 'timeoutMs');
   const headers = new Headers(await resolveHeaders(options.headers));
   headers.set('content-type', 'application/json');
   headers.set('accept', 'application/json');
@@ -308,6 +309,12 @@ function validateRawBudgetKeys(
     throw new RangeError(`${name} must not contain duplicates`);
   }
   return normalized;
+}
+
+function assertPortableTimerDelay(value: number, name: string): void {
+  if (value > 2_147_483_647) {
+    throw new RangeError(`${name} must not exceed 2147483647ms`);
+  }
 }
 
 function assertPositiveInteger(value: number, name: string): void {

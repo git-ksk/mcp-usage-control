@@ -154,7 +154,11 @@ async function runCase(
 }
 
 function flowRecord(flowId: string, ttlMs: number): McpUsageFlowRecord {
-  const expiresAt = Date.now() + ttlMs;
+  const now = Date.now();
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > Number.MAX_SAFE_INTEGER - now) {
+    throw new RangeError('flow-store conformance ttlMs exceeds safe timestamp range');
+  }
+  const expiresAt = now + ttlMs;
   return {
     flowId,
     binding: {

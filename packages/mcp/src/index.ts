@@ -563,6 +563,8 @@ function resolveInvocation<TArgs>(
   return { args: argsOrCtx as TArgs, ctx: maybeCtx };
 }
 
+const MAX_PORTABLE_TIMER_DELAY_MS = 2_147_483_647;
+
 interface LeaseHeartbeat {
   stop(): Promise<void>;
 }
@@ -573,23 +575,31 @@ function noHeartbeat(): LeaseHeartbeat {
 
 function startLeaseHeartbeat(lease: UsageLease): LeaseHeartbeat {
   const intervalMs = Math.max(1, Math.floor(lease.ttlMs / 3));
+  let remainingMs = intervalMs;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> | undefined;
 
   const schedule = (): void => {
     if (stopped) return;
+    const delayMs = Math.min(remainingMs, MAX_PORTABLE_TIMER_DELAY_MS);
     timer = setTimeout(() => {
       if (stopped) return;
+      remainingMs -= delayMs;
+      if (remainingMs > 0) {
+        schedule();
+        return;
+      }
       inFlight = lease
         .renew()
         .then(() => undefined)
         .catch(() => undefined)
         .finally(() => {
           inFlight = undefined;
+          remainingMs = intervalMs;
           schedule();
         });
-    }, intervalMs);
+    }, delayMs);
   };
 
   schedule();

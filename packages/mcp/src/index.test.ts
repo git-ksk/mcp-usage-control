@@ -5,6 +5,8 @@ import {
   UsageControl,
   type MarkLiableInput,
   type MarkLiableResult,
+  type RenewInput,
+  type RenewResult,
   type SettleInput,
   type SettlementResult,
   type UsagePolicy,
@@ -40,6 +42,14 @@ class FailingSettlementStore extends MemoryUsageStore {
 class FailingMarkLiableStore extends MemoryUsageStore {
   override async markLiable(_input: MarkLiableInput): Promise<MarkLiableResult> {
     throw new Error('mark-liable unavailable');
+  }
+}
+
+class CountingRenewStore extends MemoryUsageStore {
+  renewCalls = 0;
+  override async renew(input: RenewInput): Promise<RenewResult> {
+    this.renewCalls += 1;
+    return super.renew(input);
   }
 }
 
@@ -219,6 +229,50 @@ describe('protectTool', () => {
     expect(caught).toBeInstanceOf(UsageSettlementError);
     expect((caught as UsageSettlementError).executionError).toBe(executionError);
     expect(store.settleCalls).toBe(1);
+  });
+
+  it('chunks heartbeat delays above the portable timer limit instead of overflowing to 1ms', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+    const store = new CountingRenewStore();
+    const longTtlMs = 9_000_000_000;
+    const longPolicy: UsagePolicy = {
+      quote() {
+        return {
+          decision: 'allow',
+          units: 1,
+          budget: { key: 'monthly:user-1', limit: 1 },
+          reservationTtlMs: longTtlMs,
+        };
+      },
+    };
+    const control = new UsageControl(store, longPolicy);
+    let finish!: (value: string) => void;
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'very_slow_tool',
+        noInput: true,
+        principal,
+        operationId,
+        successUnits: () => 0,
+      },
+      () => new Promise<string>(resolve => { finish = resolve; }),
+    );
+
+    const running = protectedHandler(ctx);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(store.renewCalls).toBe(0);
+
+    // ttl/3 = 3,000,000,000ms. The first chunk stops at the portable
+    // setTimeout ceiling rather than overflowing Node's timer to 1ms.
+    await vi.advanceTimersByTimeAsync(2_147_483_646);
+    expect(store.renewCalls).toBe(0);
+    await vi.advanceTimersByTimeAsync(852_516_353);
+    expect(store.renewCalls).toBe(1);
+
+    finish('done');
+    await expect(running).resolves.toBe('done');
   });
 
   it('renews a cost-liable reservation while a long handler runs', async () => {

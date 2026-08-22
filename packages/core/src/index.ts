@@ -1241,6 +1241,7 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
     validateRequestIdentity(input.request);
 
     const now = Date.now();
+    const expiresAt = safeAdd(now, input.ttlMs, 'reservation expiry');
     this.recoverExpired(now);
 
     const operationKey = operationKeyFor(input.request);
@@ -1277,7 +1278,7 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
       tool: input.request.tool,
       budgetKeys: budgets.map(budget => budget.key),
       reservedUnits: input.units,
-      expiresAt: now + input.ttlMs,
+      expiresAt,
       growthCursor: newGrowthCursor(),
       operationKey,
       state: 'pending',
@@ -1307,6 +1308,7 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
     validateRequestIdentity(input.request);
     const dimensions = canonicalizeUsageDimensions(input.dimensions);
     const now = Date.now();
+    const expiresAt = safeAdd(now, input.ttlMs, 'reservation expiry');
     this.recoverExpired(now);
 
     const operationKey = operationKeyFor(input.request);
@@ -1362,7 +1364,7 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
         budgetKeys: dimension.budgets.map(budget => budget.key),
         reservedUnits: dimension.units,
       })),
-      expiresAt: safeAdd(now, input.ttlMs, 'reservation expiry'),
+      expiresAt,
       growthCursor: newGrowthCursor(),
       operationKey,
       state: 'pending',
@@ -1531,6 +1533,7 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
 
   async settleVector(input: VectorSettleInput): Promise<VectorSettlementResult> {
     const now = Date.now();
+    const tombstoneExpiresAt = safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry');
     this.recoverExpired(now);
     const reservation = this.reservations.get(input.reservationId);
     if (!reservation) throw new UsageStateError('Reservation not found or expired');
@@ -1558,8 +1561,8 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
     reservation.state = 'settled';
     reservation.actualByDimension = actualByDimension.map(item => ({ ...item }));
     reservation.outcome = input.outcome;
-    reservation.tombstoneExpiresAt = safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry');
-    this.trackRecoveryAt(reservation.tombstoneExpiresAt);
+    reservation.tombstoneExpiresAt = tombstoneExpiresAt;
+    this.trackRecoveryAt(tombstoneExpiresAt);
     return toVectorSettlement(reservation);
   }
 
@@ -1685,6 +1688,7 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
   async renew(input: RenewInput): Promise<RenewResult> {
     assertPositiveInteger(input.ttlMs, 'ttlMs');
     const now = Date.now();
+    const expiresAt = safeAdd(now, input.ttlMs, 'reservation expiry');
     this.recoverExpired(now);
 
     const reservation = this.reservations.get(input.reservationId);
@@ -1692,14 +1696,15 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
       throw new UsageStateError('Active reservation not found or expired');
     }
 
-    reservation.expiresAt = now + input.ttlMs;
-    this.trackRecoveryAt(reservation.expiresAt);
-    return { reservationId: reservation.id, expiresAt: reservation.expiresAt };
+    reservation.expiresAt = expiresAt;
+    this.trackRecoveryAt(expiresAt);
+    return { reservationId: reservation.id, expiresAt };
   }
 
   async settle(input: SettleInput): Promise<SettlementResult> {
     assertNonNegativeInteger(input.actualUnits, 'actualUnits');
     const now = Date.now();
+    const tombstoneExpiresAt = safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry');
     this.recoverExpired(now);
     const reservation = this.reservations.get(input.reservationId);
     if (!reservation) throw new UsageStateError('Reservation not found or expired');
@@ -1723,13 +1728,24 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
     reservation.state = 'settled';
     reservation.actualUnits = input.actualUnits;
     reservation.outcome = input.outcome;
-    reservation.tombstoneExpiresAt = now + this.idempotencyTtlMs;
-    this.trackRecoveryAt(reservation.tombstoneExpiresAt);
+    reservation.tombstoneExpiresAt = tombstoneExpiresAt;
+    this.trackRecoveryAt(tombstoneExpiresAt);
     return toSettlement(reservation);
   }
 
   private recoverExpired(now: number): void {
     if (now < this.nextRecoveryAt) return;
+
+    // Preflight every liable transition before mutating any authoritative state.
+    // This keeps recovery atomic with respect to unsafe tombstone arithmetic.
+    for (const reservation of this.reservations.values()) {
+      if (
+        reservation.state === 'liable' &&
+        reservation.expiresAt <= now
+      ) {
+        safeAdd(now, this.idempotencyTtlMs, 'tombstone expiry');
+      }
+    }
 
     let nextRecoveryAt = Number.POSITIVE_INFINITY;
     for (const [id, reservation] of this.reservations) {

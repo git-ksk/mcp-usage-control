@@ -589,7 +589,7 @@ Redis persistence / HAはdeployment-specificです。
 
 ### `RemoteCloudflareUsageStore`
 
-Cloudflare外application向けHTTP Storeです。local以外はHTTPS必須。optional request headerはstatic / callbackで指定でき、`timeoutMs` はfull remote callをboundedします。
+Cloudflare外application向けHTTP Storeです。local以外はHTTPS必須。optional request headerはstatic / callbackで指定でき、`timeoutMs` はfull remote callをboundedし、portableなsingle `setTimeout` 上限である `2_147_483_647` ms以下である必要があります。MCP lease heartbeatはreservation TTL自体をこの値へ制限せず、それを超える待機時間をbounded chunkへ分割してplatform timer overflowを避けます。
 
 network / timeout / ambiguous remote failureはsurfaceしautomatic retryしません。transport errorへresponse bodyを伝播しません。
 
