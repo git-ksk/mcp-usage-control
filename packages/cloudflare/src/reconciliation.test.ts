@@ -163,6 +163,21 @@ describe('remote Cloudflare reserve reconciliation', () => {
     ).rejects.toBeInstanceOf(UsageStateError);
   });
 
+  it('rejects timeoutMs above the portable timer ceiling before transport work', async () => {
+    let fetchCalled = false;
+    await expect(
+      reconcileRemoteCloudflareReserve(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store',
+          timeoutMs: 2_147_483_648,
+          fetch: async () => { fetchCalled = true; return new Response('{}'); },
+        },
+        { request, units: 1, budgets },
+      ),
+    ).rejects.toThrow(/must not exceed 2147483647ms/);
+    expect(fetchCalled).toBe(false);
+  });
+
   it('applies the deadline while resolving rotating headers', async () => {
     await expect(
       reconcileRemoteCloudflareReserve(

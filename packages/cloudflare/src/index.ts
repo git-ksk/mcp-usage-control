@@ -453,7 +453,10 @@ export interface RemoteCloudflareUsageStoreOptions {
   headers?: HeadersInit | (() => HeadersInit | Promise<HeadersInit>);
   /** Override fetch for tests or custom transports. No automatic retry is performed. */
   fetch?: typeof fetch;
-  /** Full-call timeout covering header resolution, fetch, and response decoding. Defaults to 10 seconds. */
+  /**
+   * Full-call timeout covering header resolution, fetch, and response decoding. Defaults to 10 seconds.
+   * Must not exceed 2,147,483,647ms, the portable setTimeout ceiling used by supported runtimes.
+   */
   timeoutMs?: number;
   /** Optional best-effort recovery observer. */
   observer?: UsageObserver;
@@ -491,6 +494,7 @@ export class RemoteCloudflareUsageStore implements ProgressiveUsageStore, Vector
     this.fetchImpl = options.fetch ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 10_000;
     assertPositiveInteger(this.timeoutMs, 'timeoutMs');
+    assertPortableTimerDelay(this.timeoutMs, 'timeoutMs');
     this.observer = options.observer;
   }
 
@@ -1559,6 +1563,12 @@ function assertReservationId(value: string): void {
 function assertNonNegativeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
+  }
+}
+
+function assertPortableTimerDelay(value: number, name: string): void {
+  if (value > 2_147_483_647) {
+    throw new RangeError(`${name} must not exceed 2147483647ms`);
   }
 }
 

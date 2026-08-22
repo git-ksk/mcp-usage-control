@@ -1,4 +1,12 @@
 const COMMON = String.raw`
+local MAX_SAFE_INTEGER = 9007199254740991
+
+local function safeTimeAdd(base, delta)
+  if not base or not delta or base < 0 or delta <= 0 then return nil end
+  if base > MAX_SAFE_INTEGER or delta > (MAX_SAFE_INTEGER - base) then return nil end
+  return base + delta
+end
+
 local function subtractUsed(budgetHashes, amount)
   if amount <= 0 then return end
   for _, budgetHash in ipairs(budgetHashes) do
@@ -88,7 +96,7 @@ for _, rid in ipairs(expiredReservations) do
     elseif record.state == 'liable' then
       retainLiable(record)
       redis.call('HSET', KEYS[3], rid, cjson.encode(record))
-      redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+      redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
       if isVector(record) then
         recoveredVectorLiableCount = recoveredVectorLiableCount + 1
       else
@@ -127,6 +135,9 @@ local growthCursor = ARGV[8]
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local expiresAt = safeTimeAdd(now, ttlMs)
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not expiresAt or not tombstoneExpiresAt then return { 'invalid_time' } end
 ${CLEANUP}
 if redis.call('HEXISTS', KEYS[4], operationKey) == 1 then return withRecovery({ 'duplicate_operation' }) end
 local remainingByHash = {}
@@ -139,7 +150,6 @@ for _, budget in ipairs(budgets) do
 end
 local budgetHashes = {}
 local reply = { 'accepted' }
-local expiresAt = now + ttlMs
 table.insert(reply, tostring(expiresAt))
 for _, budget in ipairs(budgets) do
   table.insert(budgetHashes, budget.hash)
@@ -168,6 +178,9 @@ local growthCursor = ARGV[7]
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local expiresAt = safeTimeAdd(now, ttlMs)
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not expiresAt or not tombstoneExpiresAt then return { 'invalid_time' } end
 ${CLEANUP}
 if redis.call('HEXISTS', KEYS[4], operationKey) == 1 then return withRecovery({ 'duplicate_operation' }) end
 local balances = {}
@@ -191,7 +204,6 @@ for _, dimension in ipairs(dimensions) do
   end
   table.insert(storedDimensions, { hash = dimension.hash, reservedUnits = tonumber(dimension.units), budgetHashes = hashes })
 end
-local expiresAt = now + ttlMs
 local record = cjson.encode({
   mode = 'vector', state = 'pending', operationKey = operationKey,
   dimensions = storedDimensions, expiresAt = expiresAt, growthCursor = growthCursor
@@ -208,6 +220,8 @@ local idempotencyTtlMs = tonumber(ARGV[2])
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
@@ -221,7 +235,7 @@ if tonumber(record.expiresAt) <= now then
   elseif record.state == 'liable' then
     retainLiable(record)
     redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
-    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+    redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
   end
   redis.call('ZREM', KEYS[2], reservationId)
   return directExpiryReply(record, expiredState)
@@ -240,6 +254,9 @@ local idempotencyTtlMs = tonumber(ARGV[3])
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local expiresAt = safeTimeAdd(now, ttlMs)
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not expiresAt or not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
@@ -253,13 +270,12 @@ if tonumber(record.expiresAt) <= now then
   elseif record.state == 'liable' then
     retainLiable(record)
     redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
-    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+    redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
   end
   redis.call('ZREM', KEYS[2], reservationId)
   return directExpiryReply(record, expiredState)
 end
 if record.state ~= 'pending' and record.state ~= 'liable' then return { 'not_pending' } end
-local expiresAt = now + ttlMs
 record.expiresAt = expiresAt
 redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
 redis.call('ZADD', KEYS[2], expiresAt, reservationId)
@@ -274,6 +290,8 @@ local idempotencyTtlMs = tonumber(ARGV[4])
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
@@ -295,7 +313,7 @@ if tonumber(record.expiresAt) <= now then
   else
     retainLiable(record)
     redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
-    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+    redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
   end
   redis.call('ZREM', KEYS[2], reservationId)
   return directExpiryReply(record, expiredState)
@@ -308,7 +326,7 @@ record.actualUnits = actualUnits
 record.outcome = outcome
 redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
 redis.call('ZREM', KEYS[2], reservationId)
-redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
 return { 'settled', tostring(reservedUnits), tostring(actualUnits), tostring(released) }
 `;
 
@@ -320,6 +338,8 @@ local idempotencyTtlMs = tonumber(ARGV[4])
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
@@ -354,7 +374,7 @@ if tonumber(record.expiresAt) <= now then
   else
     retainLiable(record)
     redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
-    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+    redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
   end
   redis.call('ZREM', KEYS[2], reservationId)
   return directExpiryReply(record, expiredState)
@@ -374,7 +394,7 @@ record.actualByDimensions = actuals
 record.outcome = outcome
 redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
 redis.call('ZREM', KEYS[2], reservationId)
-redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
 return { 'settled', settlementJson() }
 `;
 
@@ -390,6 +410,8 @@ local nextGrowthCursor = ARGV[8]
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
@@ -405,7 +427,7 @@ if tonumber(record.expiresAt) <= now then
   else
     retainLiable(record)
     redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
-    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+    redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
   end
   redis.call('ZREM', KEYS[2], reservationId)
   return directExpiryReply(record, expiredState)
@@ -468,6 +490,8 @@ local nextGrowthCursor = ARGV[7]
 local redisTime = redis.call('TIME')
 local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
 ${COMMON}
+local tombstoneExpiresAt = safeTimeAdd(now, idempotencyTtlMs)
+if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
@@ -482,7 +506,7 @@ if tonumber(record.expiresAt) <= now then
   else
     retainLiable(record)
     redis.call('HSET', KEYS[3], reservationId, cjson.encode(record))
-    redis.call('ZADD', KEYS[5], now + idempotencyTtlMs, record.operationKey)
+    redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
   end
   redis.call('ZREM', KEYS[2], reservationId)
   return directExpiryReply(record, expiredState)

@@ -70,6 +70,21 @@ describe('remote Cloudflare historical budget maintenance', () => {
     }
   });
 
+  it('rejects timeoutMs above the portable timer ceiling before transport work', async () => {
+    let fetchCalled = false;
+    await expect(
+      pruneRemoteCloudflareHistoricalBudgets(
+        {
+          endpoint: 'https://usage.example.test/v1/usage-store-maintenance',
+          timeoutMs: 2_147_483_648,
+          fetch: async () => { fetchCalled = true; return new Response('{}'); },
+        },
+        { historicalBudgetKeys: ['historical-key'], protectedCurrentBudgetKeys: [] },
+      ),
+    ).rejects.toThrow(/must not exceed 2147483647ms/);
+    expect(fetchCalled).toBe(false);
+  });
+
   it('fails closed when the maintenance reply omits a candidate', async () => {
     await expect(
       pruneRemoteCloudflareHistoricalBudgets(

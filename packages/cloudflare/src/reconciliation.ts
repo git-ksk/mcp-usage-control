@@ -203,6 +203,7 @@ async function postLookup(
 
   const timeoutMs = options.timeoutMs ?? 10_000;
   assertPositiveInteger(timeoutMs, 'timeoutMs');
+  assertPortableTimerDelay(timeoutMs, 'timeoutMs');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -379,6 +380,12 @@ function validateRequestIdentity(request: UsageRequest): void {
 function assertNonNegativeInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
+  }
+}
+
+function assertPortableTimerDelay(value: number, name: string): void {
+  if (value > 2_147_483_647) {
+    throw new RangeError(`${name} must not exceed 2147483647ms`);
   }
 }
 

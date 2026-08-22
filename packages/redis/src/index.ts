@@ -246,6 +246,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         ],
       }),
     );
+    assertRedisTimeReply(parsed);
     const { payload: reply, recovery } = extractRecovery(parsed);
     this.emitRecoverySummary(recovery);
 
@@ -347,6 +348,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         ],
       }),
     );
+    assertRedisTimeReply(parsed);
     const { payload: reply, recovery } = extractRecovery(parsed);
     this.emitRecoverySummary(recovery);
     if (reply[0] === 'accepted') {
@@ -427,6 +429,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         ],
       }),
     );
+    assertRedisTimeReply(reply);
     if (reply[0] === 'accepted' || reply[0] === 'accepted_replay') {
       const cursor = reply[1];
       if (!cursor) throw new UsageStateError('Redis vector growth reply omitted growth cursor');
@@ -506,6 +509,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         ],
       }),
     );
+    assertRedisTimeReply(reply);
     if (reply[0] === 'settled' || reply[0] === 'idempotent') {
       return {
         reservationId: input.reservationId,
@@ -574,6 +578,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         ],
       }),
     );
+    assertRedisTimeReply(reply);
 
     if (reply[0] === 'accepted' || reply[0] === 'accepted_replay') {
       const returnedCursor = reply[3];
@@ -649,6 +654,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         arguments: [input.reservationId, String(this.idempotencyTtlMs)],
       }),
     );
+    assertRedisTimeReply(reply);
 
     if (reply[0] === 'marked') {
       return {
@@ -677,6 +683,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         arguments: [String(input.ttlMs), input.reservationId, String(this.idempotencyTtlMs)],
       }),
     );
+    assertRedisTimeReply(reply);
 
     if (reply[0] === 'renewed') {
       return {
@@ -712,6 +719,7 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
         ],
       }),
     );
+    assertRedisTimeReply(reply);
 
     if (reply[0] === 'settled' || reply[0] === 'idempotent') {
       return {
@@ -1109,6 +1117,12 @@ function parseStringArray(value: string | undefined, name: string): string[] {
 
 function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function assertRedisTimeReply(reply: readonly string[]): void {
+  if (reply[0] === 'invalid_time') {
+    throw new RangeError('Redis timestamp arithmetic exceeds safe integer range');
+  }
 }
 
 function parseReply(value: unknown): string[] {

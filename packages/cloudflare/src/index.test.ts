@@ -144,6 +144,23 @@ describe('CloudflareUsageStore transport boundary', () => {
 });
 
 describe('RemoteCloudflareUsageStore endpoint validation', () => {
+  it('rejects timeoutMs above the portable timer ceiling', () => {
+    expect(
+      () =>
+        new RemoteCloudflareUsageStore({
+          endpoint: 'https://usage.example.test/v1/usage-store',
+          timeoutMs: 2_147_483_648,
+        }),
+    ).toThrow(/must not exceed 2147483647ms/);
+    expect(
+      () =>
+        new RemoteCloudflareUsageStore({
+          endpoint: 'https://usage.example.test/v1/usage-store',
+          timeoutMs: 2_147_483_647,
+        }),
+    ).not.toThrow();
+  });
+
   it('requires HTTPS except for explicit local HTTP test endpoints', () => {
     expect(() => new RemoteCloudflareUsageStore({ endpoint: 'ftp://localhost/v1/usage-store' })).toThrow(/HTTPS/);
     expect(() => new RemoteCloudflareUsageStore({ endpoint: 'http://usage.example.test/v1/usage-store' })).toThrow(/HTTPS/);

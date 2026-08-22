@@ -593,7 +593,7 @@ Worker-local `UsageStore` backed by one Durable Object transaction domain.
 
 ### `RemoteCloudflareUsageStore`
 
-HTTP Store for applications outside Cloudflare. Non-local endpoints require HTTPS. Optional request headers may be static or callback-based. `timeoutMs` bounds the full remote call.
+HTTP Store for applications outside Cloudflare. Non-local endpoints require HTTPS. Optional request headers may be static or callback-based. `timeoutMs` bounds the full remote call and must be at most `2_147_483_647` ms (the portable single-`setTimeout` ceiling). MCP lease heartbeats do not impose this limit on reservation TTLs; heartbeat waits longer than this are scheduled in bounded chunks rather than overflowing the platform timer.
 
 Timeout/network/ambiguous remote failures are surfaced as transport errors and are not automatically retried. Response bodies are not propagated through transport errors.
 

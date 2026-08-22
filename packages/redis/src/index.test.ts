@@ -325,6 +325,116 @@ integration('RedisUsageStore', () => {
     });
   });
 
+  it('rejects unsafe Redis lease expiry before creating scalar or vector state', async () => {
+    const store = new RedisUsageStore(client);
+    await expect(
+      store.reserve({
+        request: request('unsafe-time-scalar'),
+        units: 1,
+        budgets: [{ key: 'unsafe-time-scalar-budget', limit: 1 }],
+        ttlMs: Number.MAX_SAFE_INTEGER,
+      }),
+    ).rejects.toThrow(/timestamp arithmetic exceeds safe integer range/);
+    await expect(
+      store.reserve({
+        request: request('unsafe-time-scalar'),
+        units: 1,
+        budgets: [{ key: 'unsafe-time-scalar-budget', limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ accepted: true });
+
+    await expect(
+      store.reserveVector({
+        request: request('unsafe-time-vector'),
+        dimensions: [
+          { key: 'requests', units: 1, budgets: [{ key: 'unsafe-time-vector-budget', limit: 1 }] },
+        ],
+        ttlMs: Number.MAX_SAFE_INTEGER,
+      }),
+    ).rejects.toThrow(/timestamp arithmetic exceeds safe integer range/);
+    await expect(
+      store.reserveVector({
+        request: request('unsafe-time-vector'),
+        dimensions: [
+          { key: 'requests', units: 1, budgets: [{ key: 'unsafe-time-vector-budget', limit: 1 }] },
+        ],
+        ttlMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ accepted: true });
+  });
+
+  it('rejects unsafe Redis renewal and settlement arithmetic before mutation', async () => {
+    const normal = new RedisUsageStore(client);
+    const reserved = await normal.reserve({
+      request: request('unsafe-time-active'),
+      units: 1,
+      budgets: [{ key: 'unsafe-time-active-budget', limit: 1 }],
+      ttlMs: 5_000,
+    });
+    if (!reserved.accepted) throw new Error('expected reservation');
+
+    await expect(
+      normal.renew({ reservationId: reserved.reservation.id, ttlMs: Number.MAX_SAFE_INTEGER }),
+    ).rejects.toThrow(/timestamp arithmetic exceeds safe integer range/);
+
+    const unsafeTombstones = new RedisUsageStore(client, {
+      idempotencyTtlMs: Number.MAX_SAFE_INTEGER,
+    });
+    await expect(
+      unsafeTombstones.settle({
+        reservationId: reserved.reservation.id,
+        actualUnits: 0,
+        outcome: 'must-not-release',
+      }),
+    ).rejects.toThrow(/timestamp arithmetic exceeds safe integer range/);
+
+    await expect(
+      normal.reserve({
+        request: request('unsafe-time-probe'),
+        units: 1,
+        budgets: [{ key: 'unsafe-time-active-budget', limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ accepted: false, reason: 'quota_exceeded' });
+  });
+
+  it('rejects unsafe Redis cleanup tombstones before recovering a liable lease', async () => {
+    const normal = new RedisUsageStore(client);
+    const reserved = await normal.reserve({
+      request: request('unsafe-time-liable'),
+      units: 1,
+      budgets: [{ key: 'unsafe-time-liable-budget', limit: 1 }],
+      ttlMs: 40,
+    });
+    if (!reserved.accepted) throw new Error('expected reservation');
+    await normal.markLiable({ reservationId: reserved.reservation.id });
+    await sleep(80);
+
+    const unsafeTombstones = new RedisUsageStore(client, {
+      idempotencyTtlMs: Number.MAX_SAFE_INTEGER,
+    });
+    await expect(
+      unsafeTombstones.reserve({
+        request: request('unsafe-time-cleanup-trigger'),
+        units: 0,
+        budgets: [{ key: 'unsafe-time-cleanup-trigger-budget', limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toThrow(/timestamp arithmetic exceeds safe integer range/);
+
+    // A normal store can still perform the authoritative liable recovery. If the
+    // rejected call had partially recovered/refunded state, this probe would pass.
+    await expect(
+      normal.reserve({
+        request: request('unsafe-time-liable-probe'),
+        units: 1,
+        budgets: [{ key: 'unsafe-time-liable-budget', limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).resolves.toMatchObject({ accepted: false, reason: 'quota_exceeded' });
+  });
+
   it('does not use the application clock for Redis lease expiry calculations', async () => {
     const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => { throw new Error('application clock must not be used by RedisUsageStore'); });
     const store = new RedisUsageStore(client);
