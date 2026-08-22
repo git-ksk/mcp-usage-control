@@ -116,7 +116,7 @@ Emitted when an expired lease is recovered.
 - `pending_released`: capacity was released because execution never became cost-liable.
 - `liable_retained`: the full reservation was conservatively retained because execution had already started.
 
-The memory reference store can report the local reservation/request identifiers it already holds. The Redis store intentionally does **not** persist raw principal, tenant, tool, or budget strings just to improve telemetry. Lazy Redis cleanup therefore emits aggregate recovery events containing `count` and aggregate `reservedUnits`. If an expired Redis reservation is touched directly, its opaque hashed reservation ID may also be included.
+The memory reference store can report the local reservation/request identifiers it already holds. The Redis store intentionally does **not** persist raw principal, tenant, tool, or budget strings just to improve telemetry. Lazy Redis cleanup therefore emits aggregate recovery events containing `count` and aggregate `reservedUnits`. These operational aggregates saturate at `Number.MAX_SAFE_INTEGER` rather than overflowing; saturation affects telemetry only and never quota/accounting state. If an expired Redis reservation is touched directly, its opaque hashed reservation ID may also be included.
 
 ### `operation.error`
 
