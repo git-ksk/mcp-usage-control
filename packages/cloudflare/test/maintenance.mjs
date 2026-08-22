@@ -349,4 +349,5 @@ await store.settleVector({
   outcome: 'cleanup',
 });
 
+console.log('cross-capability: scalar/vector active reservation maintenance protection: PASS');
 console.log('Cloudflare historical budget maintenance integration: PASS');

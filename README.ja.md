@@ -287,6 +287,7 @@ raw tool arguments / exception messageは自動収集しません。`projectUsag
 - [MCP integration](docs/mcp-integration.ja.md)
 - [サブスク型MCP creditsの実装パターン](docs/subscription-credits.ja.md)
 - [MCP protocol conformance](docs/mcp-conformance.ja.md)
+- [Cross-capability safety regression matrix](docs/safety-regression-matrix.ja.md)
 - [MCP Tasks の利用量 accounting](docs/mcp-tasks-accounting.ja.md)
 - [Architecture](docs/architecture.ja.md)
 - [Memory Storeの長期運用](docs/memory-store.ja.md)

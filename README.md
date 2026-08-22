@@ -307,6 +307,7 @@ See [Observability](docs/observability.md).
 - [MCP integration](docs/mcp-integration.md)
 - [Subscription-style MCP credits](docs/subscription-credits.md)
 - [MCP protocol conformance](docs/mcp-conformance.md)
+- [Cross-capability safety regression matrix](docs/safety-regression-matrix.md)
 - [MCP Tasks accounting](docs/mcp-tasks-accounting.md)
 - [Architecture](docs/architecture.md)
 - [Memory store operations](docs/memory-store.md)
