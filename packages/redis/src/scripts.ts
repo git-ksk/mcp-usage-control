@@ -7,6 +7,15 @@ local function safeTimeAdd(base, delta)
   return base + delta
 end
 
+local function saturatingSafeAdd(base, delta)
+  if delta >= (MAX_SAFE_INTEGER - base) then return MAX_SAFE_INTEGER end
+  return base + delta
+end
+
+local function safeIntegerString(value)
+  return string.format('%.0f', value)
+end
+
 local function subtractUsed(budgetHashes, amount)
   if amount <= 0 then return end
   for _, budgetHash in ipairs(budgetHashes) do
@@ -69,12 +78,12 @@ local recoveredVectorLiableCount = 0
 
 local function withRecovery(reply)
   table.insert(reply, 'recovery')
-  table.insert(reply, tostring(recoveredPendingCount))
-  table.insert(reply, tostring(recoveredPendingUnits))
-  table.insert(reply, tostring(recoveredLiableCount))
-  table.insert(reply, tostring(recoveredLiableUnits))
-  table.insert(reply, tostring(recoveredVectorPendingCount))
-  table.insert(reply, tostring(recoveredVectorLiableCount))
+  table.insert(reply, safeIntegerString(recoveredPendingCount))
+  table.insert(reply, safeIntegerString(recoveredPendingUnits))
+  table.insert(reply, safeIntegerString(recoveredLiableCount))
+  table.insert(reply, safeIntegerString(recoveredLiableUnits))
+  table.insert(reply, safeIntegerString(recoveredVectorPendingCount))
+  table.insert(reply, safeIntegerString(recoveredVectorLiableCount))
   return reply
 end
 
@@ -88,20 +97,20 @@ for _, rid in ipairs(expiredReservations) do
       redis.call('HDEL', KEYS[4], record.operationKey)
       redis.call('HDEL', KEYS[3], rid)
       if isVector(record) then
-        recoveredVectorPendingCount = recoveredVectorPendingCount + 1
+        recoveredVectorPendingCount = saturatingSafeAdd(recoveredVectorPendingCount, 1)
       else
-        recoveredPendingCount = recoveredPendingCount + 1
-        recoveredPendingUnits = recoveredPendingUnits + tonumber(record.reservedUnits)
+        recoveredPendingCount = saturatingSafeAdd(recoveredPendingCount, 1)
+        recoveredPendingUnits = saturatingSafeAdd(recoveredPendingUnits, tonumber(record.reservedUnits))
       end
     elseif record.state == 'liable' then
       retainLiable(record)
       redis.call('HSET', KEYS[3], rid, cjson.encode(record))
       redis.call('ZADD', KEYS[5], tombstoneExpiresAt, record.operationKey)
       if isVector(record) then
-        recoveredVectorLiableCount = recoveredVectorLiableCount + 1
+        recoveredVectorLiableCount = saturatingSafeAdd(recoveredVectorLiableCount, 1)
       else
-        recoveredLiableCount = recoveredLiableCount + 1
-        recoveredLiableUnits = recoveredLiableUnits + tonumber(record.reservedUnits)
+        recoveredLiableCount = saturatingSafeAdd(recoveredLiableCount, 1)
+        recoveredLiableUnits = saturatingSafeAdd(recoveredLiableUnits, tonumber(record.reservedUnits))
       end
     end
   end

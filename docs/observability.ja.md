@@ -116,7 +116,7 @@ expired leaseをrecoveryしたときに発火します。
 - `pending_released`: cost-liableになる前なのでcapacityを解放。
 - `liable_retained`: execution開始済みなのでfull reservationを保守的に維持。
 
-Memory reference storeは、もともと保持しているlocal reservation / request identifierをeventへ出せます。一方Redis storeはtelemetryのためだけにraw principal、tenant、tool、budget stringを永続化しません。そのためRedisのlazy cleanupでは `count` と合計 `reservedUnits` を持つaggregate recovery eventを出します。expired Redis reservationを直接操作した場合はopaqueなhashed reservation IDを含む場合があります。
+Memory reference storeは、もともと保持しているlocal reservation / request identifierをeventへ出せます。一方Redis storeはtelemetryのためだけにraw principal、tenant、tool、budget stringを永続化しません。そのためRedisのlazy cleanupでは `count` と合計 `reservedUnits` を持つaggregate recovery eventを出します。これらの運用aggregateはoverflowさせず `Number.MAX_SAFE_INTEGER` でsaturateします。このsaturationはtelemetryだけに適用し、quota / accounting stateは丸めません。expired Redis reservationを直接操作した場合はopaqueなhashed reservation IDを含む場合があります。
 
 ### `operation.error`
 

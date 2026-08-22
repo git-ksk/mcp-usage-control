@@ -3,6 +3,7 @@ import { createClient } from 'redis';
 import {
   UsageControl,
   VectorUsageControl,
+  type UsageEvent,
   type UsagePolicy,
   type VectorUsagePolicy,
 } from 'mcp-usage-control';
@@ -290,6 +291,49 @@ integration('RedisUsageStore', () => {
     expect(await control.reserve(request('op-a'))).toEqual({ allowed: false, reason: 'duplicate_operation' });
     expect(await control.reserve(request('op-b'))).toEqual({
       allowed: false, reason: 'quota_exceeded', limitingBudgetKey: 'month:user-1:2026-08', remaining: 0,
+    });
+  });
+
+  it('saturates large recovery telemetry without making the triggering reserve ambiguous', async () => {
+    const events: UsageEvent[] = [];
+    const store = new RedisUsageStore(client, {
+      cleanupBatchSize: 8,
+      observer: { onEvent(event) { events.push(event); } },
+    });
+    const hugeUnits = 5_000_000_000_000_000;
+
+    for (let index = 0; index < 2; index += 1) {
+      const seeded = await store.reserve({
+        request: request(`huge-expired-${index}`),
+        units: hugeUnits,
+        budgets: [{ key: `huge-budget-${index}`, limit: hugeUnits }],
+        ttlMs: 40,
+      });
+      expect(seeded.accepted).toBe(true);
+    }
+
+    await sleep(80);
+    const triggerInput = {
+      request: request('huge-recovery-trigger'),
+      units: 0,
+      budgets: [{ key: 'huge-recovery-trigger-budget', limit: 1 }],
+      ttlMs: 5_000,
+    } as const;
+    const trigger = await store.reserve(triggerInput);
+    expect(trigger.accepted).toBe(true);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'reservation.recovered',
+        store: 'redis',
+        recovery: 'pending_released',
+        count: 2,
+        reservedUnits: Number.MAX_SAFE_INTEGER,
+      }),
+    );
+
+    await expect(store.reserve(triggerInput)).resolves.toEqual({
+      accepted: false,
+      reason: 'duplicate_operation',
     });
   });
 
