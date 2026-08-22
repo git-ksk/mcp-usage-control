@@ -1,0 +1,239 @@
+name: v0.9 release prep bootstrap
+
+on:
+  push:
+    branches:
+      - release/v0.9.0
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: release/v0.9.0
+
+      - name: Prepare v0.9.0 release files
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one anchor, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          for path in [
+              'packages/core/package.json',
+              'packages/mcp/package.json',
+              'packages/redis/package.json',
+              'packages/cloudflare/package.json',
+              'packages/firestore/package.json',
+          ]:
+              replace_once(path, '"version": "0.8.0"', '"version": "0.9.0"')
+
+          changelog_en = '''## [0.9.0] - 2026-08-22
+
+Ninth GitHub/source release preparation, focused on repository-wide safety hardening. This preparation does not itself create the tag, GitHub Release, or npm publication; those remain post-merge release operations.
+
+### Safety hardening
+
+- Closed the v0.9 repository-audit safety set #116-#127, covering retained-budget growth integrity, safe expiry/timer arithmetic, validation before mutation, unresolved MCP growth preservation, Firestore expired-liable reconciliation, Cloudflare remote/maintenance protocol validation, malformed policy fail-closed behavior, vector maintenance quota integrity, Redis recovery overflow, pre-auth reconciliation buffering, strict boolean authorization, and the cross-capability regression matrix.
+- Preserved the existing scalar/vector accounting, replay, liability, expiry/recovery, and fail-closed contracts while tightening provider and capability intersections rather than adding a new product surface.
+
+### Firestore release blocker
+
+- Resolved #143 without weakening `vector-growth-vs-settle-race`: settlement remains required to complete, and a committed growth must be observed by settlement when growth wins first.
+- Added bounded jittered outer retry only for definitive Firestore transaction aborts: gRPC `ABORTED` (`10`) and HTTP `409`.
+- `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not added to the adapter outer-retry allow-list.
+- Reduced the vector-settlement contention window by skipping budget reads/writes when settlement releases no capacity, and added a dedicated 24-iteration Firestore Emulator growth-vs-settle stress case.
+
+### Release evidence / boundary
+
+- PR #144 passed the Node 20/22/24 CI/package matrix, Cloudflare local workerd integration, and Firestore Emulator integration before squash merge.
+- All five public package manifests are aligned at `0.9.0` for release preparation.
+- After this preparation merges and the normal release gate is green, the exact tested main content is eligible for the `v0.9.0` tag and GitHub Release.
+- First npm publication is separately and explicitly authorized for this v0.9 release execution; publication remains a distinct post-source-release operation and #6 closes only after registry/provenance verification succeeds.
+
+'''
+          replace_once(
+              'CHANGELOG.md',
+              '## [Unreleased]\n\nNo entries yet.\n\n',
+              '## [Unreleased]\n\nNo entries yet.\n\n' + changelog_en,
+          )
+
+          changelog_ja = '''## [0.9.0] - 2026-08-22
+
+9回目のGitHub/source release preparation。repository全体のsafety hardeningを主対象とします。このpreparation自体ではtag / GitHub Release / npm publicationを作成せず、main merge後のrelease操作として分離します。
+
+### Safety hardening
+
+- v0.9 repository auditの#116〜#127をclose。retained-budget growth integrity、安全なexpiry/timer arithmetic、mutation前validation、MCP unresolved growth保持、Firestore expired-liable reconciliation、Cloudflare remote/maintenance protocol validation、malformed policy fail-closed、vector maintenance quota integrity、Redis recovery overflow、pre-auth reconciliation buffering、strict boolean authorization、cross-capability regression matrixを固めました。
+- 新しいproduct surfaceを増やさず、既存scalar/vector accounting、replay、liability、expiry/recovery、fail-closed contractを維持したままprovider/capability交差部をhardeningしました。
+
+### Firestore release blocker
+
+- #143をrace invariantを弱めず解消。`vector-growth-vs-settle-race`ではsettlement完了を必須のまま維持し、growthが先にcommitした場合はsettlementがそのgrowthを観測する必要があります。
+- adapterのouter retryは、commitしていないことが明確なFirestore transaction abortであるgRPC `ABORTED` (`10`) / HTTP `409`だけに限定し、bounded jitter backoffを追加しました。
+- `UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT`などambiguous/provider failureはouter retry allow-listへ追加していません。
+- release容量が0のvector settlementではbudget read/writeを省略してcontention windowを短縮し、Firestore Emulatorへ24 iterationのgrowth-vs-settle専用stressを追加しました。
+
+### Release evidence / boundary
+
+- PR #144はsquash merge前にNode 20/22/24 CI/package matrix、Cloudflare local workerd integration、Firestore Emulator integrationがすべてgreenです。
+- 5 public package manifestをrelease preparation向けに`0.9.0`へ揃えます。
+- このpreparation merge後、normal release gateがgreenなら、同一main contentを`v0.9.0` tag / GitHub Releaseへ進めます。
+- first npm publicationは今回のv0.9 release executionとして別途明示authorization済みです。source releaseとは独立操作のまま維持し、registry / provenance verification成功後にのみ#6をcloseします。
+
+'''
+          replace_once(
+              'CHANGELOG.ja.md',
+              '## [Unreleased]\n\n現在entryはありません。\n\n',
+              '## [Unreleased]\n\n現在entryはありません。\n\n' + changelog_ja,
+          )
+
+          replace_once(
+              'README.md',
+              "All five package manifests are aligned at `0.8.0`. **v0.8.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.\n\n**Current execution order:** **v0.8.0 remains the latest released source baseline, and the v0.9.0 / #116-#127 safety-hardening source gate is complete.** The active product target is now **v0.10.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, and finally **v1.0.0** as a feature-free stable promotion. No intermediate v0.8.1 release is required. The v0.9 closeout does not create a package-version bump, tag, GitHub Release, or npm publication; those remain separate explicit operations.\n",
+              "All five package manifests are aligned at `0.9.0` for the v0.9 release preparation. **v0.8.0 remains the latest released GitHub/source baseline until the v0.9 tag is created.**\n\n**Current execution order:** **v0.9.0 / #116-#127 safety hardening plus Firestore release blocker #143 are complete and v0.9 release preparation is active.** After release, the product target is **v0.10.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.11.0 / #24 + #105 + #106** final production/distribution evidence and API freeze, then feature-free **v1.0.0** stable promotion. First npm publication (#6) is explicitly authorized for the v0.9 post-merge release execution and remains separate from GitHub/source release creation until registry verification succeeds.\n",
+          )
+
+          replace_once(
+              'README.ja.md',
+              "5 packageのmanifestは `0.8.0` で揃っています。**v0.8.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。\n\n**現在の実行順序:** **v0.8.0はlatest released source baselineのまま、v0.9.0 / #116〜#127 safety hardeningのsource gateは完了済み**です。active product targetは **v0.10.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。v0.8.1を挟む必要はありません。v0.9 closeoutではpackage version bump / tag / GitHub Release / npm publishを行っておらず、これらは引き続き別の明示操作です。\n",
+              "5 packageのmanifestはv0.9 release preparation向けに `0.9.0` へ揃えます。**v0.9 tag作成まではv0.8.0がlatest released GitHub/source baselineです。**\n\n**現在の実行順序:** **v0.9.0 / #116〜#127 safety hardeningとFirestore release blocker #143は完了し、v0.9 release preparationを進行中**です。release後は **v0.10.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.11.0 / #24 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionへ進みます。first npm publication（#6）は今回のv0.9 post-merge release executionとして明示authorization済みで、registry verification成功まではGitHub/source releaseと独立操作のまま扱います。\n",
+          )
+
+          replace_once(
+              'docs/roadmap.md',
+              "**v0.8.0 remains the latest released pre-v1 source baseline.** #81 passed its design/implementation proof gate and read-only scalar operation reconciliation is adopted as an optional future-v1 Store capability. **The v0.9.0 / #116-#127 safety-hardening source gate is complete.** The active decision target is now **v0.10.0 / #76 + #82 + #99 operational usability**, followed by v0.11.0 final completion/distribution freeze. Subscription-credit ergonomics #108 + #109 + #110 are already completed adjacent work and remain non-blocking for v1.\n\nThe repository execution order is intentionally linear: **v0.8.0 released -> adjacent #108+#109+#110 credit-policy ergonomics completed -> v0.9/#116-#127 safety hardening completed -> v0.10/#76+#82+#99 operational usability active -> v0.11/#24+#6+#105+#106 final completion/distribution freeze -> v1.0 stable promotion.** No v0.8.1 release is required. Each pre-v1 minor is a distinct decision gate so safety hardening, operational tooling, and final distribution/compatibility proof are not overloaded into one release.\n",
+              "**v0.8.0 remains the latest released pre-v1 source baseline until v0.9 is tagged.** The v0.9.0 / #116-#127 safety-hardening source gate and Firestore release blocker #143 are complete, and all five package manifests are being aligned at `0.9.0` for release. The active decision target after release is **v0.10.0 / #76 + #82 + #99 operational usability**, followed by v0.11.0 final completion/distribution freeze.\n\nThe repository execution order is intentionally linear: **v0.8.0 released -> v0.9/#116-#127 + #143 safety hardening/release -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#105+#106 final completion/distribution freeze -> v1.0 stable promotion.** First npm publication (#6) is being pulled forward into the explicitly authorized v0.9 release execution; it remains separate from source-release creation and is complete only after registry/provenance verification.\n",
+          )
+
+          replace_once(
+              'docs/roadmap.md',
+              "| **v0.9.0** | Repository-audit safety hardening #116-#127 | **Completed source gate** — restored/proved fail-closed, quota-integrity, time-safety, auth/protocol, reconciliation, and cross-capability invariants | All #116-#127 closed; Node 20/22/24, live Redis 7, Firestore Emulator, local workerd, CodeQL, and explicit cross-capability evidence green; no package-version bump/tag/Release/npm publication performed |",
+              "| **v0.9.0** | Repository-audit safety hardening #116-#127 + Firestore release blocker #143 | **Release preparation** — source safety gate complete and contention race blocker resolved without weakening invariants | All #116-#127 and #143 closed; Node 20/22/24, live Redis 7, Firestore Emulator, local workerd, CodeQL/cross-capability evidence carried forward; packages aligned at `0.9.0`; source release then separately authorized npm publication |",
+          )
+          replace_once(
+              'docs/roadmap.md',
+              "| **v0.11.0** | Final completion / distribution / compatibility freeze | Close all remaining v1-scope decisions and prove the public distribution/runtime/storage compatibility boundary | #24 Cloudflare real-operation boundary, #6 first npm publication, #105 supported Node.js floor, #106 persisted-store upgrade/migration/rollback contract, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker |",
+              "| **v0.11.0** | Final completion / distribution / compatibility freeze | Close all remaining v1-scope decisions and prove the public distribution/runtime/storage compatibility boundary | #24 Cloudflare real-operation boundary, #105 supported Node.js floor, #106 persisted-store upgrade/migration/rollback contract, final public API/name review, Tasks/MRTR scope decision, full integration/package/registry dogfood, no unresolved v1 blocker; #6 moves earlier if v0.9 registry verification succeeds |",
+          )
+          replace_once(
+              'docs/roadmap.md',
+              "**v0.9 source-gate closeout: COMPLETE (2026-08-22).** All #116-#127 issues are closed. The affected provider-specific suites passed on Node 20/22/24 with live Redis 7, Firestore Emulator, and local workerd evidence, with CodeQL and the explicit cross-capability safety matrix green. Package manifests remain at `0.8.0`; no v0.9 tag, GitHub Release, or npm publication was created as part of this gate.",
+              "**v0.9 release preparation: ACTIVE (2026-08-22).** All #116-#127 issues are closed, and #143 is now closed after PR #144 passed normal CI, Cloudflare Integration, and Firestore Integration before squash merge. The Firestore adapter keeps outer retry restricted to definitive `ABORTED`/409 outcomes; ambiguous `UNKNOWN`/`UNAVAILABLE`/`INVALID_ARGUMENT` are not promoted to retryable outcomes. Package manifests are aligned at `0.9.0`; tag/GitHub Release and the separately authorized first npm publication happen only after the release-preparation PR is green and merged.",
+          )
+
+          replace_once(
+              'docs/roadmap.ja.md',
+              "**v0.8.0はlatest released pre-v1 source baselineのまま**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**v0.9.0 / #116〜#127 safety hardeningのsource gateは完了しました。** 現在のactive decision targetは **v0.10.0 / #76 + #82 + #99 operational usability**、その後はv0.11.0 final completion / distribution freezeです。subscription credits導入ergonomicsの#108 + #109 + #110は完了済みの隣接workで、v1 blockerにはしません。\n\nリポジトリ上の実行順序は明確に直列です。**v0.8.0 release済み -> 隣接#108+#109+#110 credit-policy ergonomics完了 -> v0.9/#116〜#127 safety hardening完了 -> v0.10/#76+#82+#99 operational usability進行 -> v0.11/#24+#6+#105+#106 final completion / distribution freeze -> v1.0 stable promotion** と進めます。v0.8.1 releaseは不要です。pre-v1 minorごとにdecision gateを分け、safety hardening、operational tooling、final distribution / compatibility proofを1 releaseへ詰め込みません。\n",
+              "**v0.9 tag作成まではv0.8.0がlatest released pre-v1 source baselineです。** v0.9.0 / #116〜#127 safety hardening source gateとFirestore release blocker #143は完了し、5 package manifestをrelease向けに`0.9.0`へ揃えます。release後のactive decision targetは **v0.10.0 / #76 + #82 + #99 operational usability**、その後はv0.11.0 final completion / distribution freezeです。\n\nリポジトリ上の実行順序は **v0.8.0 release済み -> v0.9/#116〜#127 + #143 safety hardening/release -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#105+#106 final completion / distribution freeze -> v1.0 stable promotion** と進めます。first npm publication（#6）は今回の明示authorizationによりv0.9 release executionへ前倒しし、source releaseとは独立操作のままregistry / provenance verification成功時点で完了とします。\n",
+          )
+          replace_once(
+              'docs/roadmap.ja.md',
+              "| **v0.9.0** | repository audit safety hardening #116〜#127 | **source gate完了** — feature交差部のfail-closed / quota-integrity / time / auth / protocol / reconciliation invariantを復旧・proof済み | #116〜#127を全close。Node 20/22/24、live Redis 7、Firestore Emulator、local workerd、CodeQL、cross-capability evidenceがgreen。package version bump / tag / Release / npm publishは未実施 |",
+              "| **v0.9.0** | repository audit safety hardening #116〜#127 + Firestore release blocker #143 | **release preparation** — source safety gate完了、race invariantを弱めずcontention blocker解消 | #116〜#127と#143を全close。Node 20/22/24、live Redis 7、Firestore Emulator、local workerd、CodeQL/cross-capability evidenceを維持。packageを`0.9.0`へ揃え、source release後に別操作でauthorized npm publication |",
+          )
+          replace_once(
+              'docs/roadmap.ja.md',
+              "| **v0.11.0** | final completion / distribution / compatibility freeze | 残るv1 scope decisionを全て閉じ、public distribution / runtime / storage compatibility boundaryを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、#105 supported Node.js floor、#106 persisted-store upgrade/migration/rollback contract、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |",
+              "| **v0.11.0** | final completion / distribution / compatibility freeze | 残るv1 scope decisionを全て閉じ、public distribution / runtime / storage compatibility boundaryを実証する | #24 Cloudflare real-operation boundary、#105 supported Node.js floor、#106 persisted-store upgrade/migration/rollback contract、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0。#6はv0.9 registry verification成功時に前倒し完了 |",
+          )
+          replace_once(
+              'docs/roadmap.ja.md',
+              "**v0.9 source gate closeout: 完了（2026-08-22）。** #116〜#127はすべてclose済みです。Node 20/22/24 + live Redis 7、Firestore Emulator、local workerdのprovider-specific evidence、CodeQL、明示的なcross-capability safety matrixがgreenです。package manifestは `0.8.0` のままで、v0.9 tag / GitHub Release / npm publicationはこのgateでは作成していません。",
+              "**v0.9 release preparation: 進行中（2026-08-22）。** #116〜#127は全close済みで、#143もPR #144がnormal CI / Cloudflare Integration / Firestore Integrationをすべてgreenで通過してsquash merge後にcloseしました。Firestore adapterのouter retryはdefinitive `ABORTED`/409だけに限定し、ambiguousな`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT`はretry対象へ昇格していません。package manifestは`0.9.0`へ揃え、tag / GitHub Release / separately-authorized first npm publicationはrelease-preparation PRがgreenでmain mergeされた後だけ実行します。",
+          )
+
+          replace_once(
+              'docs/v1-readiness.md',
+              "`v0.8.0` remains the latest released GitHub/source baseline. **The v0.9.0 / #116-#127 safety-hardening source gate is complete; v0.10.0 / #76 + #82 + #99 is now the active operational-usability gate.** No v0.9 package-version bump, tag, GitHub Release, or npm publication was created by the safety closeout.\n\nAfter v0.8, the execution order is **v0.9/#116-#127 safety hardening completed -> v0.10/#76+#82+#99 operational usability active -> v0.11/#24+#6+#105+#106 completion -> v1.0 stable promotion**. No v0.8.1 release is required; the pre-v1 minors are deliberately split into separate decision gates. #99 came from real GatewayMCP dogfood; its immediate consumer-side mapping bug may land earlier while reusable MCPUsage diagnostics stay in the v0.10 decision gate.\n",
+              "`v0.8.0` remains the latest released GitHub/source baseline until v0.9 is tagged. **The v0.9.0 / #116-#127 safety-hardening source gate and Firestore release blocker #143 are complete, and v0.9 release preparation is active with all five packages aligned at `0.9.0`.**\n\nThe execution order is **v0.9 safety release -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#105+#106 completion -> v1.0 stable promotion**. First npm publication (#6) is explicitly authorized for the v0.9 post-merge release execution, remains separate from source-release creation, and closes only after registry/provenance verification succeeds.\n",
+          )
+          replace_once(
+              'docs/v1-readiness.md',
+              "**v0.8.0 remains the latest released source baseline, and the v0.9.0 / #116-#127 safety-hardening source gate is COMPLETE. The active product decision gate is now v0.10.0 / #76 + #82 + #99.**",
+              "**v0.9.0 release preparation is READY TO GATE: #116-#127 and release blocker #143 are complete; v0.8.0 remains the released baseline until the v0.9 tag is created. The active product decision gate after release is v0.10.0 / #76 + #82 + #99.**",
+          )
+          replace_once(
+              'docs/v1-readiness.md',
+              "The v0.9 closeout evidence includes all #116-#127 issues closed, the Node 20/22/24 matrix, live Redis 7, Firestore Emulator, local workerd, CodeQL, and the [cross-capability safety regression matrix](safety-regression-matrix.md) green. This is source-gate evidence; it does not imply a package version, tag, GitHub Release, or npm publication.",
+              "The v0.9 evidence includes all #116-#127 issues closed plus #143 closed after PR #144 passed Node 20/22/24 CI/package checks, Cloudflare Integration, and Firestore Integration. The Firestore race invariant remains strict, with outer retry limited to definitive `ABORTED`/409. Package manifests are now `0.9.0` for release preparation; tag/GitHub Release and first npm publication remain distinct post-merge operations.",
+          )
+          replace_once(
+              'docs/v1-readiness.md',
+              "GitHub source releases and npm publication remain separate operations. npm publication is still intentionally deferred and must not happen merely because a GitHub/source release is ready; #6 remains the separately authorized first registry publication gate.",
+              "GitHub source releases and npm publication remain separate operations. For v0.9, first npm publication is explicitly authorized as a post-source-release operation; #6 remains open until registry package versions, provenance, package contents, and installation are actually verified.",
+          )
+          replace_once(
+              'docs/v1-readiness.md',
+              "**Current released source baseline: v0.8.0 — RELEASED / CLOSED.**\n\n**Completed source gate: v0.9.0 / #116-#127 safety hardening. Active product decision target: v0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics.** #108/#109/#110 are completed non-blocking adjacent subscription-credit ergonomics work; the helper/docs surface does not gate v1.",
+              "**Current released source baseline: v0.8.0 — RELEASED / CLOSED until v0.9 tagging.**\n\n**Current release preparation: v0.9.0 / #116-#127 + #143 — READY FOR RELEASE GATE. Active product decision target after release: v0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics.**",
+          )
+          replace_once(
+              'docs/v1-readiness.md',
+              "**npm publication remains deferred and separate.**",
+              "**First npm publication is explicitly authorized for v0.9, remains separate from source release, and is pending registry verification.**",
+          )
+
+          replace_once(
+              'docs/v1-readiness.ja.md',
+              "`v0.8.0` はlatest released GitHub/source baselineのままです。**v0.9.0 / #116〜#127 safety hardeningのsource gateは完了し、v0.10.0 / #76 + #82 + #99 が現在のactive operational-usability gateです。** v0.9 safety closeoutではpackage version bump / tag / GitHub Release / npm publicationを作成していません。\n\nv0.8後の実行順序は **v0.9/#116〜#127 safety hardening完了 -> v0.10/#76+#82+#99 operational usability進行 -> v0.11/#24+#6+#105+#106 completion -> v1.0 stable promotion** です。v0.8.1 releaseは不要で、pre-v1 minorを別々のdecision gateとして分けます。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.10 decision gateに置きます。\n",
+              "v0.9 tag作成までは`v0.8.0`がlatest released GitHub/source baselineです。**v0.9.0 / #116〜#127 safety hardening source gateとFirestore release blocker #143は完了し、5 packageを`0.9.0`へ揃えたrelease preparationを進行中です。**\n\n実行順序は **v0.9 safety release -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#105+#106 completion -> v1.0 stable promotion** です。first npm publication（#6）はv0.9 post-merge release executionとして明示authorization済みで、source releaseとは分離したままregistry / provenance verification成功後にcloseします。\n",
+          )
+          replace_once(
+              'docs/v1-readiness.ja.md',
+              "**v0.8.0はlatest released source baselineのままで、v0.9.0 / #116〜#127 safety-hardening source gateは完了しました。現在のactive product decision gateは v0.10.0 / #76 + #82 + #99 です。**",
+              "**v0.9.0 release preparationはrelease gateへ進める状態です。#116〜#127とrelease blocker #143は完了し、v0.9 tag作成まではv0.8.0がreleased baselineです。release後のactive product decision gateはv0.10.0 / #76 + #82 + #99です。**",
+          )
+          replace_once(
+              'docs/v1-readiness.ja.md',
+              "v0.9 closeout evidenceとして、#116〜#127の全Issue close、Node 20/22/24 matrix、live Redis 7、Firestore Emulator、local workerd、CodeQL、[cross-capability safety regression matrix](safety-regression-matrix.ja.md) のgreenを確認済みです。これはsource gateのevidenceであり、package version / tag / GitHub Release / npm publicationの実施を意味しません。",
+              "v0.9 evidenceとして#116〜#127の全Issue closeに加え、#143もPR #144がNode 20/22/24 CI/package check、Cloudflare Integration、Firestore Integrationをgreenで通過後にcloseしました。Firestore race invariantは維持し、outer retryはdefinitive `ABORTED`/409だけです。package manifestはrelease preparation向けに`0.9.0`へ揃え、tag / GitHub Release / first npm publicationはmain merge後の独立操作とします。",
+          )
+
+          # Update the generic Japanese release/npm separation and current baseline wording when present.
+          p = Path('docs/v1-readiness.ja.md')
+          text = p.read_text()
+          text = text.replace(
+              'GitHub source releaseとnpm publicationは別操作です。npm publicationは引き続き意図的にdeferredで、GitHub/source releaseがreadyという理由だけでは実行しません。#6をseparately-authorized first registry publication gateとして維持します。',
+              'GitHub source releaseとnpm publicationは別操作です。v0.9ではfirst npm publicationをpost-source-release操作として明示authorization済みです。#6はregistry version / provenance / package content / installを実際に確認できるまでopenのまま維持します。',
+          )
+          text = text.replace(
+              '**Current released source baseline: v0.8.0 — RELEASED / CLOSED。**',
+              '**Current released source baseline: v0.8.0 — v0.9 tag作成まではRELEASED / CLOSED。**',
+          )
+          text = text.replace(
+              '**Completed source gate: v0.9.0 / #116〜#127 safety hardening。Active product decision target: v0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics。** #108/#109/#110は完了済みnon-blocking adjacent subscription-credit ergonomicsで、helper/docs surfaceはv1をblockしません。',
+              '**Current release preparation: v0.9.0 / #116〜#127 + #143 — RELEASE GATE READY。release後のactive product decision targetはv0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnosticsです。**',
+          )
+          text = text.replace(
+              '**npm publicationはdeferredのまま別操作です。**',
+              '**first npm publicationはv0.9向けに明示authorization済みで、source releaseとは別操作のままregistry verification待ちです。**',
+          )
+          p.write_text(text)
+
+          Path('.github/workflows/v0.9-release-prep-bootstrap.yml').unlink()
+
+      - name: Validate and commit release preparation
+        shell: bash
+        run: |
+          set -euo pipefail
+          versions="$(for f in packages/core/package.json packages/mcp/package.json packages/redis/package.json packages/cloudflare/package.json packages/firestore/package.json; do node -p "require('./$f').version"; done | sort -u)"
+          test "$versions" = "0.9.0"
+          grep -q '^## \[0.9.0\] - 2026-08-22$' CHANGELOG.md
+          grep -q '^## \[0.9.0\] - 2026-08-22$' CHANGELOG.ja.md
+          git diff --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/*/package.json CHANGELOG.md CHANGELOG.ja.md README.md README.ja.md docs/roadmap.md docs/roadmap.ja.md docs/v1-readiness.md docs/v1-readiness.ja.md .github/workflows/v0.9-release-prep-bootstrap.yml
+          git commit -m "chore(release): prepare v0.9.0"
+          git push origin HEAD:release/v0.9.0
