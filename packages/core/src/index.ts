@@ -475,13 +475,17 @@ export class UsageLease {
 
     this.unresolvedGrowth = request;
     try {
-      const result = await this.store.growReservation({
-        reservationId: this.reservation.id,
-        incrementId: request.incrementId,
-        expectedGrowthCursor,
-        additionalUnits: request.additionalUnits,
-        budgets: request.budgets,
-      });
+      const result = validateStoreGrowthResult(
+        await this.store.growReservation({
+          reservationId: this.reservation.id,
+          incrementId: request.incrementId,
+          expectedGrowthCursor,
+          additionalUnits: request.additionalUnits,
+          budgets: request.budgets,
+        }),
+        this.reservation,
+        request,
+      );
       this.reservation.growthCursor = result.growthCursor;
       if (result.accepted) this.reservation.reservedUnits = result.reservedUnits;
       this.unresolvedGrowth = undefined;
@@ -625,12 +629,16 @@ export class VectorUsageLease {
 
     this.unresolvedGrowth = request;
     try {
-      const result = await this.store.growVectorReservation({
-        reservationId: this.reservation.id,
-        incrementId: request.incrementId,
-        expectedGrowthCursor,
-        dimensions: request.dimensions,
-      });
+      const result = validateStoreVectorGrowthResult(
+        await this.store.growVectorReservation({
+          reservationId: this.reservation.id,
+          incrementId: request.incrementId,
+          expectedGrowthCursor,
+          dimensions: request.dimensions,
+        }),
+        this.reservation,
+        request,
+      );
       this.reservation.growthCursor = result.growthCursor;
       if (result.accepted) {
         const byKey = new Map(result.reservedByDimension.map(item => [item.key, item.reservedUnits]));
@@ -775,9 +783,9 @@ export class UsageControl {
     validateRequestIdentity(request);
     const requestForPolicy = request as UsageRequest;
     const metadata = resolveMetadata(this.metadata, requestForPolicy);
-    let quote: UsageQuote;
+    let quote: NormalizedUsagePolicyQuote;
     try {
-      quote = await this.policy.quote(requestForPolicy);
+      quote = normalizeUsagePolicyQuote(await this.policy.quote(requestForPolicy));
     } catch (error) {
       emitUsageEvent(this.observer, {
         type: 'operation.error',
@@ -802,19 +810,23 @@ export class UsageControl {
       return { allowed: false, reason: quote.reason };
     }
 
-    assertNonNegativeInteger(quote.units, 'units');
-    const budgets = canonicalizeBudgets('budgets' in quote && quote.budgets ? quote.budgets : [quote.budget]);
+    const budgets = quote.budgets;
     const ttlMs = quote.reservationTtlMs ?? this.defaultReservationTtlMs;
     assertPositiveInteger(ttlMs, 'reservationTtlMs');
 
     let result: StoreReserveResult;
     try {
-      result = await this.store.reserve({
-        request: requestForPolicy,
-        units: quote.units,
+      result = validateStoreReserveResult(
+        await this.store.reserve({
+          request: requestForPolicy,
+          units: quote.units,
+          budgets,
+          ttlMs,
+        }),
+        requestForPolicy,
+        quote.units,
         budgets,
-        ttlMs,
-      });
+      );
     } catch (error) {
       emitUsageEvent(this.observer, {
         type: 'operation.error',
@@ -913,7 +925,7 @@ export class VectorUsageControl {
     const metadata = resolveMetadata(this.metadata, requestForPolicy);
     let quote: VectorUsageQuote;
     try {
-      quote = await this.policy.quote(requestForPolicy);
+      quote = normalizeVectorUsagePolicyQuote(await this.policy.quote(requestForPolicy));
     } catch (error) {
       emitUsageEvent(this.observer, {
         type: 'operation.error',
@@ -938,13 +950,17 @@ export class VectorUsageControl {
       return { allowed: false, reason: quote.reason };
     }
 
-    const dimensions = canonicalizeUsageDimensions(quote.dimensions);
+    const dimensions = quote.dimensions;
     const ttlMs = quote.reservationTtlMs ?? this.defaultReservationTtlMs;
     assertPositiveInteger(ttlMs, 'reservationTtlMs');
 
     let result: StoreVectorReserveResult;
     try {
-      result = await this.store.reserveVector({ request: requestForPolicy, dimensions, ttlMs });
+      result = validateStoreVectorReserveResult(
+        await this.store.reserveVector({ request: requestForPolicy, dimensions, ttlMs }),
+        requestForPolicy,
+        dimensions,
+      );
     } catch (error) {
       emitUsageEvent(this.observer, {
         type: 'operation.error',
@@ -1937,9 +1953,463 @@ function operationKeyFor(request: UsageRequest): string {
   ]);
 }
 
+const MAX_POLICY_DENIAL_REASON_LENGTH = 128;
+
+type NormalizedUsagePolicyQuote =
+  | {
+      decision: 'allow';
+      units: number;
+      budgets: Budget[];
+      reservationTtlMs?: number;
+    }
+  | { decision: 'deny'; reason: string };
+
+function normalizeUsagePolicyQuote(value: unknown): NormalizedUsagePolicyQuote {
+  const quote = requireRecord(value, 'Usage policy quote');
+  if (quote.decision === 'deny') {
+    return { decision: 'deny', reason: validatePolicyDenialReason(quote.reason) };
+  }
+  if (quote.decision !== 'allow') {
+    throw new TypeError('Usage policy quote decision must be allow or deny');
+  }
+
+  assertNonNegativeInteger(quote.units as number, 'units');
+  const hasBudget = hasOwn(quote, 'budget');
+  const hasBudgets = hasOwn(quote, 'budgets');
+  if (hasBudget === hasBudgets) {
+    throw new TypeError('Usage policy allow quote must contain exactly one of budget or budgets');
+  }
+  const budgets = hasBudgets
+    ? canonicalizeBudgets(quote.budgets as readonly Budget[])
+    : canonicalizeBudgets([quote.budget as Budget]);
+  if (quote.reservationTtlMs !== undefined) {
+    assertPositiveInteger(quote.reservationTtlMs as number, 'reservationTtlMs');
+  }
+  return {
+    decision: 'allow',
+    units: quote.units as number,
+    budgets,
+    ...(quote.reservationTtlMs === undefined
+      ? {}
+      : { reservationTtlMs: quote.reservationTtlMs as number }),
+  };
+}
+
+function normalizeVectorUsagePolicyQuote(value: unknown): VectorUsageQuote {
+  const quote = requireRecord(value, 'Vector usage policy quote');
+  if (quote.decision === 'deny') {
+    return { decision: 'deny', reason: validatePolicyDenialReason(quote.reason) };
+  }
+  if (quote.decision !== 'allow') {
+    throw new TypeError('Vector usage policy quote decision must be allow or deny');
+  }
+  if (!Array.isArray(quote.dimensions)) {
+    throw new TypeError('Vector usage policy allow quote dimensions must be an array');
+  }
+  const dimensions = canonicalizeUsageDimensions(quote.dimensions as UsageDimension[]);
+  if (quote.reservationTtlMs !== undefined) {
+    assertPositiveInteger(quote.reservationTtlMs as number, 'reservationTtlMs');
+  }
+  return {
+    decision: 'allow',
+    dimensions,
+    ...(quote.reservationTtlMs === undefined
+      ? {}
+      : { reservationTtlMs: quote.reservationTtlMs as number }),
+  };
+}
+
+function validatePolicyDenialReason(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > MAX_POLICY_DENIAL_REASON_LENGTH
+  ) {
+    throw new TypeError(
+      `Usage policy denial reason must be a non-empty string no longer than ${MAX_POLICY_DENIAL_REASON_LENGTH} characters`,
+    );
+  }
+  return value;
+}
+
+function validateStoreReserveResult(
+  value: unknown,
+  request: UsageRequest,
+  units: number,
+  budgets: readonly Budget[],
+): StoreReserveResult {
+  const result = requireStoreResult(value, 'reserve');
+  if (result.accepted === false) {
+    validateReserveDenial(result, false);
+    return result as unknown as StoreReserveResult;
+  }
+  validateScalarAcceptedReservation(result, request, units, budgets);
+  return result as unknown as StoreReserveResult;
+}
+
+function validateStoreVectorReserveResult(
+  value: unknown,
+  request: UsageRequest,
+  dimensions: readonly UsageDimension[],
+): StoreVectorReserveResult {
+  const result = requireStoreResult(value, 'vector reserve');
+  if (result.accepted === false) {
+    validateReserveDenial(result, true);
+    return result as unknown as StoreVectorReserveResult;
+  }
+  validateVectorAcceptedReservation(result, request, dimensions);
+  return result as unknown as StoreVectorReserveResult;
+}
+
+function validateStoreGrowthResult(
+  value: unknown,
+  reservation: ReservationRecord,
+  request: ReservationGrowthRequest,
+): StoreGrowResult {
+  const result = requireStoreResult(value, 'growth');
+  validateGrowthCommon(result, reservation.id, request.incrementId);
+  if (result.accepted === false) {
+    if (result.reason !== 'quota_exceeded') {
+      throw new TypeError('UsageStore growth denial reason is invalid');
+    }
+    validateNonEmptyString(result.limitingBudgetKey, 'UsageStore growth limitingBudgetKey');
+    assertNonNegativeStoreInteger(result.remaining, 'UsageStore growth remaining');
+    if (!request.budgets.some(budget => budget.key === result.limitingBudgetKey)) {
+      throw new TypeError('UsageStore growth limiting budget did not match the request');
+    }
+    return result as unknown as StoreGrowResult;
+  }
+
+  assertNonNegativeStoreInteger(
+    result.previousReservedUnits,
+    'UsageStore growth previousReservedUnits',
+  );
+  assertNonNegativeStoreInteger(result.reservedUnits, 'UsageStore growth reservedUnits');
+  if (result.previousReservedUnits !== reservation.reservedUnits) {
+    throw new TypeError('UsageStore growth previous reservation units did not match local state');
+  }
+  const expectedReservedUnits = safeAdd(
+    reservation.reservedUnits,
+    request.additionalUnits,
+    'expected growth reservedUnits',
+  );
+  if (result.reservedUnits !== expectedReservedUnits) {
+    throw new TypeError('UsageStore growth reserved units did not match the requested increment');
+  }
+  validateBudgetRemainingTopology(
+    result.remainingByBudget,
+    request.budgets.map(budget => budget.key),
+    'UsageStore growth remainingByBudget',
+  );
+  return result as unknown as StoreGrowResult;
+}
+
+function validateStoreVectorGrowthResult(
+  value: unknown,
+  reservation: VectorReservationRecord,
+  request: VectorReservationGrowthRequest,
+): StoreVectorGrowResult {
+  const result = requireStoreResult(value, 'vector growth');
+  validateGrowthCommon(result, reservation.id, request.incrementId);
+  if (result.accepted === false) {
+    if (result.reason !== 'quota_exceeded') {
+      throw new TypeError('UsageStore vector growth denial reason is invalid');
+    }
+    validateNonEmptyString(
+      result.limitingDimensionKey,
+      'UsageStore vector growth limitingDimensionKey',
+    );
+    validateNonEmptyString(result.limitingBudgetKey, 'UsageStore vector growth limitingBudgetKey');
+    assertNonNegativeStoreInteger(result.remaining, 'UsageStore vector growth remaining');
+    const dimension = request.dimensions.find(item => item.key === result.limitingDimensionKey);
+    if (!dimension?.budgets.some(budget => budget.key === result.limitingBudgetKey)) {
+      throw new TypeError('UsageStore vector growth limiting topology did not match the request');
+    }
+    return result as unknown as StoreVectorGrowResult;
+  }
+
+  validateReservedDimensionTopology(
+    result.previousReservedByDimension,
+    reservation.dimensions.map(dimension => ({
+      key: dimension.key,
+      reservedUnits: dimension.reservedUnits,
+    })),
+    'UsageStore vector growth previousReservedByDimension',
+  );
+  const growthByKey = new Map(request.dimensions.map(dimension => [dimension.key, dimension] as const));
+  validateReservedDimensionTopology(
+    result.reservedByDimension,
+    reservation.dimensions.map(dimension => ({
+      key: dimension.key,
+      reservedUnits: safeAdd(
+        dimension.reservedUnits,
+        growthByKey.get(dimension.key)?.additionalUnits ?? 0,
+        'expected vector growth reservedUnits',
+      ),
+    })),
+    'UsageStore vector growth reservedByDimension',
+  );
+  validateVectorRemainingTopology(
+    result.remainingByBudget,
+    request.dimensions,
+    'UsageStore vector growth remainingByBudget',
+  );
+  return result as unknown as StoreVectorGrowResult;
+}
+
+function requireStoreResult(value: unknown, operation: string): Record<string, unknown> & { accepted: boolean } {
+  const result = requireRecord(value, `UsageStore ${operation} result`);
+  if (typeof result.accepted !== 'boolean') {
+    throw new TypeError(`UsageStore ${operation} result accepted must be a boolean`);
+  }
+  return result as Record<string, unknown> & { accepted: boolean };
+}
+
+function validateGrowthCommon(
+  result: Record<string, unknown>,
+  reservationId: string,
+  incrementId: string,
+): void {
+  if (typeof result.replayed !== 'boolean') {
+    throw new TypeError('UsageStore growth replayed must be a boolean');
+  }
+  if (result.reservationId !== reservationId || result.incrementId !== incrementId) {
+    throw new TypeError('UsageStore growth result identity did not match the request');
+  }
+  validateNonEmptyString(result.growthCursor, 'UsageStore growthCursor');
+}
+
+function validateReserveDenial(result: Record<string, unknown>, vector: boolean): void {
+  if (result.reason !== 'quota_exceeded' && result.reason !== 'duplicate_operation') {
+    throw new TypeError('UsageStore reserve denial reason is invalid');
+  }
+  if (result.limitingBudgetKey !== undefined) {
+    validateNonEmptyString(result.limitingBudgetKey, 'UsageStore limitingBudgetKey');
+  }
+  if (vector && result.limitingDimensionKey !== undefined) {
+    validateNonEmptyString(result.limitingDimensionKey, 'UsageStore limitingDimensionKey');
+  }
+  if (result.remaining !== undefined) {
+    assertNonNegativeStoreInteger(result.remaining, 'UsageStore remaining');
+  }
+}
+
+function validateScalarAcceptedReservation(
+  result: Record<string, unknown>,
+  request: UsageRequest,
+  units: number,
+  budgets: readonly Budget[],
+): void {
+  const reservation = requireRecord(result.reservation, 'UsageStore accepted reservation');
+  validateNonEmptyString(reservation.id, 'UsageStore reservation id');
+  if (
+    reservation.operationId !== request.operationId ||
+    reservation.principalId !== request.principal.id ||
+    reservation.tenantId !== request.principal.tenantId ||
+    reservation.plan !== request.principal.plan ||
+    reservation.tool !== request.tool
+  ) {
+    throw new TypeError('UsageStore accepted reservation identity did not match the request');
+  }
+  assertNonNegativeStoreInteger(reservation.reservedUnits, 'UsageStore reservation reservedUnits');
+  if (reservation.reservedUnits !== units) {
+    throw new TypeError('UsageStore accepted reservation units did not match the request');
+  }
+  assertPositiveStoreInteger(reservation.expiresAt, 'UsageStore reservation expiresAt');
+  validateOptionalNonEmptyString(reservation.growthCursor, 'UsageStore reservation growthCursor');
+  validateStringSet(
+    reservation.budgetKeys,
+    budgets.map(budget => budget.key),
+    'UsageStore reservation budgetKeys',
+  );
+  validateBudgetRemainingTopology(
+    result.remainingByBudget,
+    budgets.map(budget => budget.key),
+    'UsageStore remainingByBudget',
+  );
+}
+
+function validateVectorAcceptedReservation(
+  result: Record<string, unknown>,
+  request: UsageRequest,
+  dimensions: readonly UsageDimension[],
+): void {
+  const reservation = requireRecord(result.reservation, 'UsageStore accepted vector reservation');
+  validateNonEmptyString(reservation.id, 'UsageStore vector reservation id');
+  if (
+    reservation.operationId !== request.operationId ||
+    reservation.principalId !== request.principal.id ||
+    reservation.tenantId !== request.principal.tenantId ||
+    reservation.plan !== request.principal.plan ||
+    reservation.tool !== request.tool
+  ) {
+    throw new TypeError('UsageStore accepted vector reservation identity did not match the request');
+  }
+  assertPositiveStoreInteger(reservation.expiresAt, 'UsageStore vector reservation expiresAt');
+  validateOptionalNonEmptyString(
+    reservation.growthCursor,
+    'UsageStore vector reservation growthCursor',
+  );
+  if (!Array.isArray(reservation.dimensions) || reservation.dimensions.length !== dimensions.length) {
+    throw new TypeError('UsageStore accepted vector reservation dimensions did not match the request');
+  }
+  const expectedByKey = new Map(dimensions.map(dimension => [dimension.key, dimension] as const));
+  const seen = new Set<string>();
+  for (const raw of reservation.dimensions) {
+    const dimension = requireRecord(raw, 'UsageStore vector reservation dimension');
+    validateNonEmptyString(dimension.key, 'UsageStore vector reservation dimension key');
+    const expected = expectedByKey.get(dimension.key);
+    if (!expected || seen.has(dimension.key)) {
+      throw new TypeError('UsageStore accepted vector reservation topology did not match the request');
+    }
+    seen.add(dimension.key);
+    assertNonNegativeStoreInteger(
+      dimension.reservedUnits,
+      'UsageStore vector reservation reservedUnits',
+    );
+    if (dimension.reservedUnits !== expected.units) {
+      throw new TypeError('UsageStore accepted vector reservation units did not match the request');
+    }
+    validateStringSet(
+      dimension.budgetKeys,
+      expected.budgets.map(budget => budget.key),
+      'UsageStore vector reservation budgetKeys',
+    );
+  }
+  validateVectorRemainingTopology(
+    result.remainingByBudget,
+    dimensions,
+    'UsageStore vector remainingByBudget',
+  );
+}
+
+function validateBudgetRemainingTopology(
+  value: unknown,
+  expectedKeys: readonly string[],
+  name: string,
+): void {
+  if (!Array.isArray(value) || value.length !== expectedKeys.length) {
+    throw new TypeError(`${name} did not match requested budgets`);
+  }
+  const expected = new Set(expectedKeys);
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const balance = requireRecord(raw, name);
+    validateNonEmptyString(balance.key, `${name} key`);
+    if (!expected.has(balance.key) || seen.has(balance.key)) {
+      throw new TypeError(`${name} did not match requested budgets`);
+    }
+    seen.add(balance.key);
+    assertNonNegativeStoreInteger(balance.remaining, `${name} remaining`);
+  }
+}
+
+function validateVectorRemainingTopology(
+  value: unknown,
+  dimensions: readonly { key: string; budgets: readonly Budget[] }[],
+  name: string,
+): void {
+  const expected = new Set(
+    dimensions.flatMap(dimension =>
+      dimension.budgets.map(budget => `${dimension.key}\u0000${budget.key}`),
+    ),
+  );
+  if (!Array.isArray(value) || value.length !== expected.size) {
+    throw new TypeError(`${name} did not match requested vector budgets`);
+  }
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const balance = requireRecord(raw, name);
+    validateNonEmptyString(balance.dimensionKey, `${name} dimensionKey`);
+    validateNonEmptyString(balance.budgetKey, `${name} budgetKey`);
+    const key = `${balance.dimensionKey}\u0000${balance.budgetKey}`;
+    if (!expected.has(key) || seen.has(key)) {
+      throw new TypeError(`${name} did not match requested vector budgets`);
+    }
+    seen.add(key);
+    assertNonNegativeStoreInteger(balance.remaining, `${name} remaining`);
+  }
+}
+
+function validateReservedDimensionTopology(
+  value: unknown,
+  expected: readonly { key: string; reservedUnits: number }[],
+  name: string,
+): void {
+  if (!Array.isArray(value) || value.length !== expected.length) {
+    throw new TypeError(`${name} did not match reservation dimensions`);
+  }
+  const expectedByKey = new Map(expected.map(dimension => [dimension.key, dimension.reservedUnits]));
+  const seen = new Set<string>();
+  for (const raw of value) {
+    const dimension = requireRecord(raw, name);
+    validateNonEmptyString(dimension.key, `${name} key`);
+    assertNonNegativeStoreInteger(dimension.reservedUnits, `${name} reservedUnits`);
+    if (
+      seen.has(dimension.key) ||
+      expectedByKey.get(dimension.key) !== dimension.reservedUnits
+    ) {
+      throw new TypeError(`${name} did not match reservation dimensions`);
+    }
+    seen.add(dimension.key);
+  }
+}
+
+function validateStringSet(value: unknown, expected: readonly string[], name: string): void {
+  if (!Array.isArray(value) || value.length !== expected.length) {
+    throw new TypeError(`${name} did not match requested identifiers`);
+  }
+  const expectedSet = new Set(expected);
+  const seen = new Set<string>();
+  for (const item of value) {
+    validateNonEmptyString(item, name);
+    if (!expectedSet.has(item) || seen.has(item)) {
+      throw new TypeError(`${name} did not match requested identifiers`);
+    }
+    seen.add(item);
+  }
+}
+
+function requireRecord(value: unknown, name: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new TypeError(`${name} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function hasOwn(value: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function validateNonEmptyString(value: unknown, name: string): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new TypeError(`${name} must be a non-empty string`);
+  }
+}
+
+function validateOptionalNonEmptyString(value: unknown, name: string): void {
+  if (value !== undefined) validateNonEmptyString(value, name);
+}
+
+function assertNonNegativeStoreInteger(value: unknown, name: string): asserts value is number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`${name} must be a non-negative safe integer`);
+  }
+}
+
+function assertPositiveStoreInteger(value: unknown, name: string): asserts value is number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new TypeError(`${name} must be a positive safe integer`);
+  }
+}
+
 function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
+  if (!Array.isArray(budgets)) throw new TypeError('budgets must be an array');
   if (budgets.length === 0) throw new RangeError('budgets must contain at least one budget');
   const normalized = budgets.map(budget => {
+    if (budget === null || typeof budget !== 'object' || Array.isArray(budget)) {
+      throw new TypeError('budget must be an object');
+    }
     if (typeof budget.key !== 'string' || budget.key.length === 0) {
       throw new RangeError('budget.key must be a non-empty string');
     }
@@ -2018,10 +2488,14 @@ function isVectorUsageStore(store: UsageStore): store is VectorUsageStore {
 }
 
 function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
+  if (!Array.isArray(dimensions)) throw new TypeError('dimensions must be an array');
   if (dimensions.length === 0) {
     throw new RangeError('dimensions must contain at least one dimension');
   }
   const normalized = dimensions.map(dimension => {
+    if (dimension === null || typeof dimension !== 'object' || Array.isArray(dimension)) {
+      throw new TypeError('dimension must be an object');
+    }
     if (typeof dimension.key !== 'string' || dimension.key.length === 0) {
       throw new RangeError('dimension.key must be a non-empty string');
     }

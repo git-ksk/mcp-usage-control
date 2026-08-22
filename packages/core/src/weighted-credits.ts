@@ -130,6 +130,9 @@ export function createWeightedCreditsPolicy(options: WeightedCreditsPolicyOption
       if (units === undefined) return { decision: 'deny' as const, reason: 'unknown_tool' };
 
       const plan = await resolvePlan(request);
+      if (plan !== undefined && (typeof plan !== 'string' || plan.length === 0)) {
+        throw new TypeError('resolvePlan must return a non-empty string or undefined');
+      }
       if (plan === undefined || config.plans[plan] === undefined) {
         return { decision: 'deny' as const, reason: 'unknown_plan' };
       }
