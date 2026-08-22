@@ -68,7 +68,7 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.8.0`. **v0.8.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.8.0 is released and closed out.** The active product target is **v0.9.0 / #116-#127 safety hardening**, followed by **v0.10.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, then **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, and finally **v1.0.0** as a feature-free stable promotion. No intermediate v0.8.1 release is required. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work belongs to v0.10.0.
+**Current execution order:** **v0.8.0 remains the latest released source baseline, and the v0.9.0 / #116-#127 safety-hardening source gate is complete.** The active product target is now **v0.10.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, and finally **v1.0.0** as a feature-free stable promotion. No intermediate v0.8.1 release is required. The v0.9 closeout does not create a package-version bump, tag, GitHub Release, or npm publication; those remain separate explicit operations.
 
 ## v1 scope under consideration after v0.5
 
@@ -327,7 +327,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.8.0` is released and closed out as the current source baseline. #81 is adopted as an optional scalar read-only future-v1 Store capability; **v0.9.0 / #116-#127 safety hardening is the active product decision target, followed by v0.10.0 / #76 + #82 + #99 operational usability**. Future tag/Release creation and npm publication remain separate operations.
+`v0.8.0` remains the latest released source baseline. #81 is adopted as an optional scalar read-only future-v1 Store capability, and **the v0.9.0 / #116-#127 safety-hardening source gate is complete. The active product decision target is now v0.10.0 / #76 + #82 + #99 operational usability**. The package manifests remain at `0.8.0`; future version bumps, tags, GitHub Releases, and npm publication remain separate operations.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 
