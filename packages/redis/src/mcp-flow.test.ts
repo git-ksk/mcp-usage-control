@@ -150,6 +150,16 @@ describe.skipIf(!redisUrl)('RedisMcpUsageFlowStore integration', () => {
     return new RedisMcpUsageFlowStore(client as unknown as RedisMcpFlowEvalClient, { prefix });
   }
 
+  it('cross-capability: preserves unresolved growth across a live Redis flow roundtrip', async () => {
+    const writer = store('flow-cross-growth');
+    const reader = store('flow-cross-growth');
+    const value = record('flow-000000000010');
+    await writer.suspend(value);
+    const resumed = await reader.consume(value.flowId, binding);
+    expect(resumed?.lease.unresolvedGrowth).toEqual(value.lease.unresolvedGrowth);
+    expect(resumed?.lease.unresolvedGrowth).not.toBe(value.lease.unresolvedGrowth);
+  });
+
   it('shares a suspended flow across store instances and consumes it once', async () => {
     const writer = store('flow-shared');
     const reader = store('flow-shared');

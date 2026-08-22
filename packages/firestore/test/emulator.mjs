@@ -325,7 +325,7 @@ const tests = [
   ['shared-budget concurrency', testSharedBudgetConcurrency],
   ['pending expiry recovery', testPendingExpiryRecovery],
   ['liable expiry retention', testLiableExpiryRetention],
-  ['recovered liable reconciliation', testRecoveredLiableReconciliation],
+  ['cross-capability: recovered liable reconciliation', testRecoveredLiableReconciliation],
   ['idempotent settlement', testIdempotentSettlement],
 ];
 
