@@ -89,6 +89,8 @@ const policy = createWeightedCreditsPolicy({
 
 同じ月の途中でFreeからPlusへ変わっても、budget keyはそのままです。変わるのはeffective limitだけなので、それまでに消費したauthoritative usageは保持されます。翌月になれば新しいkeyが導出されます。
 
+progressive growth中のactive reservationは例外です。growthはoriginal reservationのbudget-key setへpinされるため、calendar boundaryを跨いでも現在時刻から新window keyを再deriveしません。新しいwindow keyは、そのwindowで始まる新規reservationに使います。
+
 ## 設定変更はaccounting identityの変更
 
 次の値を変えるとaccounting identityも変わり、新しいauthoritative stateを選ぶ可能性があります。
@@ -102,6 +104,12 @@ const policy = createWeightedCreditsPolicy({
 特にtimezoneはkeyへ意図的に含めています。`UTC` から `Asia/Tokyo` へ変えた場合はもちろん、同じtimezoneを表す別aliasへ表記だけ変えた場合でも、別のkey identityになります。rollover境界だけ変わったのに既存bucketを半端に再利用するより、安全側へ倒すためです。
 
 この種の変更は、単なるconfig変更ではなく**quota key migration**として扱ってください。新しい利用枠へ切り替える意図がない限り、window途中で安易に変更しない方が安全です。
+
+## Historical windowのretention
+
+新しいwindow keyをderiveしても、前windowのbucketを**mutate / reset / retireしません**。これによりhistoricalなauthoritative enforcement stateは保持されますが、長期運用ではhistorical keyが無制限に増える前にapplication側で明示的なretention policyを決める必要があります。
+
+old keyをretire / pruneするのは、そのexact accounting windowが永久に終了し、active reservationから参照されておらず、必要なreplay / reconciliation horizonも経過したとapplicationが確認した後だけです。`MemoryUsageStore.retireBudgetKey()` とoptionalなCloudflare historical budget pruning APIは、そのための明示的なlifecycle toolです。どちらもwindow ageを自動推論しません。詳しくは [Memory Store](memory-store.ja.md) と [Cloudflare historical budget pruning](cloudflare-budget-pruning.ja.md) を参照してください。
 
 ## Application側に残る責務
 

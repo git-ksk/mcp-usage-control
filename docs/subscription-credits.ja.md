@@ -118,6 +118,8 @@ credits:month:tz=Asia%2FTokyo:user:42:2026-08
 
 たとえば `browser_action` は10 credits、`search` は1 creditですが、どちらもPlusの100 creditsから消費します。Storeがadmissionをatomicに処理するため、残りcreditが少ない状態でconcurrent requestが来ても同じ残量を二重に使えません。
 
+固定weightのtoolでは、quoteしたweightがそのoperationの通常chargeです。上の `browser_action` は10 creditsをreserveし、通常の成功時は10をsettleします。`successUnits` / `toolErrorUnits` / `errorUnits` や直接の `settle(actualUnits, ...)` で少ない値を返すのは、productが結果に応じたdynamic costやrefund semanticsを明示的に定義している場合だけにしてください。固定priceなのにconsumer側で任意にsettlementを下げると、configured weightが実質的なpriceではなくなります。
+
 上の `MemoryUsageStore` は短いexample用です。本番でprocess restartをまたいでstateを保持する、または複数instanceで共有する必要がある場合は、Redis / Cloudflare Durable Objects / Firestoreなどのproduction Storeを使います。
 
 ## Entitlement lookupはapplication側に残す
@@ -211,7 +213,10 @@ const SAFE_MAX_CREDITS = 20;
 const dynamicPolicy: UsagePolicy = {
   async quote(request: UsageRequest) {
     const plan = await applicationEntitlements.currentPlan(request.principal.id);
-    const monthlyLimit = plan === 'plus' ? 100 : 50;
+    const monthlyLimit = plan === 'free' ? 50 : plan === 'plus' ? 100 : undefined;
+    if (monthlyLimit === undefined) {
+      return { decision: 'deny', reason: 'unknown_plan' };
+    }
 
     return {
       decision: 'allow',
@@ -251,15 +256,23 @@ settlement時に予約した最大値とactualの差分がreleaseされます。
 worst-case reservationが大きすぎる、またはworkがbatch単位で自然に増えていく場合は、`ProgressiveUsageStore` を実装するStoreでoptional progressive reservation growthを使えます。
 
 ```ts
+const originalBudget = admission.remainingByBudget[0];
+if (!originalBudget) throw new Error('expected the original monthly budget');
+
 const currentPlan = await applicationEntitlements.currentPlan(dynamicRequest.principal.id);
-const currentMonthlyLimit = currentPlan === 'plus' ? 100 : 50;
+const currentMonthlyLimit =
+  currentPlan === 'free' ? 50 : currentPlan === 'plus' ? 100 : undefined;
+if (currentMonthlyLimit === undefined) {
+  throw new Error('unknown entitlement plan; stop before additional metered work');
+}
 
 const growth = await admission.lease.grow({
   incrementId: 'batch-0042',
   additionalUnits: 10,
   budgets: [
     {
-      key: monthlyKey.key({ scope: 'user', id: dynamicRequest.principal.id }),
+      // reserve時に選ばれたexact keyへpinする。ここでwall clockから再deriveしない。
+      key: originalBudget.key,
       limit: currentMonthlyLimit,
     },
   ],
@@ -270,7 +283,11 @@ if (!growth.accepted) {
 }
 ```
 
-追加costを発生させる**前**に各growthをauthorizeします。`incrementId` はstableにし、ACKがambiguousなら別incrementを作らず同じgrowth attemptをexact retryします。詳しくは [Progressive MCP growth](progressive-mcp-integration.ja.md) を参照してください。
+追加costを発生させる**前**に各growthをauthorizeします。`incrementId` はstableにし、ACKがambiguousなら別incrementを作らず同じgrowth attemptをexact retryします。
+
+特にcalendar windowの境界を跨ぐlong-running operationでは、**growthのbudget keyを現在時刻から再計算しないでください**。growth contractは最初のreservationと同じbudget-key setを要求します。8月にreserveしたoperationが9月に入ってからgrowしても、そのreservationのgrowthは8月keyへpinします。新しい9月keyは、9月に新規reserveする別operationから使用します。current entitlementによりlimitだけが変わる場合は、同じpinned keyへcurrent effective limitを渡せます。
+
+詳しくは [Progressive MCP growth](progressive-mcp-integration.ja.md) を参照してください。
 
 ## Scalar creditsとvector usageの使い分け
 
