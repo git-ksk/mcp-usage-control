@@ -10,7 +10,7 @@ No entries yet.
 
 ## [0.9.0] - 2026-08-22
 
-Ninth GitHub/source release focused on repository-wide safety hardening. npm publication remains intentionally separate and was not performed.
+Ninth GitHub/source release focused on repository-wide safety hardening. npm publication remains intentionally separate and deferred.
 
 ### Safety hardening
 
@@ -27,9 +27,9 @@ Ninth GitHub/source release focused on repository-wide safety hardening. npm pub
 ### Release evidence / boundary
 
 - PR #144 passed the Node 20/22/24 CI/package matrix, Cloudflare local workerd integration, and Firestore Emulator integration before squash merge.
-- Release-preparation PR #145 aligned all five public package manifests at `0.9.0` and passed Node 20/22/24 package/clean-consumer CI, Cloudflare integration, and Firestore Emulator integration before squash merge.
-- `v0.9.0` points to the exact tested release commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2`; GitHub source-release workflow run `32568777809` completed successfully.
-- Post-release registry verification confirmed that `mcp-usage-control`, `mcp-usage-control-mcp`, `mcp-usage-control-redis`, `mcp-usage-control-cloudflare`, and `mcp-usage-control-firestore` are **not published at 0.9.0**. First npm publication remains separately authorized and tracked by #6.
+- All five public package manifests are aligned at `0.9.0`.
+- `v0.9.0` points to tested commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2`; GitHub/source Release workflow `32568777809` completed successfully.
+- npm publication did not complete for this release. All five `0.9.0` packages remain unpublished in the registry, and first npm publication remains an independently authorized operation tracked by #6.
 
 ## [0.8.0] - 2026-08-22
 
@@ -56,7 +56,7 @@ Eighth GitHub/source release. npm publication remains intentionally separate and
 - Mutable budget limits are not historical operation identity: reconciliation verifies budget keys plus expected retained scalar units, preserving the existing same-key mutable-limit contract.
 - The v0.8 generic capability is intentionally scalar-only. Vector initial-reserve ambiguity remains fail closed unless a future provider-specific mechanism proves an equivalent read-only contract.
 - Business side-effect/result replay remains application-owned and separate from usage accounting.
-- #81 is adopted for the future v1 stable surface as an optional scalar Store capability. #76/#82/#99 become the next v0.9 product decision gate.
+- #81 is adopted for the future v1 stable surface as an optional scalar Store capability. #76/#82/#99 become the next product decision gate.
 
 ### Release boundary
 
