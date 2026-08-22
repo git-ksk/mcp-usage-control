@@ -92,6 +92,23 @@ describe('weighted credit policy', () => {
     });
   });
 
+  it('rejects malformed runtime values from a custom plan resolver', async () => {
+    let budgetResolverCalled = false;
+    const policy = createWeightedCreditsPolicy({
+      config: baseConfig,
+      resolvePlan: (() => ({ plan: 'plus' })) as never,
+      budgets: ({ limit }) => {
+        budgetResolverCalled = true;
+        return { key: 'shared', limit: limit('monthly') };
+      },
+    });
+
+    await expect(policy.quote(request('search'))).rejects.toThrow(
+      'resolvePlan must return a non-empty string or undefined',
+    );
+    expect(budgetResolverCalled).toBe(false);
+  });
+
   it('keeps the same budget key across a plan change and preserves consumed usage', async () => {
     const store = new MemoryUsageStore();
     const policy = createWeightedCreditsPolicy({
