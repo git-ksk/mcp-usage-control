@@ -1,0 +1,283 @@
+name: Issue 143 bootstrap patch
+
+on:
+  push:
+    branches:
+      - fix/143-firestore-vector-race-flake
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/143-firestore-vector-race-flake
+
+      - name: Apply narrow Firestore contention hardening
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one anchor, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "packages/firestore/src/index.ts",
+              "const EXPIRED_LIABLE_OUTCOME_HASH = digest(EXPIRED_LIABLE_OUTCOME);\n",
+              "const EXPIRED_LIABLE_OUTCOME_HASH = digest(EXPIRED_LIABLE_OUTCOME);\n"
+              "const FIRESTORE_ABORTED_STATUS = 10;\n"
+              "const FIRESTORE_ABORTED_HTTP_STATUS = 409;\n"
+              "const FIRESTORE_ABORTED_OUTER_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const;\n",
+          )
+
+          replace_once(
+              "packages/firestore/src/index.ts",
+              "  private runTransaction<T>(\n"
+              "    updateFunction: (transaction: FirestoreTransactionLike) => Promise<T>,\n"
+              "  ): Promise<T> {\n"
+              "    return this.firestore.runTransaction(updateFunction);\n"
+              "  }\n",
+              "  private async runTransaction<T>(\n"
+              "    updateFunction: (transaction: FirestoreTransactionLike) => Promise<T>,\n"
+              "  ): Promise<T> {\n"
+              "    for (let retry = 0; ; retry += 1) {\n"
+              "      try {\n"
+              "        return await this.firestore.runTransaction(updateFunction);\n"
+              "      } catch (error) {\n"
+              "        // The official SDK already retries transaction contention internally. If it\n"
+              "        // exhausts those attempts with ABORTED/409, no transaction commit occurred,\n"
+              "        // so restarting the transaction is non-ambiguous. Do not outer-retry\n"
+              "        // UNKNOWN/UNAVAILABLE/INVALID_ARGUMENT: those may hide ambiguous state.\n"
+              "        const delayMs = FIRESTORE_ABORTED_OUTER_RETRY_DELAYS_MS[retry];\n"
+              "        if (delayMs === undefined || !isDefinitiveFirestoreTransactionAbort(error)) {\n"
+              "          throw error;\n"
+              "        }\n"
+              "        await delay(jitteredRetryDelay(delayMs));\n"
+              "      }\n"
+              "    }\n"
+              "  }\n",
+          )
+
+          replace_once(
+              "packages/firestore/src/index.ts",
+              "      const budgetIds = reservationBudgetIds(reservation);\n"
+              "      const usedById = await readBudgets(transaction, this.budgets(), budgetIds);\n"
+              "      for (let index = 0; index < reservation.dimensions!.length; index += 1) {\n"
+              "        const dimension = reservation.dimensions![index]!;\n"
+              "        const released = dimension.reservedUnits - encodedActuals[index]!.actualUnits;\n"
+              "        if (released > 0) releaseAcrossBudgets(usedById, dimension.budgetIds, released);\n"
+              "      }\n"
+              "      writeUsedBudgets(transaction, this.budgets(), usedById, budgetIds, now);\n",
+              "      const releases = reservation.dimensions!.map(\n"
+              "        (dimension, index) => dimension.reservedUnits - encodedActuals[index]!.actualUnits,\n"
+              "      );\n"
+              "      if (releases.some(released => released > 0)) {\n"
+              "        const budgetIds = reservationBudgetIds(reservation);\n"
+              "        const usedById = await readBudgets(transaction, this.budgets(), budgetIds);\n"
+              "        for (let index = 0; index < reservation.dimensions!.length; index += 1) {\n"
+              "          const released = releases[index]!;\n"
+              "          if (released > 0) {\n"
+              "            releaseAcrossBudgets(usedById, reservation.dimensions![index]!.budgetIds, released);\n"
+              "          }\n"
+              "        }\n"
+              "        writeUsedBudgets(transaction, this.budgets(), usedById, budgetIds, now);\n"
+              "      }\n",
+          )
+
+          replace_once(
+              "packages/firestore/src/index.ts",
+              "function digest(value: string): string {\n",
+              "function delay(ms: number): Promise<void> {\n"
+              "  return new Promise(resolve => setTimeout(resolve, ms));\n"
+              "}\n\n"
+              "function jitteredRetryDelay(baseMs: number): number {\n"
+              "  return Math.max(1, Math.round(baseMs * (0.5 + Math.random())));\n"
+              "}\n\n"
+              "function isDefinitiveFirestoreTransactionAbort(error: unknown): boolean {\n"
+              "  if (typeof error !== 'object' || error === null) return false;\n"
+              "  const code = (error as { code?: unknown }).code;\n"
+              "  return code === FIRESTORE_ABORTED_STATUS || code === FIRESTORE_ABORTED_HTTP_STATUS;\n"
+              "}\n\n"
+              "function digest(value: string): string {\n",
+          )
+
+          replace_once(
+              "packages/firestore/src/index.test.ts",
+              "import { describe, expect, it } from 'vitest';\n",
+              "import { describe, expect, it, vi } from 'vitest';\n",
+          )
+
+          replace_once(
+              "packages/firestore/src/index.test.ts",
+              "function request(operationId: string, principalId = 'user-a'): UsageRequest {\n",
+              "class ScriptedTransactionFailureFirestore extends FakeFirestore {\n"
+              "  attempts = 0;\n\n"
+              "  constructor(private readonly failureCodes: number[]) {\n"
+              "    super();\n"
+              "  }\n\n"
+              "  override async runTransaction<T>(\n"
+              "    updateFunction: (transaction: FirestoreTransactionLike) => Promise<T>,\n"
+              "  ): Promise<T> {\n"
+              "    this.attempts += 1;\n"
+              "    const code = this.failureCodes.shift();\n"
+              "    if (code !== undefined) {\n"
+              "      throw Object.assign(new Error(`scripted Firestore transaction failure ${code}`), { code });\n"
+              "    }\n"
+              "    return super.runTransaction(updateFunction);\n"
+              "  }\n"
+              "}\n\n"
+              "function request(operationId: string, principalId = 'user-a'): UsageRequest {\n",
+          )
+
+          replace_once(
+              "packages/firestore/src/index.test.ts",
+              "describe('FirestoreUsageStore', () => {\n",
+              "describe('FirestoreUsageStore', () => {\n"
+              "  it('retries only definitive Firestore transaction aborts after SDK-level contention exhaustion', async () => {\n"
+              "    vi.useFakeTimers();\n"
+              "    try {\n"
+              "      const database = new ScriptedTransactionFailureFirestore([10, 409]);\n"
+              "      const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });\n"
+              "      const assertion = expect(\n"
+              "        store.reserve({\n"
+              "          request: request('aborted-retry'),\n"
+              "          units: 1,\n"
+              "          budgets: [{ key: 'aborted-retry-budget', limit: 1 }],\n"
+              "          ttlMs: 1_000,\n"
+              "        }),\n"
+              "      ).resolves.toMatchObject({ accepted: true });\n\n"
+              "      await vi.runAllTimersAsync();\n"
+              "      await assertion;\n"
+              "      expect(database.attempts).toBe(3);\n"
+              "    } finally {\n"
+              "      vi.useRealTimers();\n"
+              "    }\n"
+              "  });\n\n"
+              "  it('bounds definitive Firestore transaction abort retries', async () => {\n"
+              "    vi.useFakeTimers();\n"
+              "    try {\n"
+              "      const database = new ScriptedTransactionFailureFirestore([10, 10, 10, 10]);\n"
+              "      const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });\n"
+              "      const assertion = expect(\n"
+              "        store.reserve({\n"
+              "          request: request('aborted-bounded'),\n"
+              "          units: 1,\n"
+              "          budgets: [{ key: 'aborted-bounded-budget', limit: 1 }],\n"
+              "          ttlMs: 1_000,\n"
+              "        }),\n"
+              "      ).rejects.toMatchObject({ code: 10 });\n\n"
+              "      await vi.runAllTimersAsync();\n"
+              "      await assertion;\n"
+              "      expect(database.attempts).toBe(4);\n"
+              "    } finally {\n"
+              "      vi.useRealTimers();\n"
+              "    }\n"
+              "  });\n\n"
+              "  it.each([\n"
+              "    ['UNKNOWN', 2],\n"
+              "    ['INVALID_ARGUMENT', 3],\n"
+              "    ['UNAVAILABLE', 14],\n"
+              "  ] as const)('does not outer-retry %s Firestore transaction failures', async (_name, code) => {\n"
+              "    const database = new ScriptedTransactionFailureFirestore([code]);\n"
+              "    const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });\n\n"
+              "    await expect(\n"
+              "      store.reserve({\n"
+              "        request: request(`ambiguous-no-retry-${code}`),\n"
+              "        units: 1,\n"
+              "        budgets: [{ key: `ambiguous-no-retry-budget-${code}`, limit: 1 }],\n"
+              "        ttlMs: 1_000,\n"
+              "      }),\n"
+              "    ).rejects.toMatchObject({ code });\n"
+              "    expect(database.attempts).toBe(1);\n"
+              "  });\n\n",
+          )
+
+          replace_once(
+              "packages/core/src/vector-store-conformance.ts",
+              "    assert(results[1]!.status === 'fulfilled', 'settlement side of race must complete');\n",
+              "    assert(\n"
+              "      results[1]!.status === 'fulfilled',\n"
+              "      `settlement side of race must complete${results[1]!.status === 'rejected' ? `: ${errorMessage(results[1]!.reason)}` : ''}`,\n"
+              "    );\n",
+          )
+
+          replace_once(
+              "packages/firestore/test/emulator.mjs",
+              "async function testMultiBudgetAtomicity() {\n",
+              "async function testVectorGrowthSettleRaceStress() {\n"
+              "  const store = storeFor('vector_race_stress', { cleanupBatchSize: 0, expiryGraceMs: 0 });\n"
+              "  const iterations = 24;\n\n"
+              "  for (let index = 0; index < iterations; index += 1) {\n"
+              "    const suffix = `vector:race-stress:${index}`;\n"
+              "    const admission = await store.reserveVector({\n"
+              "      request: request(`vector-race-stress-${index}`),\n"
+              "      dimensions: [\n"
+              "        { key: 'requests', units: 1, budgets: [{ key: `${suffix}:requests`, limit: 2 }] },\n"
+              "        { key: 'tokens', units: 5, budgets: [{ key: `${suffix}:tokens`, limit: 10 }] },\n"
+              "      ],\n"
+              "      ttlMs: 60_000,\n"
+              "    });\n"
+              "    assert.equal(admission.accepted, true, `stress admission ${index} must succeed`);\n"
+              "    const cursor = admission.reservation.growthCursor;\n"
+              "    assert.equal(typeof cursor, 'string', `stress admission ${index} must expose a growth cursor`);\n\n"
+              "    const results = await Promise.allSettled([\n"
+              "      store.growVectorReservation({\n"
+              "        reservationId: admission.reservation.id,\n"
+              "        incrementId: `stress-growth-${index}`,\n"
+              "        expectedGrowthCursor: cursor,\n"
+              "        dimensions: [\n"
+              "          { key: 'requests', additionalUnits: 1, budgets: [{ key: `${suffix}:requests`, limit: 2 }] },\n"
+              "          { key: 'tokens', additionalUnits: 1, budgets: [{ key: `${suffix}:tokens`, limit: 10 }] },\n"
+              "        ],\n"
+              "      }),\n"
+              "      store.settleVector({\n"
+              "        reservationId: admission.reservation.id,\n"
+              "        actualByDimension: [\n"
+              "          { key: 'requests', actualUnits: 1 },\n"
+              "          { key: 'tokens', actualUnits: 5 },\n"
+              "        ],\n"
+              "        outcome: 'race-stress',\n"
+              "      }),\n"
+              "    ]);\n\n"
+              "    assert.equal(\n"
+              "      results[1].status,\n"
+              "      'fulfilled',\n"
+              "      `stress settlement ${index} must complete: ${results[1].status === 'rejected' ? String(results[1].reason) : ''}`,\n"
+              "    );\n"
+              "    if (results[0].status === 'fulfilled') {\n"
+              "      assert.equal(results[0].value.accepted, true, `stress growth ${index} must be accepted if it wins`);\n"
+              "      const requests = results[1].value.dimensions.find(item => item.key === 'requests');\n"
+              "      assert.equal(requests?.reservedUnits, 2, `stress settlement ${index} must observe committed growth`);\n"
+              "    }\n"
+              "  }\n"
+              "}\n\n"
+              "async function testMultiBudgetAtomicity() {\n",
+          )
+
+          replace_once(
+              "packages/firestore/test/emulator.mjs",
+              "  ['vector UsageStore conformance', testVectorConformance],\n",
+              "  ['vector UsageStore conformance', testVectorConformance],\n"
+              "  ['vector growth-vs-settle race stress', testVectorGrowthSettleRaceStress],\n",
+          )
+
+          Path('.github/workflows/issue-143-bootstrap.yml').unlink()
+
+      - name: Commit patch and remove bootstrap workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add packages/core/src/vector-store-conformance.ts packages/firestore/src/index.ts packages/firestore/src/index.test.ts packages/firestore/test/emulator.mjs .github/workflows/issue-143-bootstrap.yml
+          git diff --cached --check
+          git commit -m "fix(firestore): harden transaction contention retry (#143)"
+          git push origin HEAD:fix/143-firestore-vector-race-flake
