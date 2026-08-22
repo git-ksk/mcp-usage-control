@@ -10,9 +10,9 @@ generic agent-budget、gateway、billing、governance、workflow productへ広�
 
 ## 現在のbaseline
 
-**v0.8.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**現在のactive decision targetはv0.9.0です。** 最初の実装phaseとして2026-08-22の全体監査で見つかった#116〜#127のsafety hardeningを先に閉じ、その後#76 + #82 + #99のoperational usabilityへ進みます。subscription credits導入ergonomicsの#108 + #109 + #110はv0.9隣接のconvenience workとして完了済みで、v1 blockerにはしません。
+**v0.8.0はcurrent pre-v1 source baselineとしてrelease / closeout済み**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**現在のactive decision targetはv0.9.0 / #116〜#127 safety hardeningです。** 次release gateを **v0.10.0 / #76 + #82 + #99 operational usability**、その後をv0.11.0 final completion / distribution freezeとします。subscription credits導入ergonomicsの#108 + #109 + #110は完了済みの隣接workで、v1 blockerにはしません。
 
-リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> 隣接#108+#109+#110 credit-policy ergonomics完了 -> v0.9 safety hardening #116〜#127 -> v0.9/#76+#82+#99 operational usability -> v0.10/#24+#6+#105+#106 + final freeze -> v1.0 stable promotion** と進めます。これは実装順序のルールであり、v0.9.0の前にv0.8.1をpublishする必須要件ではありません。safety fixはそのままv0.9.0へ含めてよく、既知のfail-open / quota-integrity / reconciliation / cross-capability regressionを残したまま新しいv0.9 observabilityを積まないことが重要です。
+リポジトリ上の実行順序は明確に直列です。**v0.8.0 closeout済み -> 隣接#108+#109+#110 credit-policy ergonomics完了 -> v0.9/#116〜#127 safety hardening -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#6+#105+#106 final completion / distribution freeze -> v1.0 stable promotion** と進めます。v0.8.1 releaseは不要です。pre-v1 minorごとにdecision gateを分け、safety hardening、operational tooling、final distribution / compatibility proofを1 releaseへ詰め込みません。
 
 Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
 
@@ -42,9 +42,10 @@ v1.0前に次を完了します。
 | **v0.6.0** | #83 progressive reservation growth | **採用**: optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`、growth cursor + stable increment identity、atomic multi-budget / lost-ACK / provider conformance proof |
 | **v0.7.0** | #84 heterogeneous multi-dimensional usage | **採用**: optional v1 core/Store extension | separate `VectorUsageControl` / `VectorUsageStore`、one logical replay identity、per-dimension atomic admission / growth / settlement、deterministic retry / conflict、provider conformance |
 | **v0.8.0** | #81 operation reconciliation / status | **Adopted**: optional scalar v1 Store capability | 共通read-only status語彙、second reservation禁止、mismatch/unprovable stateはfail closed、Memory/Redis/Firestore + Cloudflare subpath、portable/provider evidence |
-| **v0.9.0** | **Phase A:** audit hardening #116〜#127。**Phase B:** #76 operational snapshot + #82 threshold / exhaustion + #99 dogfood integration diagnostics、隣接#108/#109/#110 subscription-credit ergonomics | feature交差部のfail-closed / quota-integrity invariantを先に復旧・proofし、その後bounded non-authoritative observability / diagnosticsとsettlement-outcome contractを完成させる | Phase B開始時に既知safety blockerなし。malformed runtime decision/authはfail closed、maintenanceはactive accountingを壊さない、cross-capability regressionを明示test。その上でsecond accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離 |
-| **v0.10.0** | final completion / distribution / compatibility freeze | 残るv1 scope decisionを全て閉じ、public distribution / runtime / storage compatibility boundaryを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、#105 supported Node.js floor、#106 persisted-store upgrade/migration/rollback contract、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
-| **v1.0.0** | stable promotion | 完成済みsurfaceをstable宣言 | 新featureなし。v0.10/#24+#6+#105+#106 completion criteria完了後にversion / changelog / release promotionのみ |
+| **v0.9.0** | repository audit safety hardening #116〜#127 | feature交差部のfail-closed / quota-integrity / time / auth / protocol / reconciliation invariantを復旧・proofする | #123/#126/#122即時blockerを含む#116〜#127をprovider-specific / cross-capability regression evidence付きでclose。npm publishは不要 |
+| **v0.10.0** | #76 operational snapshot + #82 threshold / exhaustion + #99 dogfood integration diagnostics | bounded non-authoritative observability / diagnosticsと明確なsettlement-outcome contractを追加する | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離、heterogeneous vector metricの意味を混同しない |
+| **v0.11.0** | final completion / distribution / compatibility freeze | 残るv1 scope decisionを全て閉じ、public distribution / runtime / storage compatibility boundaryを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、#105 supported Node.js floor、#106 persisted-store upgrade/migration/rollback contract、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
+| **v1.0.0** | stable promotion | 完成済みsurfaceをstable宣言 | 新featureなし。v0.11/#24+#6+#105+#106 completion criteria完了後にversion / changelog / release promotionのみ |
 
 SemVer上 `0.10.0` は通常の有効versionです。`0.9.0` の次が必ず `1.0.0` である必要はありません。
 
@@ -87,19 +88,19 @@ reconciliationはstrict read-onlyで、capacity reserve/release、liability、re
 
 v0.8 claimは意図的にscalar-onlyです。vector initial-reserve ambiguityは将来別途proof済みmechanismを追加しない限りfail closedのままです。business-result replayはusage accounting外のapplication責務です。
 
-### v0.9.0 — safety hardeningを先行し、その後operational usabilityへ (#116〜#127, #76, #82, #99)
+### v0.9.0 — repository safety hardening (#116〜#127)
 
-**v0.9内の実装順序を明示的に固定します。** 2026-08-22のwhole-repository auditでは、単体では十分testされていたcapability同士の交差部を中心にcorrectness / security gapが見つかりました。これらはv0.9 blockerですが、別途v0.8.1 releaseを必須にするものではありません。
+2026-08-22のwhole-repository auditでは、単体では十分testされていたcapability同士の交差部を中心にcorrectness / security gapが見つかりました。そこでv0.9は、新しいobservability surfaceを混ぜずsafety hardening専用releaseとします。
 
-Phase Aでは、新しいoperational helperをactive implementation workにする前に次を閉じます。
+優先順は次です。
 
 1. **即時safety blocker:** #123 active vector budgetをmaintenance pruneするとquota capacityが復活し得る問題、#126 gateway authorizationがtruthyなnon-booleanを許可する問題、#122 malformed policy decision discriminantがfail-openする問題。
 2. **accounting / time / provider correctness:** #117 unsafe expiry / timer arithmetic、#116 Memory growth時のretained-budget capacity、#120 Firestore expired-liable reconciliation semantics、#121 Cloudflare remote / maintenance protocol・timeout validation、#125 reconciliationのpre-auth body buffering、#119 MCP flow-storeのunresolved growth保持、#124 Redis recovery aggregate overflow、#118 runtime identityのmutation前validation。
-3. **regression gate:** #127で `retention x growth`、`flow-store x growth`、`recovery x reconciliation`、`maintenance x vector` など、独立追加されたcapability同士の交差testを明示的に追加し、縦割りconformanceだけに依存しない。
+3. **regression gate:** #127で `retention x growth`、`flow-store x growth`、`recovery x reconciliation`、`maintenance x vector` など、独立追加されたcapability同士の交差testを明示的に追加します。
 
-Phase Aはaffected provider-specific test / conformanceがgreenで、下記stable invariantを維持した時点で完了とします。npm publicationはこのphaseに含めません。
+v0.9はaffected provider-specific test / conformanceがgreenで、下記stable invariantを維持した時点で完了とします。npm publicationはこのrelease gateに含めません。
 
-Phase Bで元々のv0.9 operational-usability decisionを続けます。
+### v0.10.0 — operational usability (#76, #82, #99)
 
 applicationごとに次の区別を再発明しなくてよい程度のoptional operational toolingを整えます。
 
@@ -110,28 +111,26 @@ applicationごとに次の区別を再発明しなくてよい程度のoptional 
 - real consumer dogfoodで判明したintegration driftを防ぐcanonical settlement-outcome vocabulary / normalization guidanceとbounded diagnostics（#99）
 - principal、args、credential、request bodyを出さず、service unavailableとinvalid integration inputを区別できるprivacy-safe lifecycle counters
 
-#99で観測したGateway側の即時mapping bug（`invalid_browser_request` -> canonical `invalid_arguments`）はconsumer integration fixなので **v0.9を待たず修正可能** です。v0.9では、同じdriftを他consumerで起こしにくく・診断しやすくするMCPUsage側の再利用可能なcontract / diagnostics / operational visibilityを完成させます。
+#99で観測したGateway側の即時mapping bug（`invalid_browser_request` -> canonical `invalid_arguments`）はconsumer integration fixなので **v0.10を待たず修正可能** です。v0.10では、同じdriftを他consumerで起こしにくく・診断しやすくするMCPUsage側の再利用可能なcontract / diagnostics / operational visibilityを完成させます。
 
-これはbest-effort / non-authoritativeのままです。second ledgerを作らず、budget-window resetを推測せず、notification deliveryをenforcement correctnessへ入れません。
+これはbest-effort / non-authoritativeのままです。second ledgerを作らず、budget-window resetを推測せず、notification deliveryをenforcement correctnessへ入れません。stateful helperよりdocs / exampleの方が安全で単純なら、それをv1 product requirementの達成形として認めます。
 
-stateful helperよりdocs / exampleの方が安全で単純なら、それをv1 product requirementの達成形として認めます。
+完了済みの隣接production ergonomicsはv1 blockerにしません。
 
-v0.9隣接のproduction ergonomicsとして次を完了しました。
+- **#108 subscription-style weighted-credit guide — 完了**
+- **#109 weighted-credit quote helper — 完了**
+- **#110 accounting-window key helper — 完了**
 
-- **#108 subscription-style weighted-credit guide — 完了:** `plan allowance -> tool units -> window key -> reserve/settle` を英日で一連に説明し、同一window内plan変更とbilling/historyの責務境界も明示。
-- **#109 weighted-credit quote helper — 完了:** trustedな `tool -> units` mapping、unknown-toolの明示処理、caller-owned plan/budget resolverを組み合わせる小さなvalidated `UsagePolicy` helperを提供。
-- **#110 accounting-window key helper — 完了:** scope / window / time zone / clock inputからday/month keyをdeterministicに生成し、consumerの手書きkey rotationを減らす。ただしcalendar/business-window ownershipはapplication側のまま、plan名をkeyへ入れて同一window usageをresetする設計は避ける。
+これらはentitlement truth、Remote Config / Stripe / RevenueCat直接読込、pricing catalog、billing ledger、subscription lifecycleをMCPUsageへ持ち込みません。
 
-これらは **non-blocking v0.9 ergonomics** です。entitlement truth、Remote Config / Stripe / RevenueCat直接読込、pricing catalog、billing ledger、subscription lifecycleをMCPUsageへ持ち込みません。helperがその境界を越えるならgeneric APIを維持し、#108のcanonical exampleで解決します。
+### v0.11.0 — completion release
 
-### v0.10.0 — completion release
-
-v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
+v0.11はfeature expansionではなくfinal pre-v1 completion lineです。
 
 次を解決します。
 
 - **Cloudflare #24:** real credential rotationを実施。real platform-limit / overload evidenceは自然に観測できればcaptureし、Issueを閉じるためだけにFree-plan quotaを意図的に枯渇させない。未観測ならv1 Cloudflare claimを実観測evidenceに合わせて明示scopeする
-- **npm #6:** separate explicit authorizationがある場合だけselected v0.10 tagをfirst npm publishし、provenance、registry metadata、package contents、registry clean installを検証
+- **npm #6:** separate explicit authorizationがある場合だけselected v0.11 tagをfirst npm publishし、provenance、registry metadata、package contents、registry clean installを検証
 - **Node support #105:** v1のsupported Node.js floorを明示決定し、`engines` / CI / support claim / clean-consumer evidenceを揃える。EOL runtimeのcompatibility testを暗黙のsupport promiseにしない
 - **persisted-state compatibility #106:** Redis / Firestore / Cloudflareのupgrade / migration / newer-schema fail-close / rollback保証を定義し、SemVer/API stabilityとstorage-state compatibility boundaryを混同しない
 - **public API / name freeze:** 5 package name、exports / subpath、error / state terminology、lifecycle semantics、compatibility statementを最終確認
@@ -147,31 +146,31 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 | #83 progressive reservation growth | **v0.6.0** | **採用**: optional progressive Store capability + `UsageLease.grow()` |
 | #84 heterogeneous multi-dimensional usage | **v0.7.0** | **採用**: optional atomic vector Store capability + `VectorUsageControl` |
 | #81 operation reconciliation / status | **v0.8.0** | **Adopted**: optional scalar read-only capability vocabulary + Store support matrix |
-| #123 Cloudflare active-vector pruning safety | **v0.9.0 Phase A blocker** | active scalar / vector reservationが参照中のbudgetをmaintenance削除不可にし、quota capacityが復活しないことをproof |
-| #126 Cloudflare authorization callback validation | **v0.9.0 Phase A blocker** | literal `true`だけauthorizeし、malformed callback resultはfail closed |
-| #122 runtime policy decision validation | **v0.9.0 Phase A blocker** | unknown / malformed discriminantをStore mutation前にfail closed |
-| #117 time / timer arithmetic safety | **v0.9.0 Phase A** | unsafe expiry / platform timer値をauthoritative mutation / renew scheduling前にrejectまたは安全にchunk |
-| #116 Memory retained-budget growth capacity | **v0.9.0 Phase A** | zero-unit initial reserveを含めgrowthで`maxRetainedBudgetKeys`を迂回不可にする |
-| #120 Firestore expired-liable reconciliation | **v0.9.0 Phase A** | recovery後もprovider-neutralな`expired / liable` semanticsを維持 |
-| #121 Cloudflare remote / maintenance protocol hardening | **v0.9.0 Phase A** | method-specific reply validationとfull-call timeout / status semanticsを統一 |
-| #125 reconciliation pre-auth body handling | **v0.9.0 Phase A** | untrusted request bodyをbuffer / parseする前にauthenticate |
-| #119 MCP unresolved growth round-trip | **v0.9.0 Phase A** | Memory / Redis flow-store suspend/resumeでexact-retry fenceを保持 |
-| #124 Redis recovery aggregate overflow | **v0.9.0 Phase A** | unsafe aggregateによりcommitted cleanup/admissionがclient-side ACK ambiguityにならないようにする |
-| #118 runtime identity validation | **v0.9.0 Phase A** | malformed JS runtime identityをhash / provider call / accounting mutation前にreject |
-| #127 cross-capability safety regression matrix | **v0.9.0 Phase A gate** | independently introduced capabilityのinteraction testを明示追加 |
-| #76 operational usage snapshot | **v0.9.0** | bounded non-authoritative helper / patternを採用優先 |
-| #82 threshold / exhaustion signals | **v0.9.0** | #76 semantics上のoptional scoped helper / patternを採用優先 |
-| #99 settlement outcome normalization / dogfood diagnostics | **v0.9.0** | canonical integration vocabulary明確化、invalid outcomeとservice outageの診断分離、privacy-safe lifecycle visibility。consumer mapping bugは先行修正可 |
+| #123 Cloudflare active-vector pruning safety | **v0.9.0 blocker** | active scalar / vector reservationが参照中のbudgetをmaintenance削除不可にし、quota capacityが復活しないことをproof |
+| #126 Cloudflare authorization callback validation | **v0.9.0 blocker** | literal `true`だけauthorizeし、malformed callback resultはfail closed |
+| #122 runtime policy decision validation | **v0.9.0 blocker** | unknown / malformed discriminantをStore mutation前にfail closed |
+| #117 time / timer arithmetic safety | **v0.9.0** | unsafe expiry / platform timer値をauthoritative mutation / renew scheduling前にrejectまたは安全にchunk |
+| #116 Memory retained-budget growth capacity | **v0.9.0** | zero-unit initial reserveを含めgrowthで`maxRetainedBudgetKeys`を迂回不可にする |
+| #120 Firestore expired-liable reconciliation | **v0.9.0** | recovery後もprovider-neutralな`expired / liable` semanticsを維持 |
+| #121 Cloudflare remote / maintenance protocol hardening | **v0.9.0** | method-specific reply validationとfull-call timeout / status semanticsを統一 |
+| #125 reconciliation pre-auth body handling | **v0.9.0** | untrusted request bodyをbuffer / parseする前にauthenticate |
+| #119 MCP unresolved growth round-trip | **v0.9.0** | Memory / Redis flow-store suspend/resumeでexact-retry fenceを保持 |
+| #124 Redis recovery aggregate overflow | **v0.9.0** | unsafe aggregateによりcommitted cleanup/admissionがclient-side ACK ambiguityにならないようにする |
+| #118 runtime identity validation | **v0.9.0** | malformed JS runtime identityをhash / provider call / accounting mutation前にreject |
+| #127 cross-capability safety regression matrix | **v0.9.0 gate** | independently introduced capabilityのinteraction testを明示追加 |
+| #76 operational usage snapshot | **v0.10.0** | bounded non-authoritative helper / patternを採用優先 |
+| #82 threshold / exhaustion signals | **v0.10.0** | #76 semantics上のoptional scoped helper / patternを採用優先 |
+| #99 settlement outcome normalization / dogfood diagnostics | **v0.10.0** | canonical integration vocabulary明確化、invalid outcomeとservice outageの診断分離、privacy-safe lifecycle visibility。consumer mapping bugは先行修正可 |
 | #108 subscription-style weighted credits guide | **完了 / v0.9隣接 / non-blocking** | Free/Plus/月次credits導入と責務境界のcanonical guide |
 | #109 weighted-credit quote helper | **完了 / v0.9隣接 / non-blocking** | pricing/subscriptionを所有せずconsumer重複コードを減らす小さなvalidated policy helperを提供 |
 | #110 accounting-window key helper | **完了 / v0.9隣接 / non-blocking** | day/month keyをexplicit scope/time-zone入力からdeterministic生成し、plan変更でusageを誤resetしないhelperを提供 |
-| #24 Cloudflare deployed operational evidence | **v0.10.0** | real rotation完了 + honest v1 evidence boundary確定 |
-| #6 first npm publication | **v0.10.0** | v1前にfirst registry publish。ただしexplicit authorization必須 |
-| #105 supported Node.js floor | **v0.10.0** | v1 runtime floorを決定し、publish前にengines / CI / docsを整合 |
-| #106 persisted-store migration/rollback contract | **v0.10.0** | provider upgrade/downgrade/schema compatibility semanticsをv1前にfreeze |
+| #24 Cloudflare deployed operational evidence | **v0.11.0** | real rotation完了 + honest v1 evidence boundary確定 |
+| #6 first npm publication | **v0.11.0** | v1前にfirst registry publish。ただしexplicit authorization必須 |
+| #105 supported Node.js floor | **v0.11.0** | v1 runtime floorを決定し、publish前にengines / CI / docsを整合 |
+| #106 persisted-store migration/rollback contract | **v0.11.0** | provider upgrade/downgrade/schema compatibility semanticsをv1前にfreeze |
 | #77 / #78 / #79 / #85 | 解決済み | 後続全releaseへevidence継承 |
 
-原則は **「maybe v1」をv0.10より後へ残さない** です。proof付きで採用するか、v1 stable product外へ明示分類します。
+原則は **「maybe v1」をv0.11より後へ残さない** です。proof付きで採用するか、v1 stable product外へ明示分類します。
 
 ## pre-v1 featureが弱めてはいけないstable invariant
 
@@ -194,7 +193,7 @@ v0.10はfeature expansionではなくfinal pre-v1 completion lineです。
 
 multi-roundはshared / durable one-time compare-and-consumeをcurrent directionとして維持し、sticky MCP sessionを要求しません。stateless / client-carried alternativeは同等のreplay / ACK-ambiguity safetyをproofするまで採用しません。
 
-[MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) ではsafe accounting lifecycleを既に定義済みです。first-class Tasks wire/runtime adapterはv0.10でupstream stabilityを見て判断するscope itemであり、current core correctness gapではありません。
+[MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) ではsafe accounting lifecycleを既に定義済みです。first-class Tasks wire/runtime adapterはv0.11でupstream stabilityを見て判断するscope itemであり、current core correctness gapではありません。
 
 ## Third-party Store contract
 
@@ -208,7 +207,7 @@ import {
 import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
 ```
 
-v0.6〜v0.9で採用するcapabilityがStore behaviorを変える場合、必要に応じportable contractを拡張します。portable runner合格は必要条件ですが、backend-specific durability、failover、authoritative time、lost-ACK evidenceの代替にはなりません。
+v0.6〜v0.10で採用するcapabilityがStore behaviorを変える場合、必要に応じportable contractを拡張します。portable runner合格は必要条件ですが、backend-specific durability、failover、authoritative time、lost-ACK evidenceの代替にはなりません。
 
 ## Non-goals
 

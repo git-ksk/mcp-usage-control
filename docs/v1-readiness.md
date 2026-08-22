@@ -8,9 +8,9 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Status update — v0.8 operation-reconciliation decision
 
-`v0.8.0` is the latest released GitHub/source baseline and is closed out. **v0.9.0 is the active product decision target: close audit safety-hardening #116-#127 first, then #76 + #82 + #99.**
+`v0.8.0` is the latest released GitHub/source baseline and is closed out. **v0.9.0 / #116-#127 safety hardening is the active product decision target. v0.10.0 / #76 + #82 + #99 follows as the operational-usability gate.**
 
-After v0.8, the execution order is **v0.9 safety hardening #116-#127 -> v0.9/#76+#82+#99 -> v0.10/#24+#6+#105+#106 completion -> v1.0 stable promotion**. The hardening set is part of v0.9 implementation order and does not imply a required v0.8.1 release. #99 came from real GatewayMCP dogfood; its immediate consumer-side mapping bug may land earlier while reusable MCPUsage diagnostics stay in the v0.9 decision gate.
+After v0.8, the execution order is **v0.9/#116-#127 safety hardening -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#6+#105+#106 completion -> v1.0 stable promotion**. No v0.8.1 release is required; the pre-v1 minors are deliberately split into separate decision gates. #99 came from real GatewayMCP dogfood; its immediate consumer-side mapping bug may land earlier while reusable MCPUsage diagnostics stay in the v0.10 decision gate.
 
 The v0.8 decision for #81 is explicit:
 
@@ -26,11 +26,11 @@ The v0.8 decision for #81 is explicit:
 
 ## Verdict
 
-**v0.8.0 source release is COMPLETE. The next product decision gate is v0.9.0: #116-#127 safety hardening first, then #76 + #82 + #99.**
+**v0.8.0 source release is COMPLETE. The next product decision gate is v0.9.0 / #116-#127 safety hardening; v0.10.0 then owns #76 + #82 + #99.**
 
 The resolved v0.5-v0.7 correctness gates remain carried forward, and #81 now has a provider-neutral contract, built-in Store support matrix, portable conformance, and Cloudflare provider-specific reconciliation evidence.
 
-**v1.0 readiness remains intentionally provisional.** #83, #84, and #81 are adopted as optional future-v1 capabilities. **#116-#127 are the v0.9 safety gate before the #76, #82, and #99 product decisions.**
+**v1.0 readiness remains intentionally provisional.** #83, #84, and #81 are adopted as optional future-v1 capabilities. **#116-#127 are the v0.9 safety gate; #76, #82, and #99 move to the separate v0.10 operational-usability gate.**
 
 ## v0.8 accounting boundary
 
@@ -82,7 +82,7 @@ See [Operation reconciliation/status](operation-reconciliation.md).
 
 ### Other open capabilities
 
-#76, #82, and #99 are the v0.9 operational-usability decisions. #99 covers canonical settlement-outcome integration vocabulary, bounded diagnostics that distinguish invalid integration input from service unavailability, and privacy-safe lifecycle visibility. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
+#76, #82, and #99 are the v0.10 operational-usability decisions. #99 covers canonical settlement-outcome integration vocabulary, bounded diagnostics that distinguish invalid integration input from service unavailability, and privacy-safe lifecycle visibility. They should enter v1 only if they are low-risk, clearly useful, and do not create a second accounting authority or weaken fail-closed behavior.
 
 First-class MCP Tasks integration likewise remains dependent on the upstream TypeScript protocol surface; the accounting lifecycle itself is already defined and proof-tested.
 
@@ -201,7 +201,7 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 **Current released source baseline: v0.8.0 — RELEASED / CLOSED.**
 
-**Active product decision target: v0.9.0 — #116-#127 safety hardening first, then #76 + #82 + #99 operational usability / dogfood diagnostics.** #108/#109/#110 are completed non-blocking adjacent subscription-credit ergonomics work; the helper/docs surface does not gate v1.
+**Active product decision target: v0.9.0 / #116-#127 safety hardening. Next: v0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics.** #108/#109/#110 are completed non-blocking adjacent subscription-credit ergonomics work; the helper/docs surface does not gate v1.
 
 **#83: ADOPTED for future v1 as optional progressive reservation growth.**
 
@@ -209,7 +209,7 @@ GitHub source releases and npm publication remain separate operations. npm publi
 
 **#81: ADOPTED for future v1 as optional scalar read-only operation reconciliation.**
 
-**Next product decision target: v0.9.0 — close #116-#127 first, then #76 + #82 + #99.**
+**Next product decision target: v0.9.0 / #116-#127 safety hardening, followed by v0.10.0 / #76 + #82 + #99.**
 
 **v1.0 remains a later stable promotion with no new feature.**
 
