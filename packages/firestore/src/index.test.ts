@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { UsageRequest } from 'mcp-usage-control';
 import {
   runProgressiveUsageStoreConformance,
@@ -179,6 +179,25 @@ class FakeFirestore implements FirestoreLike {
   }
 }
 
+class ScriptedTransactionFailureFirestore extends FakeFirestore {
+  attempts = 0;
+
+  constructor(private readonly failureCodes: number[]) {
+    super();
+  }
+
+  override async runTransaction<T>(
+    updateFunction: (transaction: FirestoreTransactionLike) => Promise<T>,
+  ): Promise<T> {
+    this.attempts += 1;
+    const code = this.failureCodes.shift();
+    if (code !== undefined) {
+      throw Object.assign(new Error(`scripted Firestore transaction failure ${code}`), { code });
+    }
+    return super.runTransaction(updateFunction);
+  }
+}
+
 function request(operationId: string, principalId = 'user-a'): UsageRequest {
   return {
     operationId,
@@ -196,6 +215,69 @@ function assertServerClientTypeCompatibility(firestore: Firestore): void {
 void assertServerClientTypeCompatibility;
 
 describe('FirestoreUsageStore', () => {
+  it('retries only definitive Firestore transaction aborts after SDK-level contention exhaustion', async () => {
+    vi.useFakeTimers();
+    try {
+      const database = new ScriptedTransactionFailureFirestore([10, 409]);
+      const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });
+      const assertion = expect(
+        store.reserve({
+          request: request('aborted-retry'),
+          units: 1,
+          budgets: [{ key: 'aborted-retry-budget', limit: 1 }],
+          ttlMs: 1_000,
+        }),
+      ).resolves.toMatchObject({ accepted: true });
+
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(database.attempts).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds definitive Firestore transaction abort retries', async () => {
+    vi.useFakeTimers();
+    try {
+      const database = new ScriptedTransactionFailureFirestore([10, 10, 10, 10]);
+      const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });
+      const assertion = expect(
+        store.reserve({
+          request: request('aborted-bounded'),
+          units: 1,
+          budgets: [{ key: 'aborted-bounded-budget', limit: 1 }],
+          ttlMs: 1_000,
+        }),
+      ).rejects.toMatchObject({ code: 10 });
+
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(database.attempts).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['UNKNOWN', 2],
+    ['INVALID_ARGUMENT', 3],
+    ['UNAVAILABLE', 14],
+  ] as const)('does not outer-retry %s Firestore transaction failures', async (_name, code) => {
+    const database = new ScriptedTransactionFailureFirestore([code]);
+    const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });
+
+    await expect(
+      store.reserve({
+        request: request(`ambiguous-no-retry-${code}`),
+        units: 1,
+        budgets: [{ key: `ambiguous-no-retry-budget-${code}`, limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toMatchObject({ code });
+    expect(database.attempts).toBe(1);
+  });
+
   it('rejects malformed runtime identity and dimension keys without creating Firestore state', async () => {
     const database = new FakeFirestore();
     const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });

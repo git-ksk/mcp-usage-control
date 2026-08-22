@@ -235,7 +235,10 @@ export async function runVectorUsageStoreConformance(
         outcome: 'race',
       }),
     ]);
-    assert(results[1]!.status === 'fulfilled', 'settlement side of race must complete');
+    assert(
+      results[1]!.status === 'fulfilled',
+      `settlement side of race must complete${results[1]!.status === 'rejected' ? `: ${errorMessage(results[1]!.reason)}` : ''}`,
+    );
     if (results[0]!.status === 'fulfilled' && results[1]!.status === 'fulfilled') {
       growthAccepted(results[0]!.value, 'race growth');
       const requests = results[1]!.value.dimensions.find(item => item.key === 'requests');
