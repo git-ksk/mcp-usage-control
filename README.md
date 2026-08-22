@@ -16,7 +16,7 @@ The project focuses on the boundary between execution and usage accounting. It i
 
 **The packages are not published to npm yet.**
 
-Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred.
+`v0.9.0` is the latest GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -68,7 +68,7 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.9.0`. **v0.9.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.9.0 is released and closed out as the safety-hardening source baseline.** The active product target is **v0.10.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, and finally **v1.0.0** as a feature-free stable promotion. npm publication remains a separate explicitly authorized operation tracked by #6 and was not performed for v0.9.0.
+**Current execution order:** **v0.9.0 is released.** The active product target is **v0.10.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, and finally **v1.0.0** as a feature-free stable promotion.
 
 ## v1 scope under consideration after v0.5
 
@@ -149,7 +149,6 @@ try {
   await admission.lease.settle(1, 'success');
   return result;
 } catch (error) {
-  // Settle zero only when you can prove that no metered cost was incurred.
   await admission.lease.settle(admission.lease.reservedUnits, 'error');
   throw error;
 }
@@ -290,7 +289,7 @@ See [Observability](docs/observability.md).
 4. Metered execution is preceded by `markLiable()`.
 5. Pending expiry may release capacity; liable expiry conservatively retains the reservation.
 6. Active long-running leases are renewable.
-7. `actualUnits` cannot exceed `reservedUnits` in the current v0.5 model.
+7. `actualUnits` cannot exceed `reservedUnits` in the scalar model.
 8. Identical settlement replay is idempotent during retention; conflicting settlement fails.
 9. Storage failures do not become allow decisions.
 10. Ambiguous state-changing outcomes are not blindly retried.
@@ -327,9 +326,9 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.9.0` is the latest released source baseline. #81 remains adopted as an optional scalar read-only future-v1 Store capability, and **the v0.9.0 / #116-#127 safety-hardening line is released and closed. The active product decision target is v0.10.0 / #76 + #82 + #99 operational usability.** All five package manifests are aligned at `0.9.0`.
+`v0.9.0` is the latest released source baseline. The package manifests are `0.9.0`. The active product target is **v0.10.0 / #76 + #82 + #99 operational usability**, followed by the v0.11 final completion/distribution/API-freeze gate.
 
-**npm publication remains a separate explicitly authorized operation tracked by #6 and has not been performed for v0.9.0.**
+**npm publication remains a separate explicitly authorized operation and has not been completed.**
 
 ## License
 
