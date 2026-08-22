@@ -10,7 +10,7 @@ No entries yet.
 
 ## [0.9.0] - 2026-08-22
 
-Ninth GitHub/source release preparation focused on repository-wide safety hardening. This preparation does not itself create the tag, GitHub Release, or npm publication; those remain post-merge release operations.
+Ninth GitHub/source release focused on repository-wide safety hardening. npm publication remains intentionally separate and was not performed.
 
 ### Safety hardening
 
@@ -27,9 +27,9 @@ Ninth GitHub/source release preparation focused on repository-wide safety harden
 ### Release evidence / boundary
 
 - PR #144 passed the Node 20/22/24 CI/package matrix, Cloudflare local workerd integration, and Firestore Emulator integration before squash merge.
-- All five public package manifests are aligned at `0.9.0` for release preparation.
-- After this preparation merges and the normal release gate is green, the exact tested main content is eligible for the `v0.9.0` tag and GitHub Release.
-- First npm publication is separately and explicitly authorized for this v0.9 release execution; publication remains a distinct post-source-release operation and #6 closes only after registry/provenance verification succeeds.
+- Release-preparation PR #145 aligned all five public package manifests at `0.9.0` and passed Node 20/22/24 package/clean-consumer CI, Cloudflare integration, and Firestore Emulator integration before squash merge.
+- `v0.9.0` points to the exact tested release commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2`; GitHub source-release workflow run `32568777809` completed successfully.
+- Post-release registry verification confirmed that `mcp-usage-control`, `mcp-usage-control-mcp`, `mcp-usage-control-redis`, `mcp-usage-control-cloudflare`, and `mcp-usage-control-firestore` are **not published at 0.9.0**. First npm publication remains separately authorized and tracked by #6.
 
 ## [0.8.0] - 2026-08-22
 
