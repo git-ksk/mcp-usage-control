@@ -66,9 +66,9 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは `0.8.0` で揃っています。**v0.8.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+5 packageのmanifestは `0.9.0` で揃っています。**v0.9.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** **v0.8.0はlatest released source baselineのまま、v0.9.0 / #116〜#127 safety hardeningのsource gateは完了済み**です。active product targetは **v0.10.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。v0.8.1を挟む必要はありません。v0.9 closeoutではpackage version bump / tag / GitHub Release / npm publishを行っておらず、これらは引き続き別の明示操作です。
+**現在の実行順序:** **v0.9.0はsafety-hardening source baselineとしてrelease / closeout済み**です。active product targetは **v0.10.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。npm publicationは#6で追跡する別途explicit authorizationの操作で、v0.9.0では実施していません。
 
 ## v0.5後に再評価するv1 scope
 
@@ -307,9 +307,9 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.8.0` はlatest released source baselineのままです。#81はread-only scalar optional Store capabilityとしてfuture v1 surfaceへ採用済みで、**v0.9.0 / #116〜#127 safety hardeningのsource gateは完了しました。現在のactive product decision targetは v0.10.0 / #76 + #82 + #99 operational usabilityです。** package manifestは `0.8.0` のままで、future version bump / tag / GitHub Release / npm publicationは別操作です。
+`v0.9.0` がlatest released source baselineです。#81はread-only scalar optional Store capabilityとしてfuture v1 surfaceへ採用済みで、**v0.9.0 / #116〜#127 safety hardeningはrelease / closeout済みです。現在のactive product decision targetは v0.10.0 / #76 + #82 + #99 operational usabilityです。** 5 packageのmanifestは `0.9.0` で揃っています。
 
-**npm publicationは別途explicit authorizationが必要で、まだ実施していません。**
+**npm publicationは#6で追跡する別途explicit authorizationの操作で、v0.9.0では実施していません。**
 
 ## License
 
