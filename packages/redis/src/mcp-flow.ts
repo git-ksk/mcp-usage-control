@@ -293,6 +293,35 @@ function validateLeaseResumeState(state: UsageLeaseResumeState): void {
     throw new UsageStateError('MCP usage resume reservation expiresAt must be a positive safe integer');
   }
   if (state.metadata !== undefined) validateMetadata(state.metadata);
+  if (state.unresolvedGrowth !== undefined) validateUnresolvedGrowth(state.unresolvedGrowth);
+}
+
+function validateUnresolvedGrowth(value: unknown): void {
+  if (!isRecord(value)) {
+    throw new UsageStateError('MCP usage unresolved growth must be an object');
+  }
+  if (typeof value.incrementId !== 'string' || value.incrementId.length === 0) {
+    throw new UsageStateError('MCP usage unresolved growth incrementId must be non-empty');
+  }
+  if (!Number.isSafeInteger(value.additionalUnits) || (value.additionalUnits as number) <= 0) {
+    throw new UsageStateError('MCP usage unresolved growth additionalUnits must be a positive safe integer');
+  }
+  if (!Array.isArray(value.budgets) || value.budgets.length === 0) {
+    throw new UsageStateError('MCP usage unresolved growth must contain budgets');
+  }
+  let previousKey: string | undefined;
+  for (const budget of value.budgets) {
+    if (!isRecord(budget) || typeof budget.key !== 'string' || budget.key.length === 0) {
+      throw new UsageStateError('MCP usage unresolved growth budget key must be non-empty');
+    }
+    if (!Number.isSafeInteger(budget.limit) || (budget.limit as number) < 0) {
+      throw new UsageStateError('MCP usage unresolved growth budget limit must be a non-negative safe integer');
+    }
+    if (previousKey !== undefined && previousKey.localeCompare(budget.key) >= 0) {
+      throw new UsageStateError('MCP usage unresolved growth budgets must be canonical and unique');
+    }
+    previousKey = budget.key;
+  }
 }
 
 function validateMetadata(metadata: UsageEventMetadata): void {
@@ -335,6 +364,15 @@ function cloneFlowRecord(record: RedisMcpUsageFlowRecord): RedisMcpUsageFlowReco
       },
       ttlMs: record.lease.ttlMs,
       ...(record.lease.metadata === undefined ? {} : { metadata: { ...record.lease.metadata } }),
+      ...(record.lease.unresolvedGrowth === undefined
+        ? {}
+        : {
+            unresolvedGrowth: {
+              incrementId: record.lease.unresolvedGrowth.incrementId,
+              additionalUnits: record.lease.unresolvedGrowth.additionalUnits,
+              budgets: record.lease.unresolvedGrowth.budgets.map(budget => ({ ...budget })),
+            },
+          }),
     },
     round: record.round,
     expiresAt: record.expiresAt,
