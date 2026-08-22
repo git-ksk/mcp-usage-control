@@ -68,7 +68,7 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.8.0`. **v0.8.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.8.0 is released and closed out.** The active product target is now **v0.9.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.10.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
+**Current execution order:** **v0.8.0 is released and closed out.** The active product target is **v0.9.0**, with repository-audit safety hardening **#116-#127 first**, then **#76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.10.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, then **v1.0.0** as a feature-free stable promotion. This is implementation order inside v0.9; it does not require an intermediate v0.8.1 release. The immediate Gateway dogfood mapping fix identified by #99 may land earlier as a consumer integration bugfix; #99's reusable contract/diagnostic work remains a v0.9 product target.
 
 ## v1 scope under consideration after v0.5
 
@@ -326,7 +326,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.8.0` is released and closed out as the current source baseline. #81 is adopted as an optional scalar read-only future-v1 Store capability; **v0.9.0 / #76 + #82 + #99 is the active product decision target**. Future tag/Release creation and npm publication remain separate operations.
+`v0.8.0` is released and closed out as the current source baseline. #81 is adopted as an optional scalar read-only future-v1 Store capability; **v0.9.0 is the active product decision target, with #116-#127 safety hardening preceding #76 + #82 + #99 implementation work**. Future tag/Release creation and npm publication remain separate operations.
 
 **npm publication remains a separate explicitly authorized operation and has not been performed.**
 
