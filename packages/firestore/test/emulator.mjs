@@ -109,6 +109,57 @@ async function testVectorConformance() {
   assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
 }
 
+async function testVectorGrowthSettleRaceStress() {
+  const store = storeFor('vector_race_stress', { cleanupBatchSize: 0, expiryGraceMs: 0 });
+  const iterations = 24;
+
+  for (let index = 0; index < iterations; index += 1) {
+    const suffix = `vector:race-stress:${index}`;
+    const admission = await store.reserveVector({
+      request: request(`vector-race-stress-${index}`),
+      dimensions: [
+        { key: 'requests', units: 1, budgets: [{ key: `${suffix}:requests`, limit: 2 }] },
+        { key: 'tokens', units: 5, budgets: [{ key: `${suffix}:tokens`, limit: 10 }] },
+      ],
+      ttlMs: 60_000,
+    });
+    assert.equal(admission.accepted, true, `stress admission ${index} must succeed`);
+    const cursor = admission.reservation.growthCursor;
+    assert.equal(typeof cursor, 'string', `stress admission ${index} must expose a growth cursor`);
+
+    const results = await Promise.allSettled([
+      store.growVectorReservation({
+        reservationId: admission.reservation.id,
+        incrementId: `stress-growth-${index}`,
+        expectedGrowthCursor: cursor,
+        dimensions: [
+          { key: 'requests', additionalUnits: 1, budgets: [{ key: `${suffix}:requests`, limit: 2 }] },
+          { key: 'tokens', additionalUnits: 1, budgets: [{ key: `${suffix}:tokens`, limit: 10 }] },
+        ],
+      }),
+      store.settleVector({
+        reservationId: admission.reservation.id,
+        actualByDimension: [
+          { key: 'requests', actualUnits: 1 },
+          { key: 'tokens', actualUnits: 5 },
+        ],
+        outcome: 'race-stress',
+      }),
+    ]);
+
+    assert.equal(
+      results[1].status,
+      'fulfilled',
+      `stress settlement ${index} must complete: ${results[1].status === 'rejected' ? String(results[1].reason) : ''}`,
+    );
+    if (results[0].status === 'fulfilled') {
+      assert.equal(results[0].value.accepted, true, `stress growth ${index} must be accepted if it wins`);
+      const requests = results[1].value.dimensions.find(item => item.key === 'requests');
+      assert.equal(requests?.reservedUnits, 2, `stress settlement ${index} must observe committed growth`);
+    }
+  }
+}
+
 async function testMultiBudgetAtomicity() {
   const store = storeFor('atomic');
 
@@ -321,6 +372,7 @@ const tests = [
   ['operation reconciliation conformance', testReconciliationConformance],
   ['progressive UsageStore conformance', testProgressiveConformance],
   ['vector UsageStore conformance', testVectorConformance],
+  ['vector growth-vs-settle race stress', testVectorGrowthSettleRaceStress],
   ['multi-budget atomicity', testMultiBudgetAtomicity],
   ['shared-budget concurrency', testSharedBudgetConcurrency],
   ['pending expiry recovery', testPendingExpiryRecovery],

@@ -231,6 +231,9 @@ const RESERVATION_ID_PATTERN = /^fs1\.[a-f0-9]{64}$/;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const EXPIRED_LIABLE_OUTCOME = 'lease_expired_after_execution_started';
 const EXPIRED_LIABLE_OUTCOME_HASH = digest(EXPIRED_LIABLE_OUTCOME);
+const FIRESTORE_ABORTED_STATUS = 10;
+const FIRESTORE_ABORTED_HTTP_STATUS = 409;
+const FIRESTORE_ABORTED_OUTER_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const;
 
 /**
  * Firestore-backed `UsageStore` for server-side Node.js runtimes.
@@ -1296,14 +1299,20 @@ export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageSt
           return { ok: false, reason: 'invalid_units' };
         }
       }
-      const budgetIds = reservationBudgetIds(reservation);
-      const usedById = await readBudgets(transaction, this.budgets(), budgetIds);
-      for (let index = 0; index < reservation.dimensions!.length; index += 1) {
-        const dimension = reservation.dimensions![index]!;
-        const released = dimension.reservedUnits - encodedActuals[index]!.actualUnits;
-        if (released > 0) releaseAcrossBudgets(usedById, dimension.budgetIds, released);
+      const releases = reservation.dimensions!.map(
+        (dimension, index) => dimension.reservedUnits - encodedActuals[index]!.actualUnits,
+      );
+      if (releases.some(released => released > 0)) {
+        const budgetIds = reservationBudgetIds(reservation);
+        const usedById = await readBudgets(transaction, this.budgets(), budgetIds);
+        for (let index = 0; index < reservation.dimensions!.length; index += 1) {
+          const released = releases[index]!;
+          if (released > 0) {
+            releaseAcrossBudgets(usedById, reservation.dimensions![index]!.budgetIds, released);
+          }
+        }
+        writeUsedBudgets(transaction, this.budgets(), usedById, budgetIds, now);
       }
-      writeUsedBudgets(transaction, this.budgets(), usedById, budgetIds, now);
       const settledReservation: StoredReservation = {
         ...reservation,
         state: 'settled',
@@ -1514,10 +1523,24 @@ export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageSt
     });
   }
 
-  private runTransaction<T>(
+  private async runTransaction<T>(
     updateFunction: (transaction: FirestoreTransactionLike) => Promise<T>,
   ): Promise<T> {
-    return this.firestore.runTransaction(updateFunction);
+    for (let retry = 0; ; retry += 1) {
+      try {
+        return await this.firestore.runTransaction(updateFunction);
+      } catch (error) {
+        // The official SDK already retries transaction contention internally. If it
+        // exhausts those attempts with ABORTED/409, no transaction commit occurred,
+        // so restarting the transaction is non-ambiguous. Do not outer-retry
+        // UNKNOWN/UNAVAILABLE/INVALID_ARGUMENT: those may hide ambiguous state.
+        const delayMs = FIRESTORE_ABORTED_OUTER_RETRY_DELAYS_MS[retry];
+        if (delayMs === undefined || !isDefinitiveFirestoreTransactionAbort(error)) {
+          throw error;
+        }
+        await delay(jitteredRetryDelay(delayMs));
+      }
+    }
   }
 
   private budgets(): FirestoreCollectionReferenceLike {
@@ -2364,6 +2387,20 @@ function assertReservationId(reservationId: string): void {
   if (!RESERVATION_ID_PATTERN.test(reservationId)) {
     throw new UsageStateError('Invalid Firestore reservation ID');
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function jitteredRetryDelay(baseMs: number): number {
+  return Math.max(1, Math.round(baseMs * (0.5 + Math.random())));
+}
+
+function isDefinitiveFirestoreTransactionAbort(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === FIRESTORE_ABORTED_STATUS || code === FIRESTORE_ABORTED_HTTP_STATUS;
 }
 
 function digest(value: string): string {
