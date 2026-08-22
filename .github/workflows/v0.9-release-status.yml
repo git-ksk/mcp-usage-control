@@ -24,27 +24,19 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
       - name: Cancel v0.9 operator and npm publication runs
         shell: bash
         run: |
           set -euo pipefail
           for workflow in v0.9-release-execution.yml npm-publish.yml; do
             for status in queued in_progress waiting; do
-              gh run list \
-                --workflow "$workflow" \
-                --status "$status" \
-                --limit 30 \
-                --json databaseId,createdAt \
-                --jq ".[] | select(.createdAt >= \"${CUTOFF}\") | .databaseId" \
-              | while read -r run_id; do
-                  [[ -n "$run_id" ]] || continue
-                  echo "Cancelling $workflow run $run_id"
-                  gh run cancel "$run_id" || true
-                done
+              gh run list --workflow "$workflow" --status "$status" --limit 30 --json databaseId,createdAt --jq ".[] | select(.createdAt >= \"${CUTOFF}\") | .databaseId" | while read -r run_id; do
+                [[ -n "$run_id" ]] || continue
+                echo "Cancelling $workflow run $run_id"
+                gh run cancel "$run_id" || true
+              done
             done
           done
-
       - name: Confirm no npm publication remains active
         shell: bash
         run: |
@@ -55,62 +47,41 @@ jobs:
               gh run list --workflow npm-publish.yml --status in_progress --limit 30 --json databaseId,createdAt --jq ".[] | select(.createdAt >= \"${CUTOFF}\") | .databaseId"
               gh run list --workflow npm-publish.yml --status waiting --limit 30 --json databaseId,createdAt --jq ".[] | select(.createdAt >= \"${CUTOFF}\") | .databaseId"
             } | sed '/^$/d')"
-            if [[ -z "$active" ]]; then
-              echo 'No queued/running npm publication remains.'
-              exit 0
-            fi
+            if [[ -z "$active" ]]; then exit 0; fi
             sleep 2
           done
-          echo 'npm publication run still active after cancellation attempts' >&2
           exit 1
-
       - name: Verify exact tag target
         shell: bash
         run: |
           set -euo pipefail
           git fetch --tags --force
-          actual="$(git rev-list -n 1 "$RELEASE_TAG")"
-          test "$actual" = "$RELEASE_SHA"
-
+          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$RELEASE_SHA"
       - name: Ensure GitHub source Release exists
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease,targetCommitish,url >/tmp/release.json 2>/dev/null; then
-            echo 'GitHub Release already exists.'
-          else
+          if ! gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease,targetCommitish,url >/tmp/release.json 2>/dev/null; then
             before="$(gh run list --workflow release.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
             gh workflow run release.yml --ref main -f tag="$RELEASE_TAG"
             run_id=''
             for attempt in {1..60}; do
               latest="$(gh run list --workflow release.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
-              if [[ "$latest" != "0" && "$latest" != "$before" ]]; then
-                run_id="$latest"
-                break
-              fi
+              if [[ "$latest" != "0" && "$latest" != "$before" ]]; then run_id="$latest"; break; fi
               sleep 2
             done
             test -n "$run_id"
-            echo "source release workflow run: $run_id"
             gh run watch "$run_id" --exit-status
             gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease,targetCommitish,url >/tmp/release.json
           fi
           test "$(jq -r '.tagName' /tmp/release.json)" = "$RELEASE_TAG"
           test "$(jq -r '.isDraft' /tmp/release.json)" = 'false'
           test "$(jq -r '.isPrerelease' /tmp/release.json)" = 'false'
-
       - name: Verify v0.9 remains unpublished on npm
-        id: registry
         shell: bash
         run: |
           set -euo pipefail
-          packages=(
-            mcp-usage-control
-            mcp-usage-control-mcp
-            mcp-usage-control-redis
-            mcp-usage-control-cloudflare
-            mcp-usage-control-firestore
-          )
+          packages=(mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis mcp-usage-control-cloudflare mcp-usage-control-firestore)
           published=0
           : > /tmp/registry.txt
           for package in "${packages[@]}"; do
@@ -122,22 +93,18 @@ jobs:
               echo "- ${package}@${RELEASE_VERSION}: not published" >> /tmp/registry.txt
             fi
           done
-          echo "published=$published" >> "$GITHUB_OUTPUT"
           test "$published" = '0'
-
       - name: Record source-only release evidence
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          ops="$(gh run list --workflow v0.9-release-execution.yml --limit 1 --json databaseId,status,conclusion,url,createdAt --jq '.[0] // {}')"
           source="$(gh run list --workflow release.yml --event workflow_dispatch --limit 1 --json databaseId,status,conclusion,url,createdAt --jq '.[0] // {}')"
           publish="$(gh run list --workflow npm-publish.yml --event workflow_dispatch --limit 1 --json databaseId,status,conclusion,url,createdAt --jq '.[0] // {}')"
           {
             echo '## v0.9.0 source-release closeout evidence'
             echo
             echo "- tag: \`${RELEASE_TAG}\` -> \`${RELEASE_SHA}\`"
-            echo "- release operator: \`$(jq -r '.databaseId // "none"' <<<"$ops")\` — \`$(jq -r '.status // "missing"' <<<"$ops")\` / \`$(jq -r '.conclusion // "pending"' <<<"$ops")\`"
             echo "- GitHub source release: \`$(jq -r '.databaseId // "none"' <<<"$source")\` — \`$(jq -r '.status // "missing"' <<<"$source")\` / \`$(jq -r '.conclusion // "pending"' <<<"$source")\`"
             echo "- npm publication workflow: \`$(jq -r '.databaseId // "none"' <<<"$publish")\` — \`$(jq -r '.status // "missing"' <<<"$publish")\` / \`$(jq -r '.conclusion // "not-run"' <<<"$publish")\`"
             echo '- npm decision: deferred; Issue #6 remains open.'
