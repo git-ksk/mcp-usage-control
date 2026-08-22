@@ -8,9 +8,9 @@
 
 ## Status update — v0.8 operation reconciliation decision
 
-`v0.8.0` がlatest released GitHub/source baselineでcloseout済みです。**v0.9.0がactive product decision targetです。#116〜#127のaudit safety hardeningを先に閉じ、その後#76 + #82 + #99へ進みます。**
+`v0.8.0` がlatest released GitHub/source baselineでcloseout済みです。**v0.9.0 / #116〜#127 safety hardeningがactive product decision targetです。次のv0.10.0で#76 + #82 + #99 operational usabilityへ進みます。**
 
-v0.8後の実行順序は **v0.9 safety hardening #116〜#127 -> v0.9/#76+#82+#99 -> v0.10/#24+#6+#105+#106 completion -> v1.0 stable promotion** です。このhardening setはv0.9内の実装順序であり、v0.8.1 releaseを必須にはしません。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.9 decision gateに置きます。
+v0.8後の実行順序は **v0.9/#116〜#127 safety hardening -> v0.10/#76+#82+#99 operational usability -> v0.11/#24+#6+#105+#106 completion -> v1.0 stable promotion** です。v0.8.1 releaseは不要で、pre-v1 minorを別々のdecision gateとして分けます。#99はGatewayMCP real dogfoodから追加され、consumer側の即時mapping bugは先行修正可能ですが、再利用可能なMCPUsage diagnosticsはv0.10 decision gateに置きます。
 
 v0.8で#81の判断を明示確定します。
 
@@ -26,11 +26,11 @@ v0.8で#81の判断を明示確定します。
 
 ## 判定
 
-**v0.8.0 source releaseは完了。次product decision gateはv0.9.0で、#116〜#127 safety hardeningを先に閉じ、その後#76 + #82 + #99へ進みます。**
+**v0.8.0 source releaseは完了。次product decision gateはv0.9.0 / #116〜#127 safety hardeningで、その次のv0.10.0が#76 + #82 + #99を担当します。**
 
 v0.5-v0.7までのresolved correctness gateをcarry forwardし、#81はprovider-neutral contract、built-in Store support matrix、portable conformance、Cloudflare provider-specific reconciliation evidenceを持ちます。
 
-**v1.0 readinessは引き続きprovisionalです。** #83 / #84 / #81をoptional future-v1 capabilityとして採用し、**#116〜#127をv0.9 safety gateとして先に閉じてから#76 / #82 / #99のproduct decisionへ進みます。**
+**v1.0 readinessは引き続きprovisionalです。** #83 / #84 / #81をoptional future-v1 capabilityとして採用し、**#116〜#127をv0.9 safety gateとし、#76 / #82 / #99は別releaseのv0.10 operational-usability gateへ移します。**
 
 ## v0.8 accounting boundary
 
@@ -82,7 +82,7 @@ v0.8ではoptional scalar read-only capabilityを採用します。Memory / Redi
 
 ### その他open capability
 
-#76 / #82 / #99はv0.9 operational-usability decisionです。#99ではcanonical settlement-outcome integration vocabulary、invalid integration inputとservice unavailableを区別できるbounded diagnostics、privacy-safe lifecycle visibilityを扱います。second accounting authorityを作らずfail-closedを弱めないlow-risk / clearly usefulなものだけv1候補にします。
+#76 / #82 / #99はv0.10 operational-usability decisionです。#99ではcanonical settlement-outcome integration vocabulary、invalid integration inputとservice unavailableを区別できるbounded diagnostics、privacy-safe lifecycle visibilityを扱います。second accounting authorityを作らずfail-closedを弱めないlow-risk / clearly usefulなものだけv1候補にします。
 
 first-class MCP Tasks integrationはupstream TypeScript protocol surface依存のままです。accounting lifecycle自体はすでにdefined / proof-testedです。
 
@@ -199,7 +199,7 @@ GitHub source releaseとnpm publicationは別操作です。GitHub/source releas
 
 **Current released source baseline: v0.8.0 — RELEASED / CLOSED。**
 
-**Active product decision target: v0.9.0 — #116〜#127 safety hardeningを先に閉じ、その後#76 + #82 + #99 operational usability / dogfood diagnostics。** #108/#109/#110はsubscription-credit導入を簡単にするnon-blocking隣接workとして完了済みで、このhelper/docs surfaceはv1 gateにはしません。
+**Active product decision target: v0.9.0 / #116〜#127 safety hardening。次はv0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics。** #108/#109/#110はsubscription-credit導入を簡単にするnon-blocking隣接workとして完了済みで、このhelper/docs surfaceはv1 gateにはしません。
 
 **#83: optional progressive reservation growthとしてfuture v1へ採用。**
 
@@ -207,7 +207,7 @@ GitHub source releaseとnpm publicationは別操作です。GitHub/source releas
 
 **#81: optional scalar read-only operation reconciliationとしてfuture v1へ採用。**
 
-**次product decision target: v0.9.0 — #116〜#127を先に閉じ、その後#76 + #82 + #99。**
+**次product decision target: v0.9.0 / #116〜#127 safety hardening、その後v0.10.0 / #76 + #82 + #99。**
 
 **v1.0は新featureなしのlater stable promotion。**
 
