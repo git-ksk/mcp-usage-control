@@ -1,0 +1,70 @@
+name: v0.9 Release Status Probe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/v0.9-release-status.yml'
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: 0.9.0
+    steps:
+      - name: Capture release workflow and registry status
+        shell: bash
+        run: |
+          set -euo pipefail
+          ops="$(gh run list --workflow v0.9-release-execution.yml --limit 1 --json databaseId,status,conclusion,url,createdAt --jq '.[0] // {}')"
+          source="$(gh run list --workflow release.yml --event workflow_dispatch --limit 1 --json databaseId,status,conclusion,url,createdAt --jq '.[0] // {}')"
+          publish="$(gh run list --workflow npm-publish.yml --event workflow_dispatch --limit 1 --json databaseId,status,conclusion,url,createdAt --jq '.[0] // {}')"
+
+          packages=(
+            mcp-usage-control
+            mcp-usage-control-mcp
+            mcp-usage-control-redis
+            mcp-usage-control-cloudflare
+            mcp-usage-control-firestore
+          )
+
+          registry=''
+          for package in "${packages[@]}"; do
+            version="$(npm view "${package}@${RELEASE_VERSION}" version --json 2>/dev/null | tr -d '"' || true)"
+            if [[ "$version" = "$RELEASE_VERSION" ]]; then
+              integrity="$(npm view "${package}@${RELEASE_VERSION}" dist.integrity --json 2>/dev/null | tr -d '"' || true)"
+              attestations="$(npm view "${package}@${RELEASE_VERSION}" dist.attestations --json 2>/dev/null || true)"
+              if [[ -n "$integrity" && -n "$attestations" && "$attestations" != "null" ]]; then
+                state='published+integrity+provenance'
+              else
+                state='published-but-verification-incomplete'
+              fi
+            else
+              state='not-published'
+            fi
+            registry+="- ${package}@${RELEASE_VERSION}: ${state}"$'\n'
+          done
+
+          {
+            echo '## v0.9.0 release execution status probe'
+            echo
+            echo 'This is a read-only status probe. No release, tag, or registry mutation is performed here.'
+            echo
+            echo '### Workflow status'
+            echo
+            echo "- release operator: \`$(jq -r '.databaseId // "none"' <<<"$ops")\` — \`$(jq -r '.status // "missing"' <<<"$ops")\` / \`$(jq -r '.conclusion // "pending"' <<<"$ops")\`"
+            echo "- GitHub source release: \`$(jq -r '.databaseId // "none"' <<<"$source")\` — \`$(jq -r '.status // "missing"' <<<"$source")\` / \`$(jq -r '.conclusion // "pending"' <<<"$source")\`"
+            echo "- npm publication: \`$(jq -r '.databaseId // "none"' <<<"$publish")\` — \`$(jq -r '.status // "missing"' <<<"$publish")\` / \`$(jq -r '.conclusion // "pending"' <<<"$publish")\`"
+            echo
+            echo '### Registry status'
+            echo
+            printf '%s' "$registry"
+          } > /tmp/status.md
+
+          gh issue comment 6 --body-file /tmp/status.md
