@@ -40,6 +40,11 @@ function record(
       },
       ttlMs: 1_000,
       metadata: { environment: 'test' },
+      unresolvedGrowth: {
+        incrementId: `growth:${flowId}`,
+        additionalUnits: 1,
+        budgets: [{ key: 'budget:user-1:monthly', limit: 3 }],
+      },
     },
     round: 1,
     expiresAt,
@@ -75,6 +80,28 @@ describe('RedisMcpUsageFlowStore validation', () => {
   it('rejects invalid prefixes before constructing Redis keys', () => {
     const fake: RedisMcpFlowEvalClient = { eval: async () => ['ok'] };
     expect(() => new RedisMcpUsageFlowStore(fake, { prefix: 'bad{tag}' })).toThrow(/prefix/);
+  });
+
+  it('rejects malformed unresolved growth from decoded trusted flow state', async () => {
+    const value = record('flow-000000000009');
+    const malformed = {
+      ...value,
+      lease: {
+        ...value.lease,
+        unresolvedGrowth: {
+          incrementId: 'growth-invalid',
+          additionalUnits: 1,
+          budgets: [{ key: 'budget:user-1:monthly', limit: 'not-a-number' }],
+        },
+      },
+    };
+    const fake: RedisMcpFlowEvalClient = {
+      async eval() {
+        return ['ok', JSON.stringify(malformed)];
+      },
+    };
+    const store = new RedisMcpUsageFlowStore(fake);
+    await expect(store.consume(value.flowId, binding)).rejects.toThrow(/unresolved growth budget limit/);
   });
 
   it('supports an opaque application codec without changing binding semantics', async () => {

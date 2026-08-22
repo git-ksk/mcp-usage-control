@@ -783,6 +783,15 @@ function cloneFlowRecord(record: McpUsageFlowRecord): McpUsageFlowRecord {
       },
       ttlMs: record.lease.ttlMs,
       ...(record.lease.metadata === undefined ? {} : { metadata: { ...record.lease.metadata } }),
+      ...(record.lease.unresolvedGrowth === undefined
+        ? {}
+        : {
+            unresolvedGrowth: {
+              incrementId: record.lease.unresolvedGrowth.incrementId,
+              additionalUnits: record.lease.unresolvedGrowth.additionalUnits,
+              budgets: record.lease.unresolvedGrowth.budgets.map(budget => ({ ...budget })),
+            },
+          }),
     },
     round: record.round,
     expiresAt: record.expiresAt,

@@ -179,6 +179,11 @@ function flowRecord(flowId: string, ttlMs: number): McpUsageFlowRecord {
         expiresAt,
       },
       ttlMs,
+      unresolvedGrowth: {
+        incrementId: 'contract-growth-increment',
+        additionalUnits: 2,
+        budgets: [{ key: 'contract:budget', limit: 10 }],
+      },
     },
     round: 1,
     expiresAt,
@@ -197,6 +202,20 @@ function assertRecordMatches(actual: McpUsageFlowRecord, expected: McpUsageFlowR
     actual.lease.reservation.id === expected.lease.reservation.id,
     'reservation identity changed across storage',
   );
+  assert(
+    JSON.stringify(actual.lease.unresolvedGrowth) === JSON.stringify(expected.lease.unresolvedGrowth),
+    'unresolved growth changed across storage',
+  );
+  if (expected.lease.unresolvedGrowth !== undefined) {
+    assert(
+      actual.lease.unresolvedGrowth !== expected.lease.unresolvedGrowth,
+      'unresolved growth must be detached from caller state',
+    );
+    assert(
+      actual.lease.unresolvedGrowth?.budgets !== expected.lease.unresolvedGrowth.budgets,
+      'unresolved growth budgets must be detached from caller state',
+    );
+  }
 }
 
 async function assertRejects(action: () => Promise<unknown>, message: string): Promise<void> {
