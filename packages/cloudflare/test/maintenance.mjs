@@ -14,6 +14,7 @@ const token = process.env.MCP_USAGE_CLOUDFLARE_TOKEN ?? 'local-integration-token
 const authHeaders = { authorization: `Bearer ${token}` };
 const store = new RemoteCloudflareUsageStore({ endpoint: usageEndpoint, headers: authHeaders });
 const nonce = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const makeRequest = operationId => ({
   operationId: `${nonce}-${operationId}`,
@@ -33,6 +34,17 @@ async function consume(operationId, budgetKey) {
   if (!result.accepted) throw new Error('expected seed reservation');
   await store.markLiable({ reservationId: result.reservation.id });
   await store.settle({ reservationId: result.reservation.id, actualUnits: 1, outcome: 'seed' });
+}
+
+async function reserveVector(operationId, dimensions, ttlMs = 10_000) {
+  const result = await store.reserveVector({
+    request: makeRequest(operationId),
+    dimensions,
+    ttlMs,
+  });
+  assert.equal(result.accepted, true);
+  if (!result.accepted) throw new Error(`expected vector seed reservation: ${operationId}`);
+  return result;
 }
 
 const historicalKey = `${nonce}:daily:2026-07-01`;
@@ -135,6 +147,206 @@ assert.deepEqual(activeAfterSettlement, {
   blockedProtectedKeys: [],
   blockedActiveKeys: [],
   missingKeys: [],
+});
+
+// Active vector reservations keep every referenced budget row protected, across
+// multiple dimensions and multiple budgets within one dimension.
+const vectorPendingPrimaryKey = `${nonce}:vector-pending-primary`;
+const vectorPendingSiblingKey = `${nonce}:vector-pending-sibling`;
+const vectorPendingOtherDimensionKey = `${nonce}:vector-pending-other-dimension`;
+const vectorPending = await reserveVector('vector-pending', [
+  {
+    key: 'requests',
+    units: 1,
+    budgets: [
+      { key: vectorPendingPrimaryKey, limit: 1 },
+      { key: vectorPendingSiblingKey, limit: 1 },
+    ],
+  },
+  {
+    key: 'tokens',
+    units: 2,
+    budgets: [{ key: vectorPendingOtherDimensionKey, limit: 2 }],
+  },
+]);
+const vectorPendingPrune = await pruneRemoteCloudflareHistoricalBudgets(
+  { endpoint: maintenanceEndpoint, headers: authHeaders },
+  {
+    historicalBudgetKeys: [
+      vectorPendingPrimaryKey,
+      vectorPendingSiblingKey,
+      vectorPendingOtherDimensionKey,
+    ],
+    protectedCurrentBudgetKeys: [],
+  },
+);
+assert.deepEqual(vectorPendingPrune, {
+  prunedKeys: [],
+  blockedProtectedKeys: [],
+  blockedActiveKeys: [
+    vectorPendingPrimaryKey,
+    vectorPendingSiblingKey,
+    vectorPendingOtherDimensionKey,
+  ],
+  missingKeys: [],
+});
+const vectorPendingCompetitor = await store.reserveVector({
+  request: makeRequest('vector-pending-competitor'),
+  dimensions: [
+    {
+      key: 'requests',
+      units: 1,
+      budgets: [{ key: vectorPendingPrimaryKey, limit: 1 }],
+    },
+  ],
+  ttlMs: 10_000,
+});
+assert.deepEqual(vectorPendingCompetitor, {
+  accepted: false,
+  reason: 'quota_exceeded',
+  limitingDimensionKey: 'requests',
+  limitingBudgetKey: vectorPendingPrimaryKey,
+  remaining: 0,
+});
+
+// Exact JSON-path matching avoids treating a vector dimension ID as a budget
+// reference merely because both identities use the same SHA-256 representation.
+const vectorDimensionCollisionKey = `${nonce}:vector-dimension-collision`;
+await consume('vector-dimension-collision-historical', vectorDimensionCollisionKey);
+const vectorDimensionCollisionBudgetKey = `${nonce}:vector-dimension-collision-active-budget`;
+const vectorDimensionCollision = await reserveVector('vector-dimension-collision-active', [
+  {
+    key: vectorDimensionCollisionKey,
+    units: 1,
+    budgets: [{ key: vectorDimensionCollisionBudgetKey, limit: 1 }],
+  },
+]);
+const vectorDimensionCollisionPrune = await pruneRemoteCloudflareHistoricalBudgets(
+  { endpoint: maintenanceEndpoint, headers: authHeaders },
+  { historicalBudgetKeys: [vectorDimensionCollisionKey], protectedCurrentBudgetKeys: [] },
+);
+assert.deepEqual(vectorDimensionCollisionPrune, {
+  prunedKeys: [vectorDimensionCollisionKey],
+  blockedProtectedKeys: [],
+  blockedActiveKeys: [],
+  missingKeys: [],
+});
+
+// Liable vector reservations are equally active for maintenance purposes.
+const vectorLiableKey = `${nonce}:vector-liable`;
+const vectorLiable = await reserveVector('vector-liable', [
+  {
+    key: 'requests',
+    units: 1,
+    budgets: [{ key: vectorLiableKey, limit: 1 }],
+  },
+]);
+await store.markLiable({ reservationId: vectorLiable.reservation.id });
+const vectorLiablePrune = await pruneRemoteCloudflareHistoricalBudgets(
+  { endpoint: maintenanceEndpoint, headers: authHeaders },
+  { historicalBudgetKeys: [vectorLiableKey], protectedCurrentBudgetKeys: [] },
+);
+assert.deepEqual(vectorLiablePrune, {
+  prunedKeys: [],
+  blockedProtectedKeys: [],
+  blockedActiveKeys: [vectorLiableKey],
+  missingKeys: [],
+});
+const vectorLiableCompetitor = await store.reserveVector({
+  request: makeRequest('vector-liable-competitor'),
+  dimensions: [
+    {
+      key: 'requests',
+      units: 1,
+      budgets: [{ key: vectorLiableKey, limit: 1 }],
+    },
+  ],
+  ttlMs: 10_000,
+});
+assert.deepEqual(vectorLiableCompetitor, {
+  accepted: false,
+  reason: 'quota_exceeded',
+  limitingDimensionKey: 'requests',
+  limitingBudgetKey: vectorLiableKey,
+  remaining: 0,
+});
+
+// Lease expiry alone must not let maintenance bypass normal recovery. Pending
+// and liable rows remain active accounting until a normal store operation
+// performs recovery.
+const expiredVectorPendingKey = `${nonce}:vector-expired-pending`;
+await reserveVector(
+  'vector-expired-pending',
+  [{ key: 'requests', units: 1, budgets: [{ key: expiredVectorPendingKey, limit: 1 }] }],
+  500,
+);
+const expiredVectorLiableKey = `${nonce}:vector-expired-liable`;
+const expiredVectorLiable = await reserveVector(
+  'vector-expired-liable',
+  [{ key: 'requests', units: 1, budgets: [{ key: expiredVectorLiableKey, limit: 1 }] }],
+  500,
+);
+await store.markLiable({ reservationId: expiredVectorLiable.reservation.id });
+await sleep(650);
+const expiredVectorPrune = await pruneRemoteCloudflareHistoricalBudgets(
+  { endpoint: maintenanceEndpoint, headers: authHeaders },
+  {
+    historicalBudgetKeys: [expiredVectorPendingKey, expiredVectorLiableKey],
+    protectedCurrentBudgetKeys: [],
+  },
+);
+assert.deepEqual(expiredVectorPrune, {
+  prunedKeys: [],
+  blockedProtectedKeys: [],
+  blockedActiveKeys: [expiredVectorPendingKey, expiredVectorLiableKey],
+  missingKeys: [],
+});
+
+// A settled vector tombstone no longer blocks historical pruning after the
+// configured 2s idempotency/retirement horizon has elapsed.
+const settledVectorKey = `${nonce}:vector-settled`;
+const settledVector = await reserveVector('vector-settled', [
+  {
+    key: 'requests',
+    units: 1,
+    budgets: [{ key: settledVectorKey, limit: 1 }],
+  },
+]);
+await store.settleVector({
+  reservationId: settledVector.reservation.id,
+  actualByDimension: [{ key: 'requests', actualUnits: 0 }],
+  outcome: 'retired',
+});
+await sleep(2_100);
+const settledVectorPrune = await pruneRemoteCloudflareHistoricalBudgets(
+  { endpoint: maintenanceEndpoint, headers: authHeaders },
+  { historicalBudgetKeys: [settledVectorKey], protectedCurrentBudgetKeys: [] },
+);
+assert.deepEqual(settledVectorPrune, {
+  prunedKeys: [settledVectorKey],
+  blockedProtectedKeys: [],
+  blockedActiveKeys: [],
+  missingKeys: [],
+});
+
+// Clean up the still-active vector fixtures without relying on maintenance.
+await store.settleVector({
+  reservationId: vectorPending.reservation.id,
+  actualByDimension: [
+    { key: 'requests', actualUnits: 0 },
+    { key: 'tokens', actualUnits: 0 },
+  ],
+  outcome: 'cleanup',
+});
+await store.settleVector({
+  reservationId: vectorLiable.reservation.id,
+  actualByDimension: [{ key: 'requests', actualUnits: 0 }],
+  outcome: 'cleanup',
+});
+await store.settleVector({
+  reservationId: vectorDimensionCollision.reservation.id,
+  actualByDimension: [{ key: vectorDimensionCollisionKey, actualUnits: 0 }],
+  outcome: 'cleanup',
 });
 
 console.log('Cloudflare historical budget maintenance integration: PASS');
