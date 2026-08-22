@@ -30,6 +30,42 @@ function acceptedEnvelope(): CloudflareStoreEnvelope<{
 }
 
 describe('CloudflareUsageStore transport boundary', () => {
+  it('rejects malformed runtime identity and dimension keys before Durable Object calls', async () => {
+    let calls = 0;
+    const stub = {
+      async reserve() { calls += 1; throw new Error('must not run'); },
+      async reserveVector() { calls += 1; throw new Error('must not run'); },
+      async settleVector() { calls += 1; throw new Error('must not run'); },
+      async markLiable() { throw new Error('unused'); },
+      async renew() { throw new Error('unused'); },
+      async settle() { throw new Error('unused'); },
+    } as unknown as CloudflareUsageDurableObjectStub;
+    const store = new CloudflareUsageStore({ getByName: () => stub });
+    await expect(
+      store.reserve({
+        request: { ...request, operationId: 123 } as never,
+        units: 1,
+        budgets: [{ key: 'b', limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toThrow(/operationId must be a non-empty string/);
+    await expect(
+      store.reserveVector({
+        request,
+        dimensions: [{ key: 7, units: 1, budgets: [{ key: 'b', limit: 1 }] }],
+        ttlMs: 1_000,
+      } as never),
+    ).rejects.toThrow(/dimension.key must be a non-empty string/);
+    await expect(
+      store.settleVector({
+        reservationId: `cf1.${'a'.repeat(64)}`,
+        actualByDimension: [{ key: 7, actualUnits: 0 }],
+        outcome: 'done',
+      } as never),
+    ).rejects.toThrow(/actual dimension key must be a non-empty string/);
+    expect(calls).toBe(0);
+  });
+
   it('hashes request identity and budget keys before calling Durable Objects', async () => {
     let captured: unknown;
     const stub: CloudflareUsageDurableObjectStub = {

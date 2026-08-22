@@ -518,6 +518,38 @@ integration('RedisUsageStore', () => {
   });
 });
 
+describe('RedisUsageStore runtime input boundary', () => {
+  it('rejects malformed request identity before Redis eval', async () => {
+    let calls = 0;
+    const store = new RedisUsageStore({ async eval() { calls += 1; return []; } });
+    const malformed = { ...request('runtime-invalid'), tool: 42 } as never;
+    await expect(
+      store.reserve({ request: malformed, units: 1, budgets: [{ key: 'b', limit: 1 }], ttlMs: 1_000 }),
+    ).rejects.toThrow(/tool must be a non-empty string/);
+    expect(calls).toBe(0);
+  });
+
+  it('rejects non-string vector and actual dimension keys before Redis eval', async () => {
+    let calls = 0;
+    const store = new RedisUsageStore({ async eval() { calls += 1; return []; } });
+    await expect(
+      store.reserveVector({
+        request: request('runtime-vector'),
+        dimensions: [{ key: 7, units: 1, budgets: [{ key: 'b', limit: 1 }] }],
+        ttlMs: 1_000,
+      } as never),
+    ).rejects.toThrow(/dimension.key must be a non-empty string/);
+    await expect(
+      store.settleVector({
+        reservationId: `r2.${'a'.repeat(64)}`,
+        actualByDimension: [{ key: 7, actualUnits: 0 }],
+        outcome: 'done',
+      } as never),
+    ).rejects.toThrow(/actual dimension key must be a non-empty string/);
+    expect(calls).toBe(0);
+  });
+});
+
 describe('RedisUsageStore failure behavior', () => {
   it('fails closed when Redis admission is unavailable', async () => {
     const store = new RedisUsageStore({ async eval() { throw new Error('Redis unavailable'); } });
