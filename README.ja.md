@@ -16,7 +16,7 @@
 
 **まだnpmへ公開していません。**
 
-現在はrepository checkoutまたはlocal tarballを使います。npm publicationは別のmanual operationとして明示的にdeferredしています。
+`v0.9.0` がlatest GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -68,7 +68,7 @@ remaining確認 -> paid work実行 -> counter加算
 
 5 packageのmanifestは `0.9.0` で揃っています。**v0.9.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** **v0.9.0はsafety-hardening source baselineとしてrelease / closeout済み**です。active product targetは **v0.10.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。npm publicationは#6で追跡する別途explicit authorizationの操作で、v0.9.0では実施していません。
+**現在の実行順序:** **v0.9.0はrelease済み**です。active product targetは **v0.10.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。
 
 ## v0.5後に再評価するv1 scope
 
@@ -149,7 +149,6 @@ try {
   await admission.lease.settle(1, 'success');
   return result;
 } catch (error) {
-  // metered cost 0を証明できる場合だけ0 settleにする
   await admission.lease.settle(admission.lease.reservedUnits, 'error');
   throw error;
 }
@@ -270,7 +269,7 @@ raw tool arguments / exception messageは自動収集しません。`projectUsag
 4. metered execution前に `markLiable()`
 5. pending expiryはrelease可、liable expiryはconservative retention
 6. long-running active leaseはrenewable
-7. current v0.5 modelでは `actualUnits <= reservedUnits`
+7. scalar modelでは `actualUnits <= reservedUnits`
 8. identical settlement replayはretention中idempotent、conflictはfail
 9. storage failureをallowへ変えない
 10. ambiguous state-changing outcomeをblind retryしない
@@ -307,9 +306,9 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.9.0` がlatest released source baselineです。#81はread-only scalar optional Store capabilityとしてfuture v1 surfaceへ採用済みで、**v0.9.0 / #116〜#127 safety hardeningはrelease / closeout済みです。現在のactive product decision targetは v0.10.0 / #76 + #82 + #99 operational usabilityです。** 5 packageのmanifestは `0.9.0` で揃っています。
+`v0.9.0` がlatest released source baselineです。package manifestは `0.9.0` です。active product targetは **v0.10.0 / #76 + #82 + #99 operational usability**、その後にv0.11 final completion/distribution/API-freeze gateへ進みます。
 
-**npm publicationは#6で追跡する別途explicit authorizationの操作で、v0.9.0では実施していません。**
+**npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 
 ## License
 
