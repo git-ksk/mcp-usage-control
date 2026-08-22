@@ -1056,9 +1056,27 @@ function parseVectorSettlement(
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
-  if (!request.operationId) throw new RangeError('operationId must be non-empty');
-  if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
-  if (!request.tool) throw new RangeError('tool must be non-empty');
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+    throw new RangeError('request must be an object');
+  }
+  if (request.principal === null || typeof request.principal !== 'object' || Array.isArray(request.principal)) {
+    throw new RangeError('principal must be an object');
+  }
+  if (typeof request.operationId !== 'string' || request.operationId.length === 0) {
+    throw new RangeError('operationId must be a non-empty string');
+  }
+  if (typeof request.principal.id !== 'string' || request.principal.id.length === 0) {
+    throw new RangeError('principal.id must be a non-empty string');
+  }
+  if (typeof request.tool !== 'string' || request.tool.length === 0) {
+    throw new RangeError('tool must be a non-empty string');
+  }
+  if (request.principal.tenantId !== undefined && typeof request.principal.tenantId !== 'string') {
+    throw new RangeError('principal.tenantId must be a string when present');
+  }
+  if (request.principal.plan !== undefined && typeof request.principal.plan !== 'string') {
+    throw new RangeError('principal.plan must be a string when present');
+  }
 }
 
 function newGrowthCursor(): string {

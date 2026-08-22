@@ -2244,7 +2244,7 @@ function readStoredVectorReservedReplay(
 function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
   if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
   const normalized = dimensions.map(dimension => {
-    if (!dimension.key) throw new RangeError('dimension.key must be non-empty');
+    if (typeof dimension.key !== 'string' || dimension.key.length === 0) throw new RangeError('dimension.key must be a non-empty string');
     assertNonNegativeInteger(dimension.units, `dimension.units (${dimension.key})`);
     return { key: dimension.key, units: dimension.units, budgets: canonicalizeBudgets(dimension.budgets) };
   });
@@ -2256,7 +2256,7 @@ function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): Usa
 function canonicalizeGrowthDimensions(dimensions: readonly UsageDimensionGrowth[]): UsageDimensionGrowth[] {
   if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
   const normalized = dimensions.map(dimension => {
-    if (!dimension.key) throw new RangeError('dimension.key must be non-empty');
+    if (typeof dimension.key !== 'string' || dimension.key.length === 0) throw new RangeError('dimension.key must be a non-empty string');
     assertNonNegativeInteger(dimension.additionalUnits, `dimension.additionalUnits (${dimension.key})`);
     return {
       key: dimension.key,
@@ -2275,7 +2275,7 @@ function canonicalizeGrowthDimensions(dimensions: readonly UsageDimensionGrowth[
 function canonicalizeActualDimensions(actuals: readonly UsageDimensionActual[]): UsageDimensionActual[] {
   if (actuals.length === 0) throw new RangeError('actualByDimension must contain at least one dimension');
   const normalized = actuals.map(actual => {
-    if (!actual.key) throw new RangeError('actual dimension key must be non-empty');
+    if (typeof actual.key !== 'string' || actual.key.length === 0) throw new RangeError('actual dimension key must be a non-empty string');
     assertNonNegativeInteger(actual.actualUnits, `actualUnits (${actual.key})`);
     return { key: actual.key, actualUnits: actual.actualUnits };
   });
@@ -2326,9 +2326,27 @@ function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
-  if (!request.operationId) throw new RangeError('operationId must be non-empty');
-  if (!request.principal.id) throw new RangeError('principal.id must be non-empty');
-  if (!request.tool) throw new RangeError('tool must be non-empty');
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+    throw new RangeError('request must be an object');
+  }
+  if (request.principal === null || typeof request.principal !== 'object' || Array.isArray(request.principal)) {
+    throw new RangeError('principal must be an object');
+  }
+  if (typeof request.operationId !== 'string' || request.operationId.length === 0) {
+    throw new RangeError('operationId must be a non-empty string');
+  }
+  if (typeof request.principal.id !== 'string' || request.principal.id.length === 0) {
+    throw new RangeError('principal.id must be a non-empty string');
+  }
+  if (typeof request.tool !== 'string' || request.tool.length === 0) {
+    throw new RangeError('tool must be a non-empty string');
+  }
+  if (request.principal.tenantId !== undefined && typeof request.principal.tenantId !== 'string') {
+    throw new RangeError('principal.tenantId must be a string when present');
+  }
+  if (request.principal.plan !== undefined && typeof request.principal.plan !== 'string') {
+    throw new RangeError('principal.plan must be a string when present');
+  }
 }
 
 function reservationIdFor(request: UsageRequest): string {

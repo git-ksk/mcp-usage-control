@@ -247,3 +247,37 @@ describe('runtime Store result validation', () => {
     expect(growthCalls).toBe(2);
   });
 });
+
+describe('runtime request identity validation', () => {
+  it.each([
+    ['operationId', { ...request(), operationId: 123 }],
+    ['principal.id', { ...request(), principal: { ...request().principal, id: 123 } }],
+    ['tool', { ...request(), tool: { name: 'search' } }],
+    ['tenantId', { ...request(), principal: { ...request().principal, tenantId: 7 } }],
+    ['plan', { ...request(), principal: { ...request().principal, plan: true } }],
+  ])('rejects malformed %s before Memory accounting mutation', async (_name, malformed) => {
+    const store = new MemoryUsageStore();
+    await expect(
+      store.reserve({
+        request: malformed as unknown as UsageRequest,
+        units: 1,
+        budgets: [scalarBudget],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toBeInstanceOf(Error);
+    expect(store.stats()).toMatchObject({ retainedOperations: 0, retainedBudgetKeys: 0 });
+  });
+
+  it('preserves delimiter-containing and Unicode request identity strings', async () => {
+    const store = new MemoryUsageStore();
+    const valid: UsageRequest = {
+      operationId: 'op|日本語:1',
+      principal: { id: 'user:雪|1', tenantId: 'tenant/東京', plan: 'plus✨' },
+      tool: 'tool/検索|v1',
+      args: {},
+    };
+    await expect(
+      store.reserve({ request: valid, units: 1, budgets: [scalarBudget], ttlMs: 1_000 }),
+    ).resolves.toMatchObject({ accepted: true });
+  });
+});

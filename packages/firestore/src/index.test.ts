@@ -196,6 +196,35 @@ function assertServerClientTypeCompatibility(firestore: Firestore): void {
 void assertServerClientTypeCompatibility;
 
 describe('FirestoreUsageStore', () => {
+  it('rejects malformed runtime identity and dimension keys without creating Firestore state', async () => {
+    const database = new FakeFirestore();
+    const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });
+    await expect(
+      store.reserve({
+        request: { ...request('runtime-invalid'), principal: { ...request('runtime-invalid').principal, plan: 7 } } as never,
+        units: 1,
+        budgets: [{ key: 'b', limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toThrow(/plan must be a string/);
+    await expect(
+      store.reserveVector({
+        request: request('runtime-vector'),
+        dimensions: [{ key: 7, units: 1, budgets: [{ key: 'b', limit: 1 }] }],
+        ttlMs: 1_000,
+      } as never),
+    ).rejects.toThrow(/dimension.key must be a non-empty string/);
+    await expect(
+      store.settleVector({
+        reservationId: `fs1.${'a'.repeat(64)}`,
+        actualByDimension: [{ key: 7, actualUnits: 0 }],
+        outcome: 'done',
+      } as never),
+    ).rejects.toThrow(/actual dimension key must be a non-empty string/);
+    expect(database.rows('muc_reservations')).toHaveLength(0);
+    expect(database.rows('muc_budgets')).toHaveLength(0);
+  });
+
   it('atomically enforces user and shared tenant budgets', async () => {
     const database = new FakeFirestore();
     const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });
