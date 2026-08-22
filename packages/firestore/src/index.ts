@@ -194,6 +194,8 @@ interface StoredReservation {
   budgetIds: string[];
   reservedUnits: number;
   expiresAtMs: number;
+  /** Original lease deadline retained only for conservatively recovered liable tombstones. */
+  leaseExpiresAtMs?: number;
   actualUnits?: number;
   outcomeHash?: string;
   growthCursor?: string;
@@ -228,6 +230,7 @@ interface FailedActiveTransactionResult {
 const RESERVATION_ID_PATTERN = /^fs1\.[a-f0-9]{64}$/;
 const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const EXPIRED_LIABLE_OUTCOME = 'lease_expired_after_execution_started';
+const EXPIRED_LIABLE_OUTCOME_HASH = digest(EXPIRED_LIABLE_OUTCOME);
 
 /**
  * Firestore-backed `UsageStore` for server-side Node.js runtimes.
@@ -327,6 +330,22 @@ export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageSt
     }
 
     if (this.isExpired(reservation, now)) return { status: 'absent', reservationId };
+    if (reservation.outcomeHash === EXPIRED_LIABLE_OUTCOME_HASH) {
+      if (reservation.leaseExpiresAtMs === undefined) {
+        // Older recovered-liable tombstones did not preserve the original lease
+        // deadline. Never substitute the tombstone deadline: that would report a
+        // false expiry instant. Fail closed instead of inventing lifecycle state.
+        throw new UsageStateError(
+          'Recovered liable reservation is missing its original lease expiry',
+        );
+      }
+      return {
+        status: 'expired',
+        state: 'liable',
+        reservationId,
+        expiredAt: reservation.leaseExpiresAtMs,
+      };
+    }
     if (reservation.actualUnits === undefined) {
       throw new UsageStateError('Settled reservation is missing reconciliation state');
     }
@@ -1584,8 +1603,9 @@ function settledFromExpiredLiable(
   const base = {
     ...reservation,
     state: 'settled',
+    leaseExpiresAtMs: reservation.expiresAtMs,
     expiresAtMs: safeAdd(now, idempotencyTtlMs, 'tombstone expiry'),
-    outcomeHash: digest(EXPIRED_LIABLE_OUTCOME),
+    outcomeHash: EXPIRED_LIABLE_OUTCOME_HASH,
   };
   if (isVectorReservation(reservation)) {
     return {
@@ -1725,6 +1745,12 @@ function readReservation(
     reservedUnits,
     expiresAtMs,
   };
+  if (data.leaseExpiresAtMs !== undefined) {
+    result.leaseExpiresAtMs = readSafeNonNegativeInteger(
+      data.leaseExpiresAtMs,
+      'leaseExpiresAtMs',
+    );
+  }
   if (data.mode === 'vector') {
     result.mode = 'vector';
     result.dimensions = readStoredVectorDimensions(data.dimensions);
@@ -1774,6 +1800,15 @@ function readReservation(
     }
     if (state === 'settled' && (result.actualUnits === undefined || result.outcomeHash === undefined)) {
       throw new UsageStateError('Firestore settled reservation was incomplete');
+    }
+  }
+  if (result.leaseExpiresAtMs !== undefined) {
+    if (
+      state !== 'settled' ||
+      result.outcomeHash !== EXPIRED_LIABLE_OUTCOME_HASH ||
+      result.leaseExpiresAtMs > result.expiresAtMs
+    ) {
+      throw new UsageStateError('Firestore recovered liable lease expiry metadata was invalid');
     }
   }
   return result;

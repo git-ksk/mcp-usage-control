@@ -226,6 +226,66 @@ async function testLiableExpiryRetention() {
   });
 }
 
+async function testRecoveredLiableReconciliation() {
+  const store = storeFor('recovered_liable_reconcile');
+  const req = request('recovered-liable-reconcile');
+  const input = {
+    request: req,
+    units: 1,
+    budgets: [{ key: 'reconcile:liable:budget', limit: 1 }],
+  };
+
+  const first = await store.reserve({ ...input, ttlMs: 80 });
+  assert.equal(first.accepted, true);
+  if (!first.accepted) throw new Error('expected liable reconciliation reservation');
+  const originalLeaseExpiry = first.reservation.expiresAt;
+  await store.markLiable({ reservationId: first.reservation.id });
+  await sleep(200);
+
+  assert.deepEqual(await store.reconcileOperation(input), {
+    status: 'expired',
+    state: 'liable',
+    reservationId: first.reservation.id,
+    expiredAt: originalLeaseExpiry,
+  });
+
+  const recovery = await store.recoverExpired(10);
+  assert.equal(recovery.liableCount, 1);
+  assert.equal(recovery.liableUnits, 1);
+
+  const afterRecovery = await store.reconcileOperation(input);
+  assert.deepEqual(afterRecovery, {
+    status: 'expired',
+    state: 'liable',
+    reservationId: first.reservation.id,
+    expiredAt: originalLeaseExpiry,
+  });
+  assert.deepEqual(
+    await store.reconcileOperation(input),
+    afterRecovery,
+    'reconciliation after liable recovery must remain read-only',
+  );
+
+  const ordinaryInput = {
+    request: request('ordinary-settlement-reconcile'),
+    units: 1,
+    budgets: [{ key: 'reconcile:ordinary:budget', limit: 2 }],
+  };
+  const ordinary = await store.reserve({ ...ordinaryInput, ttlMs: 60_000 });
+  assert.equal(ordinary.accepted, true);
+  if (!ordinary.accepted) throw new Error('expected ordinary reconciliation reservation');
+  await store.settle({
+    reservationId: ordinary.reservation.id,
+    actualUnits: 1,
+    outcome: 'completed',
+  });
+  assert.match(
+    JSON.stringify(await store.reconcileOperation(ordinaryInput)),
+    /"status":"settled"/,
+    'ordinary explicit settlement must remain settled',
+  );
+}
+
 async function testIdempotentSettlement() {
   const store = storeFor('settlement');
 
@@ -265,6 +325,7 @@ const tests = [
   ['shared-budget concurrency', testSharedBudgetConcurrency],
   ['pending expiry recovery', testPendingExpiryRecovery],
   ['liable expiry retention', testLiableExpiryRetention],
+  ['recovered liable reconciliation', testRecoveredLiableReconciliation],
   ['idempotent settlement', testIdempotentSettlement],
 ];
 
