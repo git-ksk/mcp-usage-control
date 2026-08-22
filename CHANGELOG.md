@@ -8,6 +8,29 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.9.0] - 2026-08-22
+
+Ninth GitHub/source release preparation focused on repository-wide safety hardening. This preparation does not itself create the tag, GitHub Release, or npm publication; those remain post-merge release operations.
+
+### Safety hardening
+
+- Closed the v0.9 repository-audit safety set #116-#127, covering retained-budget growth integrity, safe expiry/timer arithmetic, validation before mutation, unresolved MCP growth preservation, Firestore expired-liable reconciliation, Cloudflare remote/maintenance protocol validation, malformed-policy fail-closed behavior, vector-maintenance quota integrity, Redis recovery overflow, pre-auth reconciliation buffering, strict boolean authorization, and the cross-capability regression matrix.
+- Preserved the existing scalar/vector accounting, replay, liability, expiry/recovery, and fail-closed contracts while tightening provider and capability intersections rather than adding a new product surface.
+
+### Firestore release blocker
+
+- Resolved #143 without weakening `vector-growth-vs-settle-race`: settlement remains required to complete, and committed growth must be observed by settlement when growth wins first.
+- Added bounded jittered outer retry only for definitive Firestore transaction aborts: gRPC `ABORTED` (`10`) and HTTP `409`.
+- `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not added to the adapter outer-retry allow-list.
+- Reduced the vector-settlement contention window by skipping budget reads/writes when settlement releases no capacity, and added a dedicated 24-iteration Firestore Emulator growth-vs-settle stress case.
+
+### Release evidence / boundary
+
+- PR #144 passed the Node 20/22/24 CI/package matrix, Cloudflare local workerd integration, and Firestore Emulator integration before squash merge.
+- All five public package manifests are aligned at `0.9.0` for release preparation.
+- After this preparation merges and the normal release gate is green, the exact tested main content is eligible for the `v0.9.0` tag and GitHub Release.
+- First npm publication is separately and explicitly authorized for this v0.9 release execution; publication remains a distinct post-source-release operation and #6 closes only after registry/provenance verification succeeds.
+
 ## [0.8.0] - 2026-08-22
 
 Eighth GitHub/source release. npm publication remains intentionally separate and was not performed.
@@ -288,3 +311,12 @@ Initial GitHub/source release. npm registry publication is intentionally deferre
 - Generic lease renewal is not provider-specific fencing after lease loss.
 - Observability is best-effort, non-durable, not exactly-once, and is not the transactional quota ledger.
 - npm publication is not part of this GitHub/source release and remains a separate explicitly authorized step.
+
+### Compatibility
+
+- Node.js 20+
+- ESM
+- `@modelcontextprotocol/server` v2 (CI currently exercises 2.0.0)
+- Redis 7 integration behavior
+- node-redis `redis` 6.2.x
+- Cloudflare Workers / SQLite Durable Objects (local workerd integration plus deployed Free-plan dogfood)
