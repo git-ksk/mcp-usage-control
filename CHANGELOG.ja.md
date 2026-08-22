@@ -10,7 +10,7 @@
 
 ## [0.9.0] - 2026-08-22
 
-9回目のGitHub/source release preparation。repository全体のsafety hardeningを主対象とします。このpreparation自体ではtag / GitHub Release / npm publicationを作成せず、main merge後のrelease操作として分離します。
+9回目のGitHub/source release。repository全体のsafety hardeningを主対象とし、npm publicationは引き続き別操作としてdeferredしています。
 
 ### Safety hardening
 
@@ -27,9 +27,9 @@
 ### Release evidence / boundary
 
 - PR #144はsquash merge前にNode 20/22/24 CI/package matrix、Cloudflare local workerd integration、Firestore Emulator integrationがすべてgreenです。
-- 5 public package manifestをrelease preparation向けに`0.9.0`へ揃えます。
-- このpreparation merge後、normal release gateがgreenなら、同一main contentを`v0.9.0` tag / GitHub Releaseへ進めます。
-- first npm publicationは今回のv0.9 release executionとして別途明示authorization済みです。source releaseとは独立操作のまま維持し、registry / provenance verification成功後にのみ#6をcloseします。
+- 5 public package manifestは `0.9.0` に揃っています。
+- `v0.9.0` tagはtested commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2` を指し、GitHub/source Release workflow `32568777809` は `completed / success` です。
+- npm publicationはこのreleaseでは完了していません。5 packageすべて `0.9.0` はregistry未公開で、first npm publicationは#6のseparate explicit authorization gateとしてopenのまま維持します。
 
 ## [0.8.0] - 2026-08-22
 

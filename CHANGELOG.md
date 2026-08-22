@@ -10,7 +10,7 @@ No entries yet.
 
 ## [0.9.0] - 2026-08-22
 
-Ninth GitHub/source release preparation focused on repository-wide safety hardening. This preparation does not itself create the tag, GitHub Release, or npm publication; those remain post-merge release operations.
+Ninth GitHub/source release focused on repository-wide safety hardening. npm publication remains intentionally separate and deferred.
 
 ### Safety hardening
 
@@ -27,9 +27,9 @@ Ninth GitHub/source release preparation focused on repository-wide safety harden
 ### Release evidence / boundary
 
 - PR #144 passed the Node 20/22/24 CI/package matrix, Cloudflare local workerd integration, and Firestore Emulator integration before squash merge.
-- All five public package manifests are aligned at `0.9.0` for release preparation.
-- After this preparation merges and the normal release gate is green, the exact tested main content is eligible for the `v0.9.0` tag and GitHub Release.
-- First npm publication is separately and explicitly authorized for this v0.9 release execution; publication remains a distinct post-source-release operation and #6 closes only after registry/provenance verification succeeds.
+- All five public package manifests are aligned at `0.9.0`.
+- `v0.9.0` points to tested commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2`; GitHub/source Release workflow `32568777809` completed successfully.
+- npm publication did not complete for this release. All five `0.9.0` packages remain unpublished in the registry, and first npm publication remains an independently authorized operation tracked by #6.
 
 ## [0.8.0] - 2026-08-22
 
@@ -56,7 +56,7 @@ Eighth GitHub/source release. npm publication remains intentionally separate and
 - Mutable budget limits are not historical operation identity: reconciliation verifies budget keys plus expected retained scalar units, preserving the existing same-key mutable-limit contract.
 - The v0.8 generic capability is intentionally scalar-only. Vector initial-reserve ambiguity remains fail closed unless a future provider-specific mechanism proves an equivalent read-only contract.
 - Business side-effect/result replay remains application-owned and separate from usage accounting.
-- #81 is adopted for the future v1 stable surface as an optional scalar Store capability. #76/#82/#99 become the next v0.9 product decision gate.
+- #81 is adopted for the future v1 stable surface as an optional scalar Store capability. #76/#82/#99 become the next product decision gate.
 
 ### Release boundary
 

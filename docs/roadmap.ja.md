@@ -6,209 +6,137 @@
 quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 ```
 
-generic agent-budget、gateway、billing、governance、workflow productへ広げるのではなく、この境界のcorrectnessとproduction usabilityを深めます。戦略上の境界は [Project positioning](positioning.ja.md) を参照してください。
+generic gateway、billing ledger、governance system、workflow engineへ広げるのではなく、この境界のcorrectnessとproduction usabilityを深めます。戦略上の境界は [Project positioning](positioning.ja.md) を参照してください。
 
 ## 現在のbaseline
 
-**v0.8.0はlatest released pre-v1 source baselineのまま**です。#81はdesign / implementation proof gateを通過し、read-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用済みです。**v0.9.0 / #116〜#127 safety hardeningのsource gateは完了しました。** 現在のactive decision targetは **v0.10.0 / #76 + #82 + #99 operational usability**、その後はv0.11.0 final completion / distribution freezeです。subscription credits導入ergonomicsの#108 + #109 + #110は完了済みの隣接workで、v1 blockerにはしません。
+**v0.9.0がlatest GitHub/source release baselineです。** 2026-08-22に、repository-wide safety hardening #116〜#127とFirestore release blocker #143をcloseしたtested commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2` からreleaseしました。
 
-リポジトリ上の実行順序は明確に直列です。**v0.8.0 release済み -> 隣接#108+#109+#110 credit-policy ergonomics完了 -> v0.9/#116〜#127 safety hardening完了 -> v0.10/#76+#82+#99 operational usability進行 -> v0.11/#24+#6+#105+#106 final completion / distribution freeze -> v1.0 stable promotion** と進めます。v0.8.1 releaseは不要です。pre-v1 minorごとにdecision gateを分け、safety hardening、operational tooling、final distribution / compatibility proofを1 releaseへ詰め込みません。
+publish可能な5 package manifestはすべて `0.9.0` に揃っています。**npmにはまだ公開していません。** first registry publicationは#6で追跡する別途explicit authorization必須の操作です。
 
-Firestore ACK-loss / bounded clock-skew contract、Node.js 20 / 22 / 24 full-matrix evidence、same-key mutable quota-limit semantics、Memory / Redis / Cloudflare / Firestore共通portable Store conformance、Cloudflare Bearer token rotation supportを含みます。
+現在のactive product targetは **v0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics**、続いて **v0.11.0 / #24 + #6 + #105 + #106 final production/distribution evidence + API freeze**、最後に新featureを追加しない **v1.0.0 stable promotion** です。
 
-base runtimeは既存scalar reservation pathを変更せず維持します。v0.6ではscalar reservationのoptional progressive growth、v0.7ではheterogeneous dimension向けの別optional atomic vector pathを追加します。どちらもthird-party Storeへmandatoryにしません。
+実行順序:
 
-## 「v1完成」の定義
+```text
+v0.6 progressive growth
+ -> v0.7 atomic heterogeneous vector
+ -> v0.8 scalar operation reconciliation
+ -> v0.9 repository-wide safety hardening [RELEASED]
+ -> v0.10 operational usability [ACTIVE]
+ -> v0.11 completion/distribution/API freeze
+ -> v1.0 stable promotion
+```
 
-v1.0は、未決定のfeatureを最後に詰め込むreleaseではなく、**すでに完成したproduct surfaceをstableへ昇格するrelease** とします。
+## 今後も崩さないsafety boundary
 
-v1.0前に次を完了します。
+残りの全releaseで次を維持します。
 
-- v1 productとして重要なcapabilityは、各v0.x releaseで必ず採用 / deferred / excludedを明示決定する
-- 採用するcapabilityはfailure semantics、Store / concurrency evidence、packaging coverage、英日docsまで揃える
-- 見送るcapabilityは「未完」ではなくdeliberate non-v1 scopeとして明文化する
-- public package name、subpath export、core lifecycle semantics、Store support claim、Node support、MCP integration boundaryをfreezeする
-- first npm publicationとregistry install / provenanceをv1前に実地検証する
-- final pre-v1 releaseでproduction evidenceとrelease mechanicsを完了する
+- admission compare + reservationはauthoritative Storeの1 transition
+- participating budgetは全てatomic reserve、またはnone reserve
+- pending / cost-liable expiry semanticsを分離し、unknown usageはconservative
+- replay / idempotency identityは1 logical operationへscope
+- ambiguous state-changing outcomeをblind retryしない
+- scalar / vector accountingで異種dimensionをsynthetic totalへ変換しない
+- MCP multi-round resumeはintegrity-verified / binding-aware / one-time
+- observabilityはnon-authoritativeでenforcement outcomeを変更できない
+- provider durability / time / HA / lost-ACK制約はevidence以上の強いclaimへ勝手に拡張しない
 
-**v1.0自体では新featureやaccounting modelを追加しません。** final pre-v1 surfaceをgreen evidence確認後にstable versionへ昇格するだけにします。
+## 完了済みpre-v1 capability decision
 
-## Pre-v1 completion ladder
+| Release | Decision | Status |
+| --- | --- | --- |
+| **v0.6.0** | `UsageLease.grow()` / `ProgressiveUsageStore` によるoptional progressive reservation growth | Release済み / Adopted |
+| **v0.7.0** | `VectorUsageControl` / `VectorUsageStore` によるoptional atomic heterogeneous vector usage | Release済み / Adopted |
+| **v0.8.0** | `OperationReconciliationStore` によるoptional read-only scalar operation reconciliation | Release済み / Adopted |
+| **v0.9.0** | repository-wide safety hardening #116〜#127 + Firestore race blocker #143 | **Release済み / Complete** |
 
-以下の各releaseは **decision gate** です。versionに割り当てたから必ずv1へ入れるわけではありません。安全性 / compatibility proofが成立しなければ、そのv0.xでv1から明示defer / excludeし、未決定のままv1へ持ち越しません。
+### v0.9.0 release evidence
 
-| Release | 主対象 | preferred outcome | release gate |
-| --- | --- | --- | --- |
-| **v0.6.0** | #83 progressive reservation growth | **採用**: optional v1 core/Store extension | `UsageLease.grow()` + optional `ProgressiveUsageStore`、growth cursor + stable increment identity、atomic multi-budget / lost-ACK / provider conformance proof |
-| **v0.7.0** | #84 heterogeneous multi-dimensional usage | **採用**: optional v1 core/Store extension | separate `VectorUsageControl` / `VectorUsageStore`、one logical replay identity、per-dimension atomic admission / growth / settlement、deterministic retry / conflict、provider conformance |
-| **v0.8.0** | #81 operation reconciliation / status | **Adopted**: optional scalar v1 Store capability | 共通read-only status語彙、second reservation禁止、mismatch/unprovable stateはfail closed、Memory/Redis/Firestore + Cloudflare subpath、portable/provider evidence |
-| **v0.9.0** | repository audit safety hardening #116〜#127 | **source gate完了** — feature交差部のfail-closed / quota-integrity / time / auth / protocol / reconciliation invariantを復旧・proof済み | #116〜#127を全close。Node 20/22/24、live Redis 7、Firestore Emulator、local workerd、CodeQL、cross-capability evidenceがgreen。package version bump / tag / Release / npm publishは未実施 |
-| **v0.10.0** | #76 operational snapshot + #82 threshold / exhaustion + #99 dogfood integration diagnostics | bounded non-authoritative observability / diagnosticsと明確なsettlement-outcome contractを追加する | second accounting truth禁止、scoped authoritative valueのみ、privacy / cardinality safety、helper failureをenforcementから隔離、heterogeneous vector metricの意味を混同しない |
-| **v0.11.0** | final completion / distribution / compatibility freeze | 残るv1 scope decisionを全て閉じ、public distribution / runtime / storage compatibility boundaryを実証する | #24 Cloudflare real-operation boundary、#6 first npm publication、#105 supported Node.js floor、#106 persisted-store upgrade/migration/rollback contract、final public API / name review、Tasks / MRTR scope decision、full integration / package / registry dogfood、v1 blocker 0 |
-| **v1.0.0** | stable promotion | 完成済みsurfaceをstable宣言 | 新featureなし。v0.11/#24+#6+#105+#106 completion criteria完了後にversion / changelog / release promotionのみ |
+v0.9ではpublic accounting modelを変更せず、capability同士の交差部をhardeningしました。retained-budget growth integrity、安全なexpiry/timer arithmetic、mutation前validation、MCP unresolved growth保持、Firestore expired-liable reconciliation、Cloudflare remote/maintenance validation、malformed policy fail-close、vector maintenance quota integrity、Redis recovery overflow、pre-auth reconciliation handling、strict boolean authorization、cross-capability regression matrixを含みます。
 
-SemVer上 `0.10.0` は通常の有効versionです。`0.9.0` の次が必ず `1.0.0` である必要はありません。
+#143は `vector-growth-vs-settle-race` のinvariantを弱めず解消しました。Firestore outer retryは definitive transaction abortである `ABORTED` / gRPC 10 と HTTP 409だけをbounded jittered backoffでretryします。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはouter retry allow-listへ追加していません。
 
-## 各decision target
+release validationはNode 20/22/24 package / clean-consumer CI、Redis、Cloudflare local workerd、Firestore Emulatorを通過しました。`v0.9.0` GitHub/source releaseはsuccessです。npm publicationは完了しておらず、#6でdeferredを維持します。
 
-### v0.6.0 — progressive reservation growth (#83)
+## Active target: v0.10.0 — operational usability
 
-**判断: future v1 stable surfaceへ採用。** base `UsageStore`はfixed-reservation互換のまま維持し、growthは強いtransaction contractを証明できるStoreだけがopt-inするoptional extensionとする。
+主対象は **#76、#82、#99** です。
 
-current bounded-reservation modelは正しい一方、streaming / iterative / long-running metered workではadmission時に現実的なsafe maximumを決めづらい場合があります。
-
-v1へ入れるなら次を維持する必要があります。
-
-- participating budget全体のatomic all-or-nothing growth
-- concurrent admission correctness
-- incrementごとのstable idempotency identity
-- lost ACK後もduplicate growthしないsafe retry
-- pending / cost-liableの明示
-- committed increment後のconservative expiry / recovery
-- `actual <= total successfully reserved` settlement
-- multi-round / Tasksをまたいでも1 logical operation
-
-これを既存modelを弱めずproofできなければ、v0.6でv1非採用を正式決定します。
-
-### v0.7.0 — heterogeneous multi-dimensional usage (#84)
-
-**判断: future v1 stable surfaceへoptional capabilityとして採用。** scalar APIは変更せず、vector callerだけ`VectorUsageControl` / `VectorUsageStore`へopt-inします。
-
-request count、model token、compute seconds、provider work unitなど異なるdimensionをsynthetic scalarへ変換せず1 logical operationで扱います。admission / growth / recovery / settlementはreservation全体の1 atomic domainを維持します。
-
-proof対象はscalar/vector operation collision、multi-dimension all-or-nothing admission、per-dimension settlement bound、vector全体の1 growth cursor、lost-ACK exact replay、partial growthなしのauthoritative denial、pending/liable expiry、growth/settlement raceです。Memory / Redis / Cloudflare Durable Objects / Firestoreでproofし、既存scalar Store実装のsource compatibilityを維持します。
-
-### v0.8.0 — operation reconciliation / status (#81)
-
-**Decision: future v1 stable surfaceへoptional scalar Store capabilityとして採用。** base `UsageStore` のsource compatibilityは維持します。`OperationReconciliationStore` はretained scalar operation stateをproofできるStore向けread-only `reconcileOperation()` capabilityで、Cloudflareはremote base APIへ強制せずauthenticated reconciliation subpathで同等契約を提供します。
-
-共通語彙は `absent`、`active/pending`、`active/liable`、`expired/pending`、`expired/liable`、`settled` です。backend/transport failure、corrupt / unsupported state、trusted-input mismatchは成功statusに変換せず、callerがindeterminateとしてfail closedします。`absent` は「現在retained stateがない」だけで、retention horizon後のautomatic replay permissionではありません。
-
-reconciliationはstrict read-onlyで、capacity reserve/release、liability、renew、settle、replay state書換えを行いません。Memory / Redis / Firestoreはoptional interfaceを実装し、Cloudflareは `reconcileRemoteCloudflareOperation()` で同じcore result語彙を返します。v0.7の `reconcileRemoteCloudflareReserve()` 名は互換維持します。portable conformanceでlifecycle status、expired stateのrepeated read-only観測、expected-state mismatchを検証し、provider-specific ambiguity / time / durability evidenceは別途維持します。
-
-v0.8 claimは意図的にscalar-onlyです。vector initial-reserve ambiguityは将来別途proof済みmechanismを追加しない限りfail closedのままです。business-result replayはusage accounting外のapplication責務です。
-
-### v0.9.0 — repository safety hardening (#116〜#127)
-
-2026-08-22のwhole-repository auditでは、単体では十分testされていたcapability同士の交差部を中心にcorrectness / security gapが見つかりました。そこでv0.9は、新しいobservability surfaceを混ぜずsafety hardening専用gateとしました。
-
-優先順は次です。
-
-1. **即時safety blocker:** #123 active vector budgetをmaintenance pruneするとquota capacityが復活し得る問題、#126 gateway authorizationがtruthyなnon-booleanを許可する問題、#122 malformed policy decision discriminantがfail-openする問題。
-2. **accounting / time / provider correctness:** #117 unsafe expiry / timer arithmetic、#116 Memory growth時のretained-budget capacity、#120 Firestore expired-liable reconciliation semantics、#121 Cloudflare remote / maintenance protocol・timeout validation、#125 reconciliationのpre-auth body buffering、#119 MCP flow-storeのunresolved growth保持、#124 Redis recovery aggregate overflow、#118 runtime identityのmutation前validation。
-3. **regression gate:** #127で `retention x growth`、`flow-store x growth`、`recovery x reconciliation`、`maintenance x vector` など、独立追加されたcapability同士の交差testを明示的に追加します。
-
-**v0.9 source gate closeout: 完了（2026-08-22）。** #116〜#127はすべてclose済みです。Node 20/22/24 + live Redis 7、Firestore Emulator、local workerdのprovider-specific evidence、CodeQL、明示的なcross-capability safety matrixがgreenです。package manifestは `0.8.0` のままで、v0.9 tag / GitHub Release / npm publicationはこのgateでは作成していません。
-
-### v0.10.0 — operational usability (#76, #82, #99)
-
-applicationごとに次の区別を再発明しなくてよい程度のoptional operational toolingを整えます。
+second accounting truthを作らず、applicationが次を区別できるbounded operational visibilityを目標にします。
 
 - retained bookkeeping state
 - lifecycle telemetry
 - authoritative scoped quota state
-- threshold / exhaustion notification
-- real consumer dogfoodで判明したintegration driftを防ぐcanonical settlement-outcome vocabulary / normalization guidanceとbounded diagnostics（#99）
-- principal、args、credential、request bodyを出さず、service unavailableとinvalid integration inputを区別できるprivacy-safe lifecycle counters
+- threshold / exhaustion signal
+- canonical settlement-outcome vocabularyとintegration drift
+- service failureとinvalid integration inputを区別するprivacy-safe diagnostics
 
-#99で観測したGateway側の即時mapping bug（`invalid_browser_request` -> canonical `invalid_arguments`）はconsumer integration fixなので **v0.10を待たず修正可能** です。v0.10では、同じdriftを他consumerで起こしにくく・診断しやすくするMCPUsage側の再利用可能なcontract / diagnostics / operational visibilityを完成させます。
+要件:
 
-これはbest-effort / non-authoritativeのままです。second ledgerを作らず、budget-window resetを推測せず、notification deliveryをenforcement correctnessへ入れません。stateful helperよりdocs / exampleの方が安全で単純なら、それをv1 product requirementの達成形として認めます。
+- helper / signalはoptionalかつnon-authoritative
+- budget windowを暗黙に推測しない
+- PII / high-cardinality identifierをdefault metric labelへ昇格しない
+- helper / observer failureがadmission / settlementを変更しない
+- vector dimensionの意味を混ぜない
+- consumer mapping bugはv0.10を待たず即fix可
 
-完了済みの隣接production ergonomicsはv1 blockerにしません。
+完了済み隣接work #108 / #109 / #110はnon-blockingです。MCPUsageがentitlement truth、pricing catalog、billing ledger、subscription lifecycleを所有する方向には広げません。
 
-- **#108 subscription-style weighted-credit guide — 完了**
-- **#109 weighted-credit quote helper — 完了**
-- **#110 accounting-window key helper — 完了**
-
-これらはentitlement truth、Remote Config / Stripe / RevenueCat直接読込、pricing catalog、billing ledger、subscription lifecycleをMCPUsageへ持ち込みません。
-
-### v0.11.0 — completion release
+## v0.11.0 — completion / distribution / compatibility freeze
 
 v0.11はfeature expansionではなくfinal pre-v1 completion lineです。
 
-次を解決します。
+次をresolveまたは明示scopeします。
 
-- **Cloudflare #24:** real credential rotationを実施。real platform-limit / overload evidenceは自然に観測できればcaptureし、Issueを閉じるためだけにFree-plan quotaを意図的に枯渇させない。未観測ならv1 Cloudflare claimを実観測evidenceに合わせて明示scopeする
-- **npm #6:** separate explicit authorizationがある場合だけselected v0.11 tagをfirst npm publishし、provenance、registry metadata、package contents、registry clean installを検証
-- **Node support #105:** v1のsupported Node.js floorを明示決定し、`engines` / CI / support claim / clean-consumer evidenceを揃える。EOL runtimeのcompatibility testを暗黙のsupport promiseにしない
-- **persisted-state compatibility #106:** Redis / Firestore / Cloudflareのupgrade / migration / newer-schema fail-close / rollback保証を定義し、SemVer/API stabilityとstorage-state compatibility boundaryを混同しない
-- **public API / name freeze:** 5 package name、exports / subpath、error / state terminology、lifecycle semantics、compatibility statementを最終確認
-- **MCP Tasks:** upstream TypeScript Tasks surfaceが十分stableならfirst-class adapter採用を判定。まだexperimentalならaccounting semanticsは維持しつつv1 stable adapterから明示除外
-- **stateless MRTR alternative:** concrete benefit + equivalent one-time / lost-ACK proofがなければshared / durable compare-and-consumeをv1として確定し、alternativeはnon-v1 workへ分類
-- Node 20 / 22 / 24、Redis、Cloudflare workerd、Firestore Emulator、tarball、clean consumer、必要なdeployed / manual evidenceをfull確認
-- v1 release blockerに分類されたopen issueを0にする
+- **#24 Cloudflare real-operation boundary:** credential rotationと自然に得られるplatform-limit / overload evidence。proof目的でFree-plan exhaustionを人工的に作らない
+- **#6 first npm publication:** separate explicit authorizationがある場合のみ実施し、name/ownership、Trusted Publishingまたはbootstrap credential、registry metadata、provenance、package contents、clean registry installを確認
+- **#105 Node support floor:** v1のNode.js support floorを決め、`engines` / CI / docs / consumer evidenceを同期
+- **#106 persisted-state compatibility:** Redis / Firestore / Cloudflareのupgrade、migration、rollback、newer-schema fail-close contractを明文化
+- **public API/name freeze:** 5 package名、exports/subpath、error/state terminology、lifecycle semantics、compatibility claimのfinal review
+- **MCP Tasks / MRTR scope:** stable upstreamと同等safety proofがあるsurfaceだけadopt。なければv1から明示defer
+- **full release evidence:** integration、package、source release、およびexplicit authorization後のregistry dogfood
 
-## v1に向けたIssue分類
+v0.11 close時点でv1 blocker分類の未解決Issueを残しません。
 
-| Issue | target decision | current direction |
+## 「v1 complete」の定義
+
+v1.0は、未決定事項を最後に解くreleaseではなく、**すでに完成したsurfaceをstableへ昇格するrelease**です。
+
+v1.0前に:
+
+- material capabilityは全てadopt / defer / excludeを明示
+- adopted capabilityはfailure semantics、concurrency/provider evidence、packaging coverage、英日docsを完備
+- public package名、export、lifecycle semantics、Store support claim、Node support、MCP integration boundaryをfreeze
+- first npm publicationを別途authorizationの下で実地検証
+- persisted-state compatibility / rollback boundaryを文書化
+- final production evidenceをgreenにする
+
+**v1.0自体では新featureやaccounting modelを追加しません。**
+
+## v1へ向けたIssue分類
+
+| Issue | Target | Direction |
 | --- | --- | --- |
-| #83 progressive reservation growth | **v0.6.0** | **採用**: optional progressive Store capability + `UsageLease.grow()` |
-| #84 heterogeneous multi-dimensional usage | **v0.7.0** | **採用**: optional atomic vector Store capability + `VectorUsageControl` |
-| #81 operation reconciliation / status | **v0.8.0** | **Adopted**: optional scalar read-only capability vocabulary + Store support matrix |
-| #123 Cloudflare active-vector pruning safety | **Completed / v0.9.0** | active scalar / vector reservationが参照中のbudgetをmaintenance削除不可にし、quota capacityが復活しないことをproof |
-| #126 Cloudflare authorization callback validation | **Completed / v0.9.0** | literal `true`だけauthorizeし、malformed callback resultはfail closed |
-| #122 runtime policy decision validation | **Completed / v0.9.0** | unknown / malformed discriminantをStore mutation前にfail closed |
-| #117 time / timer arithmetic safety | **Completed / v0.9.0** | unsafe expiry / platform timer値をauthoritative mutation / renew scheduling前にrejectまたは安全にchunk |
-| #116 Memory retained-budget growth capacity | **Completed / v0.9.0** | zero-unit initial reserveを含めgrowthで`maxRetainedBudgetKeys`を迂回不可にする |
-| #120 Firestore expired-liable reconciliation | **Completed / v0.9.0** | recovery後もprovider-neutralな`expired / liable` semanticsを維持 |
-| #121 Cloudflare remote / maintenance protocol hardening | **Completed / v0.9.0** | method-specific reply validationとfull-call timeout / status semanticsを統一 |
-| #125 reconciliation pre-auth body handling | **Completed / v0.9.0** | untrusted request bodyをbuffer / parseする前にauthenticate |
-| #119 MCP unresolved growth round-trip | **Completed / v0.9.0** | Memory / Redis flow-store suspend/resumeでexact-retry fenceを保持 |
-| #124 Redis recovery aggregate overflow | **Completed / v0.9.0** | unsafe aggregateによりcommitted cleanup/admissionがclient-side ACK ambiguityにならないようにする |
-| #118 runtime identity validation | **Completed / v0.9.0** | malformed JS runtime identityをhash / provider call / accounting mutation前にreject |
-| #127 cross-capability safety regression matrix | **Completed / v0.9.0** | independently introduced capabilityのinteraction testを明示追加 |
-| #76 operational usage snapshot | **v0.10.0** | bounded non-authoritative helper / patternを採用優先 |
-| #82 threshold / exhaustion signals | **v0.10.0** | #76 semantics上のoptional scoped helper / patternを採用優先 |
-| #99 settlement outcome normalization / dogfood diagnostics | **v0.10.0** | canonical integration vocabulary明確化、invalid outcomeとservice outageの診断分離、privacy-safe lifecycle visibility。consumer mapping bugは先行修正可 |
-| #108 subscription-style weighted credits guide | **完了 / v0.9隣接 / non-blocking** | Free/Plus/月次credits導入と責務境界のcanonical guide |
-| #109 weighted-credit quote helper | **完了 / v0.9隣接 / non-blocking** | pricing/subscriptionを所有せずconsumer重複コードを減らす小さなvalidated policy helperを提供 |
-| #110 accounting-window key helper | **完了 / v0.9隣接 / non-blocking** | day/month keyをexplicit scope/time-zone入力からdeterministic生成し、plan変更でusageを誤resetしないhelperを提供 |
-| #24 Cloudflare deployed operational evidence | **v0.11.0** | real rotation完了 + honest v1 evidence boundary確定 |
-| #6 first npm publication | **v0.11.0** | v1前にfirst registry publish。ただしexplicit authorization必須 |
-| #105 supported Node.js floor | **v0.11.0** | v1 runtime floorを決定し、publish前にengines / CI / docsを整合 |
-| #106 persisted-store migration/rollback contract | **v0.11.0** | provider upgrade/downgrade/schema compatibility semanticsをv1前にfreeze |
-| #77 / #78 / #79 / #85 | 解決済み | 後続全releaseへevidence継承 |
+| #83 progressive reservation growth | v0.6 | Adopted / released |
+| #84 heterogeneous multi-dimensional usage | v0.7 | Adopted / released |
+| #81 operation reconciliation/status | v0.8 | Adopted / released |
+| #116〜#127 repository safety hardening | v0.9 | Completed / released |
+| #143 Firestore vector growth-vs-settle race | v0.9 | Completed release blocker |
+| #76 operational usage snapshot | v0.10 | Active |
+| #82 threshold/exhaustion signals | v0.10 | Active |
+| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Active |
+| #24 Cloudflare real operational evidence | v0.11 | Final completion evidence |
+| #6 first npm publication | v0.11 | **Open; separate explicit authorization必須** |
+| #105 Node.js support floor | v0.11 | v1前にfreeze |
+| #106 persisted-store compatibility | v0.11 | v1前にfreeze |
 
-原則は **「maybe v1」をv0.11より後へ残さない** です。proof付きで採用するか、v1 stable product外へ明示分類します。
+## Release policy
 
-## pre-v1 featureが弱めてはいけないstable invariant
+- release mechanicsを楽にするためruntime/accounting semanticsを黙って変更しない
+- GitHub/source releaseとnpm publicationはindependent authorization
+- GitHub/source release成功はregistry publicationを意味しない
+- npm publicationを明示deferしている場合、failed/cancelled npm workflowによってsource release自体を未完扱いにしない
+- provider claimは実測/test evidenceを超えて強くしない
 
-- admission compare + reservationはauthoritative Storeの1 operation
-- 1 logical admissionに必要なbudget / dimensionは全部atomic commit、または全部失敗
-- replay identityはstableだがauthenticationではない
-- metered execution前にexplicit liability
-- pending expiryはrelease可能、liable unknown usageはconservative
-- ambiguous state-changing outcomeをblind retryしない
-- Store / platform failureをallowへ変えない
-- malformed runtime policy / auth callback resultをallowへ変えない
-- maintenance / retention operationがactive scalar / vector reservation参照中のaccounting capacityを削除・再生成しない
-- callerがclean precondition failureとして扱えるvalidation / time / protocol errorはauthoritative mutation前に検出する
-- cross-capability interactionを独立feature conformanceから推測せずregression contractへ含める
-- observability / alertをenforcement authorityにしない
-- business side effect / result replayはusage accounting外
-- provider-specific durability / time / HA limitationをover-strong generic claimで隠さない
-
-## MCP-native scope
-
-multi-roundはshared / durable one-time compare-and-consumeをcurrent directionとして維持し、sticky MCP sessionを要求しません。stateless / client-carried alternativeは同等のreplay / ACK-ambiguity safetyをproofするまで採用しません。
-
-[MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) ではsafe accounting lifecycleを既に定義済みです。first-class Tasks wire/runtime adapterはv0.11でupstream stabilityを見て判断するscope itemであり、current core correctness gapではありません。
-
-## Third-party Store contract
-
-portable conformanceは引き続きbehavioral baselineです。
-
-```ts
-import {
-  assertUsageStoreConformance,
-  runProgressiveUsageStoreConformance,
-} from 'mcp-usage-control/conformance';
-import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
-```
-
-v0.6〜v0.10で採用するcapabilityがStore behaviorを変える場合、必要に応じportable contractを拡張します。portable runner合格は必要条件ですが、backend-specific durability、failover、authoritative time、lost-ACK evidenceの代替にはなりません。
-
-## Non-goals
-
-core runtimeはgeneric agent runtime / budget authority、ordinary HTTP rate limiter、payment / subscription system、financial ledger、OAuth provider、billing dashboard / pricing catalog、gateway / router、vendor billing protocol implementation、generic workflow engine、ambiguous state-changing operationをblind retryするsystemにはしません。
+[Release policy](releasing.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、各provider docsをproduction deployment前に確認してください。
