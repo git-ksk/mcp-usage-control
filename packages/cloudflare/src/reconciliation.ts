@@ -41,36 +41,23 @@ export type CloudflareReserveReconciliation = UsageOperationReconciliation;
 export function createReconciliableCloudflareUsageStoreGateway(
   options: CloudflareUsageStoreGatewayOptions,
 ) {
-  const baseHandler = createCloudflareUsageStoreGateway(options);
+  // Normal usage requests still delegate to the base gateway. Cache only a
+  // successful decision for the exact Request object so a side-effectful
+  // application authorizer is never executed twice for one request.
+  const preauthorized = new WeakSet<Request>();
+  const baseHandler = createCloudflareUsageStoreGateway({
+    ...options,
+    authorize(request) {
+      if (preauthorized.has(request)) return true;
+      return options.authorize(request);
+    },
+  });
   const path = options.path ?? DEFAULT_PATH;
   const domainName = options.domainName ?? 'default';
 
   return async function handle(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname !== path || request.method !== 'POST') return baseHandler(request);
-
-    const contentLength = Number(request.headers.get('content-length') ?? '0');
-    if (Number.isFinite(contentLength) && contentLength > MAX_GATEWAY_BODY_BYTES) {
-      return baseHandler(request);
-    }
-
-    let text: string;
-    try {
-      text = await request.clone().text();
-    } catch {
-      return baseHandler(request);
-    }
-    if (new TextEncoder().encode(text).byteLength > MAX_GATEWAY_BODY_BYTES) {
-      return baseHandler(request);
-    }
-
-    let body: unknown;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      return baseHandler(request);
-    }
-    if (!isLookupHttpRequest(body)) return baseHandler(request);
 
     let authorized = false;
     try {
@@ -79,6 +66,28 @@ export function createReconciliableCloudflareUsageStoreGateway(
       authorized = false;
     }
     if (!authorized) return responseJson({ error: 'unauthorized' }, 401);
+    preauthorized.add(request);
+
+    const contentLength = Number(request.headers.get('content-length') ?? '0');
+    if (Number.isFinite(contentLength) && contentLength > MAX_GATEWAY_BODY_BYTES) {
+      return responseJson({ error: 'payload_too_large' }, 413);
+    }
+
+    const buffered = await readBoundedRequestText(request.clone(), MAX_GATEWAY_BODY_BYTES);
+    if (buffered.status === 'too_large') {
+      return responseJson({ error: 'payload_too_large' }, 413);
+    }
+    if (buffered.status === 'error') {
+      return responseJson({ error: 'invalid_request' }, 400);
+    }
+
+    let body: unknown;
+    try {
+      body = JSON.parse(buffered.text);
+    } catch {
+      return responseJson({ error: 'invalid_request' }, 400);
+    }
+    if (!isLookupHttpRequest(body)) return baseHandler(request);
 
     let stub: CloudflareLookupDurableObjectStub;
     try {
@@ -94,6 +103,51 @@ export function createReconciliableCloudflareUsageStoreGateway(
       return responseJson({ error: 'store_unavailable' }, 503);
     }
   };
+}
+
+type BoundedRequestText =
+  | { status: 'ok'; text: string }
+  | { status: 'too_large' }
+  | { status: 'error' };
+
+async function readBoundedRequestText(
+  request: Request,
+  maxBytes: number,
+): Promise<BoundedRequestText> {
+  if (!request.body) return { status: 'ok', text: '' };
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || value.byteLength === 0) continue;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // Best-effort cancellation only; the response is already fail-closed.
+        }
+        return { status: 'too_large' };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { status: 'error' };
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { status: 'ok', text: new TextDecoder().decode(bytes) };
 }
 
 /**

@@ -44,6 +44,18 @@ function request(path: string, body: unknown): Request {
   });
 }
 
+function streamingRequest(path: string, body: ReadableStream<Uint8Array>): Request {
+  return new Request(
+    `https://usage.example.test${path}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' },
+  );
+}
+
 function unsafeAuthorize(value: unknown): CloudflareGatewayAuthorize {
   return (() => value) as unknown as CloudflareGatewayAuthorize;
 }
@@ -128,6 +140,96 @@ describe('Cloudflare gateway authorization runtime boundary', () => {
     const response = await maintenanceGateway(unsafeAuthorize(value), calls)(request('/v1/usage-store-maintenance', maintenanceBody));
     expect(response.status).toBe(401);
     expect(calls.count).toBe(0);
+  });
+
+  it('authorizes before reading a stalled reconciliation body without Content-Length', async () => {
+    let authorizeCalls = 0;
+    const calls = { count: 0 };
+    const gateway = reconciliationGateway(() => {
+      authorizeCalls += 1;
+      return false;
+    }, calls);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{'));
+        // Intentionally never close: authorization must complete before body completion.
+      },
+    });
+    const incoming = streamingRequest('/v1/usage-store', stream);
+    expect(incoming.headers.get('content-length')).toBeNull();
+
+    const response = await Promise.race([
+      gateway(incoming),
+      new Promise<Response>((_resolve, reject) =>
+        setTimeout(() => reject(new Error('gateway waited for unauthenticated request body')), 100),
+      ),
+    ]);
+
+    expect(response.status).toBe(401);
+    expect(authorizeCalls).toBe(1);
+    expect(calls.count).toBe(0);
+  });
+
+  it('rejects an oversized chunked body after one authorization decision', async () => {
+    let authorizeCalls = 0;
+    const calls = { count: 0 };
+    const gateway = reconciliationGateway(() => {
+      authorizeCalls += 1;
+      return true;
+    }, calls);
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(65_537));
+        controller.close();
+      },
+    });
+    const incoming = streamingRequest('/v1/usage-store', stream);
+    expect(incoming.headers.get('content-length')).toBeNull();
+
+    const response = await gateway(incoming);
+    expect(response.status).toBe(413);
+    expect(authorizeCalls).toBe(1);
+    expect(calls.count).toBe(0);
+  });
+
+  it('reuses one authorization decision when delegating a normal usage request', async () => {
+    let authorizeCalls = 0;
+    let reserveCalls = 0;
+    let lookupCalls = 0;
+    const gateway = createReconciliableCloudflareUsageStoreGateway({
+      authorize() {
+        authorizeCalls += 1;
+        return true;
+      },
+      namespace: {
+        getByName: () =>
+          ({
+            async lookup() {
+              lookupCalls += 1;
+              return { status: 'absent' };
+            },
+            async reserve() {
+              reserveCalls += 1;
+              return {
+                ok: true,
+                result: {
+                  accepted: true,
+                  expiresAt: Date.now() + 1_000,
+                  remainingByBudget: [{ id: budgetId, remaining: 0 }],
+                },
+                recovery: {
+                  aggregate: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
+                },
+              };
+            },
+          }) as never,
+      },
+    });
+
+    expect((await gateway(request('/v1/usage-store', usageBody))).status).toBe(200);
+    expect(authorizeCalls).toBe(1);
+    expect(reserveCalls).toBe(1);
+    expect(lookupCalls).toBe(0);
   });
 
   it('literal true is the only result that reaches all three Durable Object methods', async () => {
