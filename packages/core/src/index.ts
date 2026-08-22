@@ -1476,6 +1476,11 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
       return result;
     }
 
+    const newlyNonZeroBudgets = dimensions.flatMap(dimension =>
+      dimension.additionalUnits > 0 ? dimension.budgets : [],
+    );
+    if (newlyNonZeroBudgets.length > 0) this.assertBudgetCapacity(newlyNonZeroBudgets);
+
     const previousReservedByDimension = reservation.dimensions.map(dimension => ({
       key: dimension.key,
       reservedUnits: dimension.reservedUnits,
@@ -1644,6 +1649,8 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
       };
       return result;
     }
+
+    this.assertBudgetCapacity(budgets);
 
     const previousReservedUnits = reservation.reservedUnits;
     const reservedUnits = safeAdd(
