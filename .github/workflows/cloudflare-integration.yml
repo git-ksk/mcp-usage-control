@@ -61,3 +61,4 @@ jobs:
           node packages/cloudflare/test/rotation.mjs
           node packages/cloudflare/test/reconciliation.mjs
           node packages/cloudflare/test/maintenance.mjs
+          node packages/cloudflare/test/authorization.mjs

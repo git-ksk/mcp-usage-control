@@ -73,7 +73,7 @@ export function createCloudflareBudgetMaintenanceGateway(
 
     let authorized = false;
     try {
-      authorized = await options.authorizeMaintenance(request);
+      authorized = (await options.authorizeMaintenance(request)) === true;
     } catch {
       authorized = false;
     }
