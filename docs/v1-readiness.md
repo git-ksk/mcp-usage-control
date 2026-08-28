@@ -12,7 +12,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 All five publishable package manifests are aligned at `0.9.0`. The packages remain **unpublished to npm**. First registry publication remains separately tracked by #6 and requires explicit authorization independent from source releases.
 
-The active decision gate is now **v0.10.0 / #76 + #82 + #99 operational usability and dogfood diagnostics**. The final pre-v1 gate is **v0.11.0 / #24 + #6 + #105 + #106 completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
+The active decision gate is now **v0.10.0 / #76 -> #99 -> #82 operational usability and dogfood diagnostics**. The final pre-v1 gate is **v0.11.0 / #152 + #105 + #106 + #24 + #6 accounting-contract, completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
 
 ## Verdict
 
@@ -34,11 +34,12 @@ What is already proven:
 
 What still blocks v1 promotion:
 
-- bounded operational usability and diagnostics (#76, #82, #99);
-- final Cloudflare real-operation boundary (#24);
-- separately authorized first npm publication and registry/provenance dogfood (#6);
+- bounded operational usability and diagnostics (#76, #99, #82);
+- explicit cost-bearing operation lifecycle mapping and shared accounting-scope proof (#152);
 - explicit v1 Node.js support floor (#105);
 - persisted-store migration/rollback/newer-schema compatibility contract (#106);
+- final Cloudflare real-operation boundary (#24);
+- separately authorized first npm publication and registry/provenance dogfood (#6);
 - final public package/export/API terminology freeze;
 - final MCP Tasks / MRTR scope decisions;
 - final full production/distribution evidence with no unresolved v1 blocker.
@@ -61,6 +62,7 @@ These must remain true through v0.10, v0.11, and v1.0:
 12. Business-operation replay/result replay remains application-owned.
 13. Observability cannot change enforcement state.
 14. Provider durability/time/HA/lost-ACK limits remain explicit.
+15. Entitlement, subscription, pricing catalog, and provider-health policy remain application-owned rather than becoming a second authority inside MCPUsage.
 
 ## Adopted v1 capability candidates
 
@@ -94,7 +96,13 @@ The normal release/package gate and provider integration evidence were green bef
 
 v0.10 should add operational usability without creating a second ledger or authority.
 
-Acceptance direction for #76/#82/#99:
+Execution order:
+
+1. **#76** — operational snapshot/runtime identity and bounded read-only vocabulary.
+2. **#99** — canonical settlement normalization and diagnostics that distinguish integration errors from backend unavailability.
+3. **#82** — threshold/exhaustion signals composed from the established scoped quota semantics.
+
+Acceptance direction for #76/#99/#82:
 
 - expose only bounded/scoped authoritative values where needed;
 - keep lifecycle/threshold helpers non-authoritative;
@@ -104,18 +112,17 @@ Acceptance direction for #76/#82/#99:
 - preserve vector dimension meaning;
 - helper/observer failure cannot alter enforcement.
 
+The existing `UsageObserver` and `projectUsageEvent()` surface is supporting evidence, not completion evidence for these three issues.
+
 ## v0.11 final completion gate
 
-Before v1 stable promotion, v0.11 must close or explicitly scope:
+Before v1 stable promotion, v0.11 must close or explicitly scope, in priority order:
 
-- #24 Cloudflare real-operation evidence;
-- #6 first npm publication, only after separate explicit authorization, including registry ownership, provenance, package contents, and clean-registry consumer verification;
-- #105 supported Node.js floor;
-- #106 persisted-store upgrade/migration/rollback/newer-schema behavior;
-- package names, exports/subpaths, errors/status vocabulary, and public lifecycle semantics;
-- MCP Tasks adapter decision based on upstream stability;
-- MRTR scope decision, retaining shared/durable compare-and-consume unless an alternative has equivalent proof;
-- final integration/package/deployed/manual evidence.
+1. **#152 cost-bearing operation reservation lifecycle** — prove the frozen reserve/liability/settlement contract is sufficient for provider-backed billable work, shared accounting scopes, retry/idempotency, conservative ambiguous outcomes, and proven-no-effect release; add new surface only if the current model is insufficient.
+2. **#105 supported Node.js floor** and **#106 persisted-store compatibility** — freeze runtime and state compatibility guarantees.
+3. **#24 Cloudflare real-operation evidence** — complete credential rotation and the final honest production-evidence boundary.
+4. **#6 first npm publication** — only after separate explicit authorization and after the public contract is frozen.
+5. package names, exports/subpaths, errors/status vocabulary, public lifecycle semantics, MCP Tasks/MRTR decisions, and final integration/package/deployed/manual evidence.
 
 ## Distribution boundary
 
