@@ -12,7 +12,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 All five publishable package manifests are aligned at `0.9.0`. The packages remain **unpublished to npm**. First registry publication remains separately tracked by #6 and requires explicit authorization independent from source releases.
 
-The active decision gate is now **v0.10.0 / #76 -> #99 -> #82 operational usability and dogfood diagnostics**. The final pre-v1 gate is **v0.11.0 / #152 + #105 + #106 + #24 + #6 accounting-contract, completion, distribution, and API freeze**, followed by feature-free v1.0 promotion.
+The active decision gate is now **v0.10.0 / #76 -> #99 -> #82 operational usability and dogfood diagnostics**. The final pre-v1 gate is **v0.11.0 / #152 + #105 + #106 + #24 + #6 accounting-contract, completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
 
 ## Verdict
 
@@ -68,15 +68,29 @@ These must remain true through v0.10, v0.11, and v1.0:
 
 ### Progressive reservation growth (#83) — adopted in v0.6
 
-`UsageLease.grow()` / optional `ProgressiveUsageStore` provide bounded incremental capacity without making growth mandatory for third-party Stores.
+`UsageLease.grow()` / optional `ProgressiveUsageStore` provide bounded incremental capacity without making growth mandatory for third-party Stores. The proof covers atomic all-budget growth, stable increment identity, lost-ACK replay fencing, terminal-state rejection, inherited pending/liable semantics, and settlement bounded by total committed capacity.
 
 ### Heterogeneous multi-dimensional usage (#84) — adopted in v0.7
 
-`VectorUsageControl` / optional `VectorUsageStore` keep dimensions semantically distinct while preserving one logical replay identity and one atomic reservation-wide transaction domain.
+`VectorUsageControl` / optional `VectorUsageStore` keep dimensions semantically distinct while preserving one logical replay identity and one atomic reservation-wide transaction domain. Provider evidence covers Memory, Redis, Cloudflare Durable Objects, and Firestore.
 
 ### Scalar operation reconciliation (#81) — adopted in v0.8
 
-Optional `OperationReconciliationStore` provides read-only `absent` / `active` / `expired` / `settled` status without turning reconciliation into accounting mutation or business-result replay.
+Optional `OperationReconciliationStore` provides read-only `absent` / `active` / `expired` / `settled` status. Backend/transport failure, corrupt state, unsupported mode, and trusted-input mismatch remain indeterminate/fail closed rather than becoming `absent`. Reconciliation does not reserve/release, mark liability, renew, settle, or rewrite replay state.
+
+## v0.9.0 safety-hardening evidence
+
+The v0.9 audit focused on capability intersections rather than new product surface. It closed #116-#127 and added explicit regression coverage across retention/growth, flow-store/growth, recovery/reconciliation, maintenance/vector, authorization, protocol validation, arithmetic bounds, and runtime identity validation.
+
+Firestore release blocker #143 was closed with these semantics preserved:
+
+- settlement in `vector-growth-vs-settle-race` must complete;
+- if growth commits first, settlement must observe the grown reservation;
+- bounded outer retry applies only to definitive transaction aborts: gRPC `ABORTED` (`10`) and HTTP `409`;
+- `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not added to the adapter outer retry allow-list;
+- no-op vector settlement avoids unnecessary budget reads/writes to reduce contention without changing accounting semantics.
+
+The normal release/package gate and provider integration evidence were green before the v0.9 source release. The GitHub/source release succeeded. npm publication did not complete and is intentionally deferred under #6.
 
 ## v0.10 readiness gate
 
@@ -88,7 +102,7 @@ Execution order:
 2. **#99** — canonical settlement normalization and diagnostics that distinguish integration errors from backend unavailability.
 3. **#82** — threshold/exhaustion signals composed from the established scoped quota semantics.
 
-Acceptance direction:
+Acceptance direction for #76/#99/#82:
 
 - expose only bounded/scoped authoritative values where needed;
 - keep lifecycle/threshold helpers non-authoritative;
