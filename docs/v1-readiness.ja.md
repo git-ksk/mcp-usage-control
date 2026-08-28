@@ -68,15 +68,29 @@ v0.10 / v0.11 / v1.0を通して次を崩しません。
 
 ### Progressive reservation growth (#83) — v0.6でadopted
 
-`UsageLease.grow()` / optional `ProgressiveUsageStore` はthird-party Storeへgrowthをmandatory化せずincremental capacityを追加します。
+`UsageLease.grow()` / optional `ProgressiveUsageStore` はthird-party Storeへgrowthをmandatory化せずincremental capacityを追加します。atomic all-budget growth、stable increment identity、lost-ACK replay fencing、terminal-state rejection、pending/liable semantics継承、total committed capacity以内のsettlementをproof済みです。
 
 ### Heterogeneous multi-dimensional usage (#84) — v0.7でadopted
 
-`VectorUsageControl` / optional `VectorUsageStore` はdimensionをsemantically distinctに保ちながら、1 logical replay identityと1 reservation-wide atomic transaction domainを維持します。
+`VectorUsageControl` / optional `VectorUsageStore` はdimensionをsemantically distinctに保ちながら、1 logical replay identityと1 reservation-wide atomic transaction domainを維持します。Memory / Redis / Cloudflare Durable Objects / Firestoreでprovider evidenceがあります。
 
 ### Scalar operation reconciliation (#81) — v0.8でadopted
 
-optional `OperationReconciliationStore` はread-only `absent` / `active` / `expired` / `settled` statusを提供し、reconciliationをaccounting mutationやbusiness-result replayへ拡張しません。
+optional `OperationReconciliationStore` はread-only `absent` / `active` / `expired` / `settled` statusを提供します。backend/transport failure、corrupt state、unsupported mode、trusted-input mismatchを`absent`へ変換せずindeterminate / fail closedにします。reconciliationはreserve/release、liability、renew、settle、replay state rewriteを行いません。
+
+## v0.9.0 safety-hardening evidence
+
+v0.9 auditは新product surfaceではなくcapability intersectionを対象にしました。#116〜#127をcloseし、retention/growth、flow-store/growth、recovery/reconciliation、maintenance/vector、authorization、protocol validation、arithmetic bounds、runtime identity validationの明示regression coverageを追加しました。
+
+Firestore release blocker #143は次を維持してcloseしています。
+
+- `vector-growth-vs-settle-race` のsettlementは必ずcomplete
+- growthが先にcommitした場合、settlementはgrown reservationをobserve
+- bounded outer retryはdefinitive transaction abortであるgRPC `ABORTED` (`10`) / HTTP `409`だけ
+- `UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはadapter outer retry allow-listへ追加しない
+- no-op vector settlementでは不要なbudget read/writeを避け、accounting semanticsを変えずcontentionを減らす
+
+normal release/package gateとprovider integration evidenceはv0.9 source release前にgreenでした。GitHub/source releaseはsuccessです。npm publicationは完了しておらず、#6でintentional deferを維持します。
 
 ## v0.10 readiness gate
 
@@ -88,7 +102,7 @@ v0.10はsecond ledger / second authorityを作らずoperational usabilityを追�
 2. **#99** — canonical settlement normalizationとintegration error / backend unavailabilityを区別するdiagnostics
 3. **#82** — 確定したscoped quota semanticsへcompositionするthreshold / exhaustion signals
 
-Acceptance方向:
+#76 / #99 / #82のacceptance方向:
 
 - 必要なauthoritative valueはbounded / scopedに限定
 - lifecycle / threshold helperはnon-authoritative
