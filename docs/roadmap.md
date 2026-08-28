@@ -14,7 +14,7 @@ The project should deepen correctness and production usability at that boundary 
 
 All five publishable package manifests are aligned at `0.9.0`. **The packages are not published to npm.** First registry publication remains a separately authorized operation tracked by #6.
 
-The active product target is **v0.10.0 / #76 + #82 + #99 operational usability and dogfood diagnostics**, followed by **v0.11.0 / #24 + #6 + #105 + #106 final production/distribution evidence and API freeze**, then **v1.0.0** as a feature-free stable promotion.
+The active product target is **v0.10.0 / #76 + #99 + #82 operational usability and dogfood diagnostics**, followed by **v0.11.0 / #152 + #105 + #106 + #24 + #6 final accounting-contract, production, distribution, and API freeze**, then **v1.0.0** as a feature-free stable promotion.
 
 Repository execution order:
 
@@ -24,7 +24,7 @@ v0.6 progressive growth
  -> v0.8 scalar operation reconciliation
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [ACTIVE]
- -> v0.11 completion/distribution/API freeze
+ -> v0.11 accounting/production/distribution/API freeze
  -> v1.0 stable promotion
 ```
 
@@ -51,17 +51,13 @@ Across every remaining release:
 | **v0.8.0** | Optional read-only scalar operation reconciliation through `OperationReconciliationStore` | Released / adopted |
 | **v0.9.0** | Repository-wide safety hardening #116-#127 plus Firestore race blocker #143 | **Released / complete** |
 
-### v0.9.0 release evidence
-
-v0.9 preserved the public accounting model while hardening capability intersections. The release includes the repository-audit fixes for retained-budget growth integrity, safe expiry/timer arithmetic, validation-before-mutation, unresolved MCP growth preservation, Firestore expired-liable reconciliation, Cloudflare remote/maintenance validation, malformed-policy fail-close, vector-maintenance quota integrity, Redis recovery overflow, pre-auth reconciliation handling, strict boolean authorization, and the cross-capability regression matrix.
-
-Issue #143 was resolved without weakening `vector-growth-vs-settle-race`. Firestore outer retry is limited to definitive transaction aborts (`ABORTED` / gRPC 10 and HTTP 409) with bounded jittered backoff; `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not added to that outer retry allow-list.
-
-Release validation covered Node 20/22/24 package/clean-consumer CI, Redis, Cloudflare local workerd, and Firestore Emulator. The `v0.9.0` GitHub/source release completed successfully. npm publication was not completed and remains deferred under #6.
-
 ## Active target: v0.10.0 — operational usability
 
-Primary issues: **#76, #82, #99**.
+Primary issues: **#76, #99, #82**, in that implementation order unless new evidence requires a dependency change.
+
+1. **#76 operational usage snapshot** establishes the bounded read-only vocabulary and runtime identity surface.
+2. **#99 settlement outcome normalization / diagnostics** builds on that vocabulary so invalid integration input is distinguishable from backend unavailability.
+3. **#82 threshold/exhaustion signals** composes with the operational surface after scoped remaining/exhaustion semantics are fixed.
 
 The goal is bounded operational visibility without creating a second accounting truth. The preferred surface should help applications distinguish:
 
@@ -81,14 +77,25 @@ Requirements:
 - vector dimensions remain semantically distinct;
 - consumer mapping bugs may be fixed immediately and do not need to wait for v0.10.
 
+Existing `UsageObserver` / `projectUsageEvent()` behavior is useful evidence but does **not** by itself close #76/#82/#99: v0.10 still needs the explicit operational snapshot, bounded diagnostics/normalization, and threshold/exhaustion contract required by those issues.
+
 Completed adjacent ergonomics #108, #109, and #110 remain non-blocking and do not make MCPUsage own entitlement truth, pricing catalogs, billing ledgers, or subscription lifecycle.
 
-## v0.11.0 — completion / distribution / compatibility freeze
+## v0.11.0 — accounting contract / completion / distribution / compatibility freeze
 
 v0.11 is the final pre-v1 completion line, not another feature-expansion cycle.
 
+Execution priority:
+
+1. **#152 cost-bearing operation reservation lifecycle** — prove that the existing reserve/liability/settlement model cleanly covers provider-backed cost-bearing work, shared accounting scopes, idempotent retries, conservative ambiguous outcomes, and proven-no-effect release; add API only if the existing model is insufficient.
+2. **#105 Node support floor** and **#106 persisted-state compatibility** — freeze runtime and storage compatibility boundaries.
+3. **#24 Cloudflare real-operation boundary** — complete real credential rotation and the final honest platform-limit evidence statement.
+4. **#6 first npm publication** — only with separate explicit authorization, after the public contract is frozen.
+5. **public API/name freeze and final release evidence**.
+
 It must resolve or explicitly scope:
 
+- **#152 cost-bearing operation lifecycle:** keep entitlement/pricing/provider policy application-owned while making reservation, shared accounting scope, idempotency, liability, settlement, and refund/no-effect mapping explicit before v1;
 - **#24 Cloudflare real-operation boundary:** credential rotation plus naturally available platform-limit/overload evidence; do not manufacture Free-plan exhaustion merely for proof;
 - **#6 first npm publication:** only with separate explicit authorization; verify names/ownership, Trusted Publishing or bootstrap credentials, registry metadata, provenance, package contents, and clean registry installation;
 - **#105 Node support floor:** choose the v1 Node.js support floor and align `engines`, CI, docs, and consumer evidence;
@@ -108,6 +115,7 @@ Before v1.0:
 - every material capability has an explicit adopt/defer/exclude decision;
 - adopted capabilities have failure semantics, concurrency/provider evidence, packaging coverage, and bilingual documentation;
 - public package names, exports, lifecycle semantics, Store support claims, Node support, and MCP integration boundaries are frozen;
+- cost-bearing operation semantics are explicitly mapped to the frozen accounting lifecycle;
 - first npm publication has been exercised under separate authorization;
 - persisted-state compatibility and rollback boundaries are documented;
 - final production evidence is green.
@@ -123,13 +131,14 @@ Before v1.0:
 | #81 operation reconciliation/status | v0.8 | Adopted / released |
 | #116-#127 repository safety hardening | v0.9 | Completed / released |
 | #143 Firestore vector growth-vs-settle race | v0.9 | Completed release blocker |
-| #76 operational usage snapshot | v0.10 | Active |
-| #82 threshold/exhaustion signals | v0.10 | Active |
-| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Active |
-| #24 Cloudflare real operational evidence | v0.11 | Final completion evidence |
+| #76 operational usage snapshot | v0.10 | Active / first |
+| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Active / second |
+| #82 threshold/exhaustion signals | v0.10 | Active / third |
+| #152 cost-bearing operation reservation lifecycle | v0.11 | Accounting-contract freeze |
+| #105 Node.js support floor | v0.11 | Runtime support freeze |
+| #106 persisted-store compatibility | v0.11 | Storage compatibility freeze |
+| #24 Cloudflare real operational evidence | v0.11 | Final production evidence |
 | #6 first npm publication | v0.11 | **Open; separate explicit authorization required** |
-| #105 Node.js support floor | v0.11 | Freeze before v1 |
-| #106 persisted-store compatibility | v0.11 | Freeze before v1 |
 
 ## Release policy
 
