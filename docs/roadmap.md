@@ -14,7 +14,7 @@ The project should deepen correctness and production usability at that boundary 
 
 All five publishable package manifests are aligned at `0.9.0`. **The packages are not published to npm.** First registry publication remains a separately authorized operation tracked by #6.
 
-The active product target is **v0.10.0 / #76 + #99 + #82 operational usability and dogfood diagnostics**, followed by **v0.11.0 / #152 + #105 + #106 + #24 + #6 final accounting-contract, production, distribution, and API freeze**, then **v1.0.0** as a feature-free stable promotion.
+The active product target is **v0.10.0 / #76 + #99 + #82 operational usability and dogfood diagnostics**, followed by **v0.11.0 / #152 + #105 + #106 + #24 + #6 final accounting-contract, production/distribution evidence and API freeze**, then **v1.0.0** as a feature-free stable promotion.
 
 Repository execution order:
 
@@ -24,7 +24,7 @@ v0.6 progressive growth
  -> v0.8 scalar operation reconciliation
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [ACTIVE]
- -> v0.11 accounting/production/distribution/API freeze
+ -> v0.11 accounting/completion/distribution/API freeze
  -> v1.0 stable promotion
 ```
 
@@ -50,6 +50,14 @@ Across every remaining release:
 | **v0.7.0** | Optional atomic heterogeneous vector usage through `VectorUsageControl` / `VectorUsageStore` | Released / adopted |
 | **v0.8.0** | Optional read-only scalar operation reconciliation through `OperationReconciliationStore` | Released / adopted |
 | **v0.9.0** | Repository-wide safety hardening #116-#127 plus Firestore race blocker #143 | **Released / complete** |
+
+### v0.9.0 release evidence
+
+v0.9 preserved the public accounting model while hardening capability intersections. The release includes the repository-audit fixes for retained-budget growth integrity, safe expiry/timer arithmetic, validation-before-mutation, unresolved MCP growth preservation, Firestore expired-liable reconciliation, Cloudflare remote/maintenance validation, malformed-policy fail-close, vector-maintenance quota integrity, Redis recovery overflow, pre-auth reconciliation handling, strict boolean authorization, and the cross-capability regression matrix.
+
+Issue #143 was resolved without weakening `vector-growth-vs-settle-race`. Firestore outer retry is limited to definitive transaction aborts (`ABORTED` / gRPC 10 and HTTP 409) with bounded jittered backoff; `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not added to that outer retry allow-list.
+
+Release validation covered Node 20/22/24 package/clean-consumer CI, Redis, Cloudflare local workerd, and Firestore Emulator. The `v0.9.0` GitHub/source release completed successfully. npm publication was not completed and remains deferred under #6.
 
 ## Active target: v0.10.0 — operational usability
 
