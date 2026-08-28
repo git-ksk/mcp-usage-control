@@ -14,7 +14,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 publish可能な5 package manifestはすべて `0.9.0` に揃っています。**npmにはまだ公開していません。** first registry publicationは#6で追跡する別途explicit authorization必須の操作です。
 
-現在のactive product targetは **v0.10.0 / #76 + #82 + #99 operational usability / dogfood diagnostics**、続いて **v0.11.0 / #24 + #6 + #105 + #106 final production/distribution evidence + API freeze**、最後に新featureを追加しない **v1.0.0 stable promotion** です。
+現在のactive product targetは **v0.10.0 / #76 + #99 + #82 operational usability / dogfood diagnostics**、続いて **v0.11.0 / #152 + #105 + #106 + #24 + #6 accounting contract / production / distribution / API freeze**、最後に新featureを追加しない **v1.0.0 stable promotion** です。
 
 実行順序:
 
@@ -24,7 +24,7 @@ v0.6 progressive growth
  -> v0.8 scalar operation reconciliation
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [ACTIVE]
- -> v0.11 completion/distribution/API freeze
+ -> v0.11 accounting/production/distribution/API freeze
  -> v1.0 stable promotion
 ```
 
@@ -51,17 +51,13 @@ v0.6 progressive growth
 | **v0.8.0** | `OperationReconciliationStore` によるoptional read-only scalar operation reconciliation | Release済み / Adopted |
 | **v0.9.0** | repository-wide safety hardening #116〜#127 + Firestore race blocker #143 | **Release済み / Complete** |
 
-### v0.9.0 release evidence
-
-v0.9ではpublic accounting modelを変更せず、capability同士の交差部をhardeningしました。retained-budget growth integrity、安全なexpiry/timer arithmetic、mutation前validation、MCP unresolved growth保持、Firestore expired-liable reconciliation、Cloudflare remote/maintenance validation、malformed policy fail-close、vector maintenance quota integrity、Redis recovery overflow、pre-auth reconciliation handling、strict boolean authorization、cross-capability regression matrixを含みます。
-
-#143は `vector-growth-vs-settle-race` のinvariantを弱めず解消しました。Firestore outer retryは definitive transaction abortである `ABORTED` / gRPC 10 と HTTP 409だけをbounded jittered backoffでretryします。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはouter retry allow-listへ追加していません。
-
-release validationはNode 20/22/24 package / clean-consumer CI、Redis、Cloudflare local workerd、Firestore Emulatorを通過しました。`v0.9.0` GitHub/source releaseはsuccessです。npm publicationは完了しておらず、#6でdeferredを維持します。
-
 ## Active target: v0.10.0 — operational usability
 
-主対象は **#76、#82、#99** です。
+主対象は **#76、#99、#82**。新しいdependency evidenceが出ない限り、この順序で進めます。
+
+1. **#76 operational usage snapshot** でbounded read-only vocabularyとruntime identity surfaceを確定
+2. **#99 settlement outcome normalization / diagnostics** でinvalid integration inputとbackend unavailabilityを区別
+3. **#82 threshold / exhaustion signals** を、確定したscoped remaining / exhaustion semanticsへcomposition
 
 second accounting truthを作らず、applicationが次を区別できるbounded operational visibilityを目標にします。
 
@@ -81,14 +77,25 @@ second accounting truthを作らず、applicationが次を区別できるbounded
 - vector dimensionの意味を混ぜない
 - consumer mapping bugはv0.10を待たず即fix可
 
+既存の `UsageObserver` / `projectUsageEvent()` は重要なevidenceですが、それだけで #76 / #82 / #99 はcloseしません。v0.10では、各Issueが要求する明示的operational snapshot、bounded diagnostics / normalization、threshold / exhaustion contractを完成させます。
+
 完了済み隣接work #108 / #109 / #110はnon-blockingです。MCPUsageがentitlement truth、pricing catalog、billing ledger、subscription lifecycleを所有する方向には広げません。
 
-## v0.11.0 — completion / distribution / compatibility freeze
+## v0.11.0 — accounting contract / completion / distribution / compatibility freeze
 
 v0.11はfeature expansionではなくfinal pre-v1 completion lineです。
 
+実行優先順:
+
+1. **#152 cost-bearing operation reservation lifecycle** — provider-backed cost-bearing work、shared accounting scope、idempotent retry、ambiguous outcomeのconservative handling、proven-no-effect releaseを既存reserve/liability/settlement modelで表現できるかproofし、不足時のみAPI追加
+2. **#105 Node support floor** と **#106 persisted-state compatibility** — runtime / storage compatibility boundaryをfreeze
+3. **#24 Cloudflare real-operation boundary** — real credential rotationとhonestなplatform-limit evidence statementを完了
+4. **#6 first npm publication** — public contract freeze後、separate explicit authorizationがある場合のみ実施
+5. **public API/name freeze + final release evidence**
+
 次をresolveまたは明示scopeします。
 
+- **#152 cost-bearing operation lifecycle:** entitlement / pricing / provider policyはapplication-ownedのまま、reservation、shared accounting scope、idempotency、liability、settlement、refund/no-effect mappingをv1前に明文化
 - **#24 Cloudflare real-operation boundary:** credential rotationと自然に得られるplatform-limit / overload evidence。proof目的でFree-plan exhaustionを人工的に作らない
 - **#6 first npm publication:** separate explicit authorizationがある場合のみ実施し、name/ownership、Trusted Publishingまたはbootstrap credential、registry metadata、provenance、package contents、clean registry installを確認
 - **#105 Node support floor:** v1のNode.js support floorを決め、`engines` / CI / docs / consumer evidenceを同期
@@ -108,6 +115,7 @@ v1.0前に:
 - material capabilityは全てadopt / defer / excludeを明示
 - adopted capabilityはfailure semantics、concurrency/provider evidence、packaging coverage、英日docsを完備
 - public package名、export、lifecycle semantics、Store support claim、Node support、MCP integration boundaryをfreeze
+- cost-bearing operation semanticsをfrozen accounting lifecycleへ明示mapping
 - first npm publicationを別途authorizationの下で実地検証
 - persisted-state compatibility / rollback boundaryを文書化
 - final production evidenceをgreenにする
@@ -123,13 +131,14 @@ v1.0前に:
 | #81 operation reconciliation/status | v0.8 | Adopted / released |
 | #116〜#127 repository safety hardening | v0.9 | Completed / released |
 | #143 Firestore vector growth-vs-settle race | v0.9 | Completed release blocker |
-| #76 operational usage snapshot | v0.10 | Active |
-| #82 threshold/exhaustion signals | v0.10 | Active |
-| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Active |
-| #24 Cloudflare real operational evidence | v0.11 | Final completion evidence |
+| #76 operational usage snapshot | v0.10 | Active / first |
+| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Active / second |
+| #82 threshold/exhaustion signals | v0.10 | Active / third |
+| #152 cost-bearing operation reservation lifecycle | v0.11 | Accounting-contract freeze |
+| #105 Node.js support floor | v0.11 | Runtime support freeze |
+| #106 persisted-store compatibility | v0.11 | Storage compatibility freeze |
+| #24 Cloudflare real operational evidence | v0.11 | Final production evidence |
 | #6 first npm publication | v0.11 | **Open; separate explicit authorization必須** |
-| #105 Node.js support floor | v0.11 | v1前にfreeze |
-| #106 persisted-store compatibility | v0.11 | v1前にfreeze |
 
 ## Release policy
 
