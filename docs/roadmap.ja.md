@@ -24,7 +24,7 @@ v0.6 progressive growth
  -> v0.8 scalar operation reconciliation
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [ACTIVE]
- -> v0.11 accounting/production/distribution/API freeze
+ -> v0.11 accounting/completion/distribution/API freeze
  -> v1.0 stable promotion
 ```
 
@@ -50,6 +50,14 @@ v0.6 progressive growth
 | **v0.7.0** | `VectorUsageControl` / `VectorUsageStore` によるoptional atomic heterogeneous vector usage | Release済み / Adopted |
 | **v0.8.0** | `OperationReconciliationStore` によるoptional read-only scalar operation reconciliation | Release済み / Adopted |
 | **v0.9.0** | repository-wide safety hardening #116〜#127 + Firestore race blocker #143 | **Release済み / Complete** |
+
+### v0.9.0 release evidence
+
+v0.9ではpublic accounting modelを変更せず、capability同士の交差部をhardeningしました。retained-budget growth integrity、安全なexpiry/timer arithmetic、mutation前validation、MCP unresolved growth保持、Firestore expired-liable reconciliation、Cloudflare remote/maintenance validation、malformed policy fail-close、vector maintenance quota integrity、Redis recovery overflow、pre-auth reconciliation handling、strict boolean authorization、cross-capability regression matrixを含みます。
+
+#143は `vector-growth-vs-settle-race` のinvariantを弱めず解消しました。Firestore outer retryは definitive transaction abortである `ABORTED` / gRPC 10 と HTTP 409だけをbounded jittered backoffでretryします。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはouter retry allow-listへ追加していません。
+
+release validationはNode 20/22/24 package / clean-consumer CI、Redis、Cloudflare local workerd、Firestore Emulatorを通過しました。`v0.9.0` GitHub/source releaseはsuccessです。npm publicationは完了しておらず、#6でdeferredを維持します。
 
 ## Active target: v0.10.0 — operational usability
 
