@@ -176,6 +176,12 @@ jobs:
           done
           version="$(node -p "require('./packages/core/package.json').version")"
           core_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-${version}.tgz")"
+          grep -qx 'package/dist/operational.js' <<<"$core_listing"
+          grep -qx 'package/dist/operational.d.ts' <<<"$core_listing"
+          grep -qx 'package/dist/settlement-outcomes.js' <<<"$core_listing"
+          grep -qx 'package/dist/settlement-outcomes.d.ts' <<<"$core_listing"
+          grep -qx 'package/dist/thresholds.js' <<<"$core_listing"
+          grep -qx 'package/dist/thresholds.d.ts' <<<"$core_listing"
           grep -qx 'package/dist/store-conformance.js' <<<"$core_listing"
           grep -qx 'package/dist/store-conformance.d.ts' <<<"$core_listing"
           grep -qx 'package/dist/progressive-store-conformance.js' <<<"$core_listing"
@@ -227,6 +233,19 @@ jobs:
           node --input-type=module <<'NODE'
           import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
           import {
+            UsageOperationalMonitor,
+            createUsageRuntimeIdentity,
+            projectScopedQuota,
+          } from 'mcp-usage-control/operational';
+          import {
+            InvalidSettlementOutcomeError,
+            normalizeSettlementOutcome,
+          } from 'mcp-usage-control/settlement-outcomes';
+          import {
+            didUsageQuotaThresholdCross,
+            evaluateUsageQuotaThreshold,
+          } from 'mcp-usage-control/thresholds';
+          import {
             assertUsageStoreConformance,
             runOperationReconciliationStoreConformance,
             runProgressiveUsageStoreConformance,
@@ -250,6 +269,13 @@ jobs:
           if (![
             MemoryUsageStore,
             UsageControl,
+            UsageOperationalMonitor,
+            createUsageRuntimeIdentity,
+            projectScopedQuota,
+            InvalidSettlementOutcomeError,
+            normalizeSettlementOutcome,
+            didUsageQuotaThresholdCross,
+            evaluateUsageQuotaThreshold,
             assertUsageStoreConformance,
             runOperationReconciliationStoreConformance,
             runProgressiveUsageStoreConformance,
