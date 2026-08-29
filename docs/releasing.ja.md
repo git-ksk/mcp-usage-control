@@ -30,7 +30,19 @@ pre-1.0 minorでもbreaking changeはrelease notesで明示します。
 
 ## Supported Node.js runtime
 
-v1のsupported runtime matrixは **Node.js 22 / 24** で、package metadataは `engines.node >=22` を宣言します。Node.js 20はEOL済みでsupported v1 runtimeではありません。#160でlegacy required-check policyを移行するまでは `test (20)` CI jobをcompatibility-only evidenceとして一時的に残せますが、support evidenceとして扱いません。
+v1のsupported runtime matrixは **Node.js 22 / 24** で、package metadataは `engines.node >=22` を宣言します。Node.js 20はEOL済みでsupported v1 runtimeではありません。legacy required contextの `test (20)` はcompatibility-only evidenceとして残しますが、support evidenceとして扱いません。
+
+## Required release-safety gate
+
+`main`では既存のprotected check名を維持したまま、その意味を次のように固定します。
+
+- `test (20)` はlegacy compatibility required contextです。Node / Redis / package matrix全体がsuccessした場合だけsuccessします。
+- `test (22)` はv1向けaggregate release-safety required contextです。Node / Redis / package / tarball / clean-consumer matrix全体に加え、関連path変更時はCloudflare workerdとFirestore Emulator evidenceも必須です。
+- provider jobの`skipped`をsuccess相当として認めるのは、path classifierがそのproviderを明示的に非該当と判定した場合だけです。
+- docs-only変更ではlightweight Node pathを使い、provider integrationをskipしてもrequired contextがpendingのまま残らないようにします。
+- diff baseが取得できない、または変更pathを安全に判定できない場合は全release-safety evidenceを保守的に実行します。
+
+standaloneの `cloudflare-safety` / `firestore-safety` workflowはprovider診断用evidenceとして維持します。一方、protectedなaggregate `test (22)` 自体が必要なprovider evidenceを内包するため、branch protectionへprovider contextを個別追加しなくてもrelease-critical evidenceをbypassできません。
 
 ## Pre-1.0 release gate
 
@@ -50,18 +62,17 @@ pre-1.0 GitHub/source releaseは、対象surfaceについて次を満たした�
 - `pnpm-lock.yaml` commit済み、CIは `--frozen-lockfile`。
 - npm-pack tarballをsmoke testし、workspace protocol dependencyがartifactへ残らない。
 - releaseでsupportする全Node.js majorのclean-consumer importがpass。
-- Cloudflareをlocal workerd、FirestoreをLocal Emulator Suiteでintegration testし、deployed dogfood要件はadapterごとに扱う。
+- aggregate path classifierが必要と判定した場合にCloudflareをlocal workerd、FirestoreをLocal Emulator Suiteでintegration testする。
 - tagged codeと英日user documentationが一致。
 
 ## GitHub/source release procedure
 
 1. package version、changelog、英日docsを更新。
-2. Node.js 22 / 24のsupported CI evidence + 実Redis + frozen dependencyを実行。legacy branch policyがrequiredとしている間だけ、compatibility-onlyなNode 20 jobもresolveさせる。
-3. 対象codeについてCloudflare workerd integrationとFirestore Emulator integrationを実行。
-4. public packageをpackしtarball contentを検証。
-5. release PRを `main` へmerge。
-6. test済みexact commitへ `vX.Y.Z` tag。
-7. 同tag / changelog entryからGitHub Releaseを作成。
+2. release PRでaggregate `test (22)` を必須とし、Node.js 22 / 24、実Redis、package / tarball / clean-consumer、該当provider integrationのevidenceを確認する。legacy `test (20)` がprotectedな間はcompatibility-only contextとしてresolveさせる。
+3. public CI外にあるadapter固有のdeployed dogfood要件を確認する。
+4. release PRを `main` へmerge。
+5. test済みexact commitへ `vX.Y.Z` tag。
+6. 同tag / changelog entryからGitHub Releaseを作成。
 
 `GitHub Release` workflowはnpm publishを行いません。
 

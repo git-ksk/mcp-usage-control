@@ -30,7 +30,19 @@ Breaking changes are called out prominently even when they occur in a pre-1.0 mi
 
 ## Supported Node.js runtime
 
-The supported v1 runtime matrix is **Node.js 22 and 24**, with package metadata declaring `engines.node >=22`. Node.js 20 is EOL and is not a supported v1 runtime. A temporary `test (20)` CI job may remain as compatibility-only evidence until #160 migrates the legacy required-check policy; it must not be cited as support evidence.
+The supported v1 runtime matrix is **Node.js 22 and 24**, with package metadata declaring `engines.node >=22`. Node.js 20 is EOL and is not a supported v1 runtime. The legacy required context `test (20)` remains compatibility-only evidence and must not be cited as support evidence.
+
+## Required release-safety gate
+
+`main` keeps the existing protected check names while making their meaning explicit:
+
+- `test (20)` is the legacy compatibility required context. It succeeds only after the complete Node/Redis/package matrix succeeds.
+- `test (22)` is the aggregate v1 release-safety required context. It requires the complete Node/Redis/package/tarball/clean-consumer matrix and, when relevant paths changed, Cloudflare workerd and Firestore Emulator evidence.
+- provider jobs are accepted as `skipped` only when the path classifier explicitly marks them non-applicable.
+- docs-only changes take the lightweight Node path and skip provider integration without leaving either required context pending.
+- a missing/unknown diff base runs all release-safety evidence conservatively.
+
+Standalone `cloudflare-safety` and `firestore-safety` workflows remain useful diagnostic evidence, but the protected aggregate `test (22)` context no longer depends on administrators separately adding those provider contexts to branch protection.
 
 ## Pre-1.0 release gate
 
@@ -50,18 +62,17 @@ A pre-1.0 GitHub/source release is ready only when the applicable surfaces satis
 - `pnpm-lock.yaml` is committed and CI uses `--frozen-lockfile`;
 - npm-pack tarballs are smoke-tested and do not contain workspace protocol dependencies;
 - clean-consumer imports pass on every supported Node.js major selected for the release;
-- Cloudflare is exercised against local workerd and Firestore against the Local Emulator Suite; deployed dogfood requirements remain adapter-specific;
+- Cloudflare is exercised against local workerd and Firestore against the Local Emulator Suite whenever the aggregate path classifier requires them;
 - English/Japanese user documentation matches the tagged code.
 
 ## GitHub/source release procedure
 
 1. update package versions, changelog, and bilingual docs;
-2. run the supported Node.js 22/24 CI evidence with real Redis and frozen dependencies; while the legacy branch policy still requires it, also allow the explicitly compatibility-only Node 20 job to resolve;
-3. run Cloudflare workerd integration and Firestore Emulator integration for the tagged code where applicable;
-4. pack all public packages and inspect tarball contents;
-5. merge the release PR to `main`;
-6. tag the exact tested commit as `vX.Y.Z`;
-7. create the GitHub Release from the same tag and changelog entry.
+2. require aggregate `test (22)` release-safety evidence for the release PR, including Node.js 22/24, real Redis, package/tarball/clean-consumer checks, and applicable provider integration; allow the compatibility-only `test (20)` context to resolve while it remains protected;
+3. verify any adapter-specific deployed dogfood requirement that is outside public CI;
+4. merge the release PR to `main`;
+5. tag the exact tested commit as `vX.Y.Z`;
+6. create the GitHub Release from the same tag and changelog entry.
 
 The `GitHub Release` workflow never publishes to npm.
 
