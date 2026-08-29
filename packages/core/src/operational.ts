@@ -1,7 +1,7 @@
 import type { UsageEvent, UsageObserverHandler } from './observability.js';
 
 export const MCP_USAGE_CONTROL_PACKAGE_NAME = 'mcp-usage-control';
-export const MCP_USAGE_CONTROL_VERSION = '0.9.0';
+export const MCP_USAGE_CONTROL_VERSION = '0.10.0';
 
 export type UsageRuntimeProvider = 'memory' | 'redis' | 'firestore' | 'cloudflare' | 'custom';
 export type UsageRuntimeCapability =
