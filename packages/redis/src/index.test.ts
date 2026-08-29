@@ -493,12 +493,15 @@ integration('RedisUsageStore', () => {
   });
 
   it('does not reclaim a reservation whose lease was renewed', async () => {
-    const control = new UsageControl(new RedisUsageStore(client), policy(1, 50));
+    // Keep a wide CI scheduling margin while still proving renewal crosses the
+    // original deadline. Tiny sub-100ms windows can expire legitimately if a
+    // busy runner delays the post-renew probe beyond the renewed TTL.
+    const control = new UsageControl(new RedisUsageStore(client), policy(1, 500));
     const first = await control.reserve(request('op-a'));
     if (!first.allowed) throw new Error('expected admission');
-    await sleep(30);
-    await first.lease.renew(120);
-    await sleep(50);
+    await sleep(100);
+    await first.lease.renew(5_000);
+    await sleep(600);
     expect(await control.reserve(request('op-b'))).toEqual({
       allowed: false, reason: 'quota_exceeded', limitingBudgetKey: 'month:user-1:2026-08', remaining: 0,
     });
