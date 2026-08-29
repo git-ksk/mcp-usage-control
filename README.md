@@ -16,7 +16,7 @@ The project focuses on the boundary between execution and usage accounting. It i
 
 **The packages are not published to npm yet.**
 
-`v0.12.0` is the current GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
+`v0.13.0` is the current GitHub/source release baseline. Use a repository checkout or the validated GitHub Release tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,7 +66,7 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests in the v0.13 preparation branch are aligned at `0.13.0`. **v0.12.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.13.0`. **v0.13.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
 **Current execution order:** v0.12 is the released baseline. A bounded **v0.13 v1-blocker closure** tranche now hardens authoritative flow expiry, renewal uncertainty, historical budget retirement, vector reserve reconciliation, input bounds, shipped documentation, Node 22/24 CI, and peer compatibility before stable promotion. Issue #6 remains a separate npm-publication gate that requires explicit authorization.
 
@@ -330,7 +330,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.12.0` is the current released source baseline. The working package manifests are `0.13.0` for the v1-blocker closure tranche; v1.0 promotion follows after that tranche is green. Issue #6 remains a separate explicitly authorized npm-publication gate.
+`v0.13.0` is the current released source baseline. The v1-blocker closure tranche is complete and v1.0 is the next feature-free stable-promotion milestone. Issue #6 remains a separate explicitly authorized npm-publication gate.
 
 **npm publication remains a separate explicitly authorized operation and has not been completed.**
 

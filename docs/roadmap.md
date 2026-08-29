@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.12.0 is the current GitHub/source release baseline.** The v0.13 preparation branch aligns all five publishable manifests at `0.13.0`, requires Node.js 22+, and remains unpublished to npm.
+**v0.13.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `0.13.0`, require Node.js 22+, and remain unpublished to npm.
 
 First npm publication is a separately authorized operation tracked by #6. Source-release progress never implies registry publication.
 
@@ -24,7 +24,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
- -> v0.13 v1-blocker closure [IN PROGRESS]
+ -> v0.13 v1-blocker closure [RELEASED]
  -> v1.0 feature-free stable promotion
 ```
 

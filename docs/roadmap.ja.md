@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v0.12.0がcurrent GitHub/source release baselineです。** v0.13 preparation branchではpublish可能な5 package manifestを `0.13.0` に揃え、Node.js 22+をrequireし、npmにはまだ公開していません。
+**v0.13.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.13.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
 
 first npm publicationは#6で追跡するseparate explicit authorization必須の操作です。source-release progressがregistry publicationを意味することはありません。
 
@@ -24,7 +24,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
- -> v0.13 v1-blocker closure [IN PROGRESS]
+ -> v0.13 v1-blocker closure [RELEASED]
  -> v1.0 feature-free stable promotion
 ```
 
