@@ -32,6 +32,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [MCP protocol conformance](mcp-conformance.md) — the current protocol/SDK baseline, fresh-request multi-round proof, and horizontal-scale/session-affinity assumptions.
 - [Progressive MCP growth](progressive-mcp-integration.md) — safe small-reserve/top-up/stop pattern for incrementally metered MCP work.
 - [Atomic heterogeneous usage vectors](vector-usage.md) — v0.7 contract for atomically reserving, growing, and settling unlike units in one logical operation.
+- [Cost-bearing operations](cost-bearing-operations.md) — v0.11 mapping for bounded provider cost, shared accounting scopes, billable retries, conservative ambiguity, and proven-no-effect release.
 - [Vector MCP integration](vector-mcp-integration.md) — explicit MCP lifecycle for safely consuming vector capacity.
 - [MCP Tasks accounting](mcp-tasks-accounting.md) — the long-running task accounting state machine and its separation from business task/result replay.
 - [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
@@ -65,7 +66,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 
 For pull requests that change only `docs/**` and Markdown (`*.md`) files, CI first classifies the change and then completes the `test (20)` / `test (22)` / `test (24)` matrix checks through a lightweight path.
 
-That path does not start Redis, check out the repository in the matrix jobs, set up Node.js/pnpm, install dependencies, run tests, pack packages, or install the clean consumer project. If any non-documentation path such as source code, workflows, package manifests, lockfiles, or configuration changes, the full Node.js 20/22/24 CI matrix runs the same build/test/package/clean-consumer evidence.
+That path does not start Redis, check out the repository in the matrix jobs, set up Node.js/pnpm, install dependencies, run tests, pack packages, or install the clean consumer project. If any non-documentation path such as source code, workflows, package manifests, lockfiles, or configuration changes, the full Node.js 20/22/24 CI matrix runs the same build/test/package/clean-consumer evidence. Node 22/24 are the supported v1 runtime evidence; Node 20 remains compatibility-only while its current required check context is still protected.
 
 ## Project policies
 

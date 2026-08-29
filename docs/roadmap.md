@@ -12,11 +12,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.10.0 is the current GitHub/source release baseline.** It adds bounded operational usability and dogfood diagnostics while preserving the existing accounting model.
+**v0.10.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.10.0`, require Node.js 22+, and remain unpublished to npm.
 
-All five publishable package manifests are aligned at `0.10.0`. **The packages are not published to npm.** First registry publication remains a separately authorized operation tracked by #6.
-
-The active product target is **v0.11.0 / #152 -> #157 + #166 -> #105 + #106 -> #160 + #161 -> #24 -> #6**, followed by **v1.0.0** as a feature-free stable promotion.
+First npm publication is a separately authorized operation tracked by #6. Source-release progress never implies registry publication.
 
 ```text
 v0.6 progressive growth [RELEASED]
@@ -25,7 +23,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/distribution/API freeze [ACTIVE]
- -> v1.0 stable promotion
+ -> v1.0 feature-free stable promotion
 ```
 
 ## Safety boundary that must not regress
@@ -33,16 +31,17 @@ v0.6 progressive growth [RELEASED]
 Across every remaining release:
 
 - admission comparison and reservation stay one authoritative Store transition;
-- all participating budgets reserve atomically or none do;
-- pending vs cost-liable expiry semantics remain distinct and conservative;
+- all participating budgets/dimensions reserve atomically or none do;
+- pending and cost-liable expiry remain distinct, with unknown liable usage conservative;
 - replay/idempotency identity remains scoped to one logical operation;
 - ambiguous state-changing outcomes are not blindly retried;
-- scalar/vector accounting never converts unlike dimensions into a synthetic total;
+- unlike scalar/vector dimensions are never collapsed into a synthetic total;
 - MCP multi-round resume remains integrity-verified, binding-aware, and one-time;
-- observability remains non-authoritative and cannot change enforcement outcomes;
-- provider durability, time, HA, and lost-ACK limits remain explicit rather than upgraded into stronger claims without evidence.
+- observability remains non-authoritative;
+- provider durability/time/HA/lost-ACK limits remain explicit;
+- entitlement, billing, pricing catalogs, provider-health policy, and financial reconciliation remain application-owned.
 
-## Completed pre-v1 capability decisions
+## Released capability line
 
 | Release | Decision | Status |
 | --- | --- | --- |
@@ -50,86 +49,73 @@ Across every remaining release:
 | **v0.7.0** | Optional atomic heterogeneous vector usage through `VectorUsageControl` / `VectorUsageStore` | Released / adopted |
 | **v0.8.0** | Optional read-only scalar operation reconciliation through `OperationReconciliationStore` | Released / adopted |
 | **v0.9.0** | Repository-wide safety hardening #116-#127 plus Firestore race blocker #143 | Released / complete |
-| **v0.10.0** | Operational snapshot/runtime identity, canonical settlement diagnostics, scoped threshold/exhaustion helpers | **Released / adopted** |
+| **v0.10.0** | Operational snapshot/runtime identity, canonical settlement diagnostics, scoped threshold/exhaustion helpers | Released / adopted |
 
-### v0.9 safety evidence carried forward
+Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
-v0.9 preserved the public accounting model while hardening capability intersections. It closed the repository-audit safety set #116-#127 and Firestore blocker #143 without weakening `vector-growth-vs-settle-race`.
+## v0.11 progress completed so far
 
-Firestore outer retry remains limited to definitive transaction aborts (`ABORTED` / gRPC 10 and HTTP 409) with bounded jittered backoff. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not added to that retry allow-list.
+### #166 Redis renewed-lease reliability — complete
 
-## v0.10.0 — operational usability [complete]
+The apparent renewal failure was a test-harness race: parallel Vitest files shared one Redis database and independently used `FLUSHDB`. Redis runtime renewal remained based on Redis server `TIME`. Redis test files now run without file parallelism and the renewal proof uses wide timing margins without weakening lease semantics.
 
-Issues **#76 -> #99 -> #82** are complete.
+### #105 Node.js support floor — complete
 
-v0.10 adds three explicit public core subpaths:
+The v1 supported runtime floor is **Node.js 22+**. Node 22/24 are the supported evidence matrix. Node 20 is EOL and remains only as a temporary compatibility-only check context until the protected merge policy can be migrated safely under #160.
 
-- `mcp-usage-control/operational` — process-local bounded lifecycle counters, static runtime identity, and explicit scoped quota projection;
-- `mcp-usage-control/settlement-outcomes` — canonical settlement vocabulary, bounded alias normalization, and distinguishable `invalid_settlement_outcome` diagnostics;
-- `mcp-usage-control/thresholds` — pure threshold evaluation/crossing helpers over an explicitly scoped quota snapshot.
+### #157 Firestore growth-concurrency reliability — complete
 
-The release deliberately does **not** create a second accounting truth:
+The Firestore Emulator can surface `3 INVALID_ARGUMENT: Transaction is invalid or closed.` during progressive-growth contention. The Store does not blanket-retry it.
 
-- operational counters are best-effort/process-local and never enforce quota;
-- active-reservation counts are not inferred from replayable or aggregate lifecycle events;
-- authoritative `remaining` is exposed only after the application selects the exact budget/window;
-- threshold window/reset state and notification delivery remain application-owned;
-- invalid-outcome diagnostics never weaken settlement validation or reveal the raw rejected value;
-- observer/diagnostic sink failure cannot alter admission, liability, renewal, or settlement.
+The integration gate now includes repeated diagnostic stress that distinguishes authoritative stale-cursor rejection from provider ambiguity and resolves only the exact logical increment through the existing idempotency fence. Both same-increment and distinct-increment ambiguity paths have been observed and resolved without weakening one-winner/double-commit invariants.
 
-Release packaging verifies the three new subpaths in npm tarball contents and clean-consumer imports. English/Japanese operational guidance is in [Operational usability](operational-usability.md).
+### #152 cost-bearing operation lifecycle — frozen on existing primitives
 
-A post-release audit found one provider-observer integration gap: Firestore recovery events used a narrower provider-specific observer type while the common recovery event vocabulary omitted `firestore`. That gap was a telemetry/type-integration defect, not an accounting-state defect, and has been corrected before the v0.11 freeze.
+Provider-backed cost-bearing work does not require a new billing-specific public primitive.
 
-## Active target: v0.11.0 — accounting contract / completion / distribution / compatibility freeze
+The v1 composition is:
 
-v0.11 is the final pre-v1 completion line, not another feature-expansion cycle.
+```text
+application resolves trusted caller + accounting scope + pricing
+  -> atomically reserve bounded count/cost exposure
+  -> mark liable immediately before billable dispatch
+  -> grow before any additional billable exposure
+  -> renew while authoritative work/evidence remains active
+  -> settle authoritative actual usage
+```
 
-Execution priority:
+The focused proof covers shared accounting scopes across different callers, atomic count + provider-cost dimensions, maximum exposure, pre-dispatch proven-no-effect release, retry pre-growth, growth denial blocking retry dispatch, conservative post-dispatch ambiguity, settlement bounds, and duplicate operation protection.
 
-1. **#152 cost-bearing operation reservation lifecycle** — prove that the existing reserve/liability/grow/settlement model cleanly covers provider-backed cost-bearing work, shared accounting scopes, idempotent retries, conservative ambiguous outcomes, proven-no-effect release, bounded maximum exposure, variable provider cost, and delayed final usage evidence; add API only if the existing model is insufficient.
-2. **#157 Firestore growth concurrency + #166 Redis renewed-lease timing reliability** — classify provider/test reliability evidence without weakening fail-closed semantics. Firestore `INVALID_ARGUMENT` must not be blanket-retried, and Redis renewal proof must tolerate CI scheduling jitter without weakening the invariant that a successfully renewed live lease remains retained until its renewed deadline.
-3. **#105 Node support floor** and **#106 persisted-state compatibility** — freeze runtime and storage compatibility boundaries.
-4. **#160 release-safety enforcement** and **#161 settlement outcome/public lifecycle typing** — finish merge-policy enforcement for stable provider safety checks, then freeze names, outcome types, errors/status vocabulary, and public lifecycle semantics.
-5. **#24 Cloudflare real-operation boundary** — complete real credential rotation and the final honest platform-limit evidence statement.
-6. **#6 first npm publication** — only with separate explicit authorization, after the public contract is frozen.
-7. **final release evidence** — require the frozen package/runtime/provider matrix to be green before v0.11 closes.
+Opaque application-owned budget keys already represent a shared accounting bucket, so core does not add `subscriptionId`, `billingAccountId`, or `budgetScopeId`. Provider cost uses safe integer/fixed-scale application units. If no defensible maximum exposure or controllable pre-growth boundary exists, the application cannot claim a hard spend cap from this library.
 
-It must resolve or explicitly scope:
+See [Cost-bearing operations](cost-bearing-operations.md).
 
-- entitlement, pricing, subscription state, and provider policy stay application-owned;
-- shared accounting scope, operation identity, liability, settlement, and no-effect/refund mapping for cost-bearing work are explicit;
-- variable provider cost is bounded by maximum pre-reservation or pre-dispatch progressive growth; average expected cost alone is not presented as a hard spend cap;
-- provider retries that may create additional cost exposure reserve/grow before each additional billable dispatch;
-- count quotas and provider-cost budgets remain distinct dimensions where units differ;
-- delayed final provider usage evidence has an honest bounded-support policy rather than silent under-accounting;
-- Firestore recovery observability remains type-compatible with the provider-neutral operational monitor;
-- #157 is classified and resolved/scoped with repeated Emulator evidence and no blanket retry of ambiguous state-changing failures;
-- #166 is classified as test-only scheduling jitter or a real Redis renewal defect, with timing coverage hardened without weakening renewal semantics;
-- Node support, persisted-state upgrade/migration/rollback, and newer-schema fail-closed guarantees are frozen;
-- #160 stable provider safety checks are actually enforced by branch protection/rulesets rather than merely emitted by Actions;
-- all five package names, exports/subpaths, error/status vocabulary, settlement outcome typing, and lifecycle semantics receive the #161 final public-contract review;
-- MCP Tasks / MRTR surfaces are adopted only where upstream stability and equivalent safety proof exist; otherwise they are explicitly deferred;
-- production/package/source-release evidence is green and release-critical provider checks cannot be accidentally bypassed by merge policy;
-- npm publication occurs only if separately authorized and then includes registry/provenance/clean-install verification.
+## Active v0.11 execution order
 
-No unresolved issue classified as a v1 blocker may remain when v0.11 closes.
+The remaining sequence is now:
 
-## What “v1 complete” means
+1. **#106 persisted-state compatibility** — freeze Redis, Firestore, and Cloudflare schema/version ownership, upgrade behavior, downgrade/rollback safety, newer-schema fail-closed behavior, and operator reset/migration boundaries.
+2. **#161 public API/name freeze** — decide the final settlement-outcome typing boundary; review scalar/vector parity, package names, exports/subpaths, error/status vocabulary, lifecycle terminology, and MCP Tasks/MRTR scope.
+3. **#160 release-safety enforcement** — finish the required-check/ruleset policy so applicable supported Node/package/Redis/Cloudflare/Firestore evidence cannot be accidentally bypassed. Path-aware `cloudflare-safety` and `firestore-safety` checks already exist; the administrative branch-protection write remains pending because the current connector is read-only for that mutation.
+4. **#24 Cloudflare real-operation boundary** — execute documented real credential rotation and finalize the honest v1 platform-limit claim. Do not burn shared Free-plan quota solely to manufacture an overload/exhaustion event.
+5. **final v0.11 release evidence** — supported Node/package checks, Redis, Cloudflare workerd, Firestore Emulator, tarball/clean-consumer validation, bilingual docs, and final public-contract review all green with no unresolved v1 blocker.
+6. **#6 first npm publication** — only if separately explicitly authorized, after the public contract is frozen. Registry/provenance/clean-install verification is part of that separate operation.
 
-v1.0 is a **stable promotion of an already completed surface**. It should not be the release where unresolved product or accounting questions are decided.
+## v1 completion definition
+
+v1.0 is a **stable promotion of an already completed surface**, not the release where unresolved product/accounting questions are decided.
 
 Before v1.0:
 
 - every material capability has an explicit adopt/defer/exclude decision;
 - adopted capabilities have failure semantics, concurrency/provider evidence, packaging coverage, and bilingual documentation;
-- public package names, exports, lifecycle semantics, Store support claims, Node support, and MCP integration boundaries are frozen;
-- cost-bearing operation semantics are explicitly mapped to the frozen accounting lifecycle;
-- first npm publication has been exercised under separate authorization;
-- persisted-state compatibility and rollback boundaries are documented;
-- final production evidence is green;
-- pre-v1 reliability follow-ups such as #157 and #166 are closed or explicitly scoped with evidence;
-- release-critical CI/provider evidence is represented by required stable safety checks or an equally strong branch-protection policy.
+- package names, exports, lifecycle semantics, Store support claims, Node support, and MCP integration boundaries are frozen;
+- cost-bearing work is mapped to the frozen accounting lifecycle without adding billing authority to core;
+- persisted-state upgrade/rollback boundaries are documented and tested;
+- release-critical evidence is protected by required stable safety checks or an equally strong branch policy;
+- Cloudflare production claims match observed evidence;
+- final source/package/provider evidence is green;
+- no issue remains classified as a v1 blocker.
 
 **v1.0 itself should add no new feature or accounting model.**
 
@@ -142,25 +128,23 @@ Before v1.0:
 | #81 operation reconciliation/status | v0.8 | Adopted / released |
 | #116-#127 repository safety hardening | v0.9 | Completed / released |
 | #143 Firestore vector growth-vs-settle race | v0.9 | Completed release blocker |
-| #76 operational usage snapshot | v0.10 | Completed / released |
-| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Completed / released |
-| #82 threshold/exhaustion signals | v0.10 | Completed / released |
-| #152 cost-bearing operation reservation lifecycle | v0.11 | **Active / accounting-contract freeze** |
-| #157 Firestore progressive growth-concurrency reliability | v0.11 | **Pre-v1 reliability evidence** |
-| #166 Redis renewed-lease timing reliability | v0.11 | **Pre-v1 reliability evidence** |
-| #105 Node.js support floor | v0.11 | Runtime support freeze |
-| #106 persisted-store compatibility | v0.11 | Storage compatibility freeze |
-| #160 required release-safety enforcement | v0.11 | **Workflow foundation merged; branch-policy enforcement pending** |
-| #161 settlement/public lifecycle typing freeze | v0.11 | **Public API/name freeze** |
-| #24 Cloudflare real operational evidence | v0.11 | Final production evidence |
-| #6 first npm publication | v0.11 | **Open; separate explicit authorization required** |
+| #76 / #99 / #82 operational usability | v0.10 | Completed / released |
+| #166 Redis renewed-lease reliability | v0.11 | **Completed** |
+| #105 Node.js support floor | v0.11 | **Completed; Node 22+** |
+| #157 Firestore progressive growth concurrency | v0.11 | **Completed; diagnostic stress in gate** |
+| #152 cost-bearing operation lifecycle | v0.11 | **Frozen on existing vector/growth lifecycle** |
+| #106 persisted-store compatibility | v0.11 | **Active storage compatibility freeze** |
+| #161 settlement/public lifecycle typing | v0.11 | **Pending public API/name freeze** |
+| #160 required release-safety enforcement | v0.11 | **Workflow foundation complete; branch-policy enforcement pending** |
+| #24 Cloudflare real operational evidence | v0.11 | **Pending final production evidence** |
+| #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization required** |
 
 ## Release policy
 
-- One release gate must not silently change runtime/accounting semantics merely to make release mechanics easier.
+- Release mechanics must not silently change accounting semantics.
 - GitHub/source releases and npm publication remain independently authorized operations.
-- A GitHub/source release does not imply registry publication.
-- Release documentation describes observed provider evidence, not stronger guarantees than tests and deployment profiles prove.
-- Stable `cloudflare-safety` / `firestore-safety` checks now exist on every PR, but #160 is not complete until required merge policy enforces the applicable release-safety evidence together with the supported Node/package gate.
+- Provider claims must not exceed observed/tested evidence.
+- A GitHub/source release never implies registry publication.
+- Stable provider safety checks must be enforced by merge policy before stable promotion, not merely emitted by Actions.
 
-See [Release policy](releasing.md), [v1.0 readiness review](v1-readiness.md), and provider-specific documentation before production deployment.
+See [Release policy](releasing.md), [v1.0 readiness review](v1-readiness.md), [Cost-bearing operations](cost-bearing-operations.md), and provider-specific documentation before production deployment.

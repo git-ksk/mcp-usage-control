@@ -66,9 +66,10 @@ protectTool()
 - [Project positioning](positioning.ja.md) — failure-safeなtransactional enforcementへ集中する理由、競争上の境界、coreへ入れないもの
 - [Architecture](architecture.ja.md) — reserve、`markLiable()`、settle、retry、crash時の考え方
 - [MCP protocol conformance](mcp-conformance.ja.md) — current protocol / SDK baseline、fresh-request multi-round proof、horizontal scale / session affinityの前提
-- [Progressive MCP growth](progressive-mcp-integration.ja.md)
-- [Atomic heterogeneous usage vector](vector-usage.ja.md) — 異種unitを1 logical operationでatomicにreserve / grow / settleするv0.7 contract。
-- [Vector MCP integration](vector-mcp-integration.ja.md) — MCPでvector capacityを安全に使うexplicit lifecycle pattern。 — incrementally metered MCP workでのsmall reserve / top-up / safe stop pattern。
+- [Progressive MCP growth](progressive-mcp-integration.ja.md) — incrementally metered MCP workでのsmall reserve / top-up / safe stop pattern
+- [Atomic heterogeneous usage vector](vector-usage.ja.md) — 異種unitを1 logical operationでatomicにreserve / grow / settleするv0.7 contract
+- [Cost-bearing operation](cost-bearing-operations.ja.md) — bounded provider cost、shared accounting scope、billable retry、conservative ambiguity、proven-no-effect releaseを既存contractへ安全にmappingするv0.11方針
+- [Vector MCP integration](vector-mcp-integration.ja.md) — MCPでvector capacityを安全に使うexplicit lifecycle pattern
 - [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
 - [Operation reconciliation / status](operation-reconciliation.ja.md) — v0.8 read-only scalar operation state語彙、fail-closed ambiguity boundary、Store別support matrix、portable conformance
@@ -101,7 +102,7 @@ protectTool()
 
 `docs/**` とMarkdown (`*.md`) だけを変更したPull Requestでは、CIは変更範囲を判定したあと `test (20)` / `test (22)` / `test (24)` のmatrix checkを軽量pathで終了します。
 
-この場合はRedis起動、matrix jobでのcheckout、Node.js / pnpm setup、dependency install、test、package pack、clean consumer installを実行しません。source code、workflow、package manifest、lockfile、configなどMarkdown以外の変更が1つでも含まれる場合は、Node.js 20 / 22 / 24のfull CI matrixで同じbuild / test / package / clean-consumer evidenceを実行します。
+この場合はRedis起動、matrix jobでのcheckout、Node.js / pnpm setup、dependency install、test、package pack、clean consumer installを実行しません。source code、workflow、package manifest、lockfile、configなどMarkdown以外の変更が1つでも含まれる場合は、Node.js 20 / 22 / 24のfull CI matrixで同じbuild / test / package / clean-consumer evidenceを実行します。v1のsupported runtime evidenceはNode 22 / 24で、Node 20はcurrent required check contextを維持するためのcompatibility-onlyです。
 
 ## Project policies
 
