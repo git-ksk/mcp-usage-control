@@ -92,6 +92,88 @@ async function testProgressiveConformance() {
   assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
 }
 
+async function testScalarGrowthConcurrencyStress() {
+  const store = storeFor('scalar_growth_concurrency_stress', {
+    cleanupBatchSize: 0,
+    expiryGraceMs: 0,
+  });
+  const iterations = 24;
+
+  for (let index = 0; index < iterations; index += 1) {
+    const sameBudget = `growth:stress:same:${index}`;
+    const same = await store.reserve({
+      request: request(`growth-stress-same-${index}`),
+      units: 1,
+      budgets: [{ key: sameBudget, limit: 2 }],
+      ttlMs: 60_000,
+    });
+    assert.equal(same.accepted, true, `same-increment stress admission ${index} must succeed`);
+    if (!same.accepted) throw new Error(`same-increment stress admission ${index} failed`);
+    assert.equal(typeof same.reservation.growthCursor, 'string');
+
+    const sameInput = {
+      reservationId: same.reservation.id,
+      incrementId: `same-inc-${index}`,
+      expectedGrowthCursor: same.reservation.growthCursor,
+      additionalUnits: 1,
+      budgets: [{ key: sameBudget, limit: 2 }],
+    };
+    const sameResults = await Promise.all([
+      store.growReservation(sameInput),
+      store.growReservation(sameInput),
+    ]);
+    assert.equal(
+      sameResults.filter(result => result.accepted && result.replayed).length,
+      1,
+      `same increment ${index} must replay exactly once`,
+    );
+    assert.equal(
+      sameResults.filter(result => result.accepted && !result.replayed).length,
+      1,
+      `same increment ${index} must commit exactly once`,
+    );
+
+    const distinctBudget = `growth:stress:distinct:${index}`;
+    const distinct = await store.reserve({
+      request: request(`growth-stress-distinct-${index}`),
+      units: 1,
+      budgets: [{ key: distinctBudget, limit: 3 }],
+      ttlMs: 60_000,
+    });
+    assert.equal(distinct.accepted, true, `distinct-increment stress admission ${index} must succeed`);
+    if (!distinct.accepted) throw new Error(`distinct-increment stress admission ${index} failed`);
+    const cursor = distinct.reservation.growthCursor;
+    assert.equal(typeof cursor, 'string');
+
+    const distinctResults = await Promise.allSettled([
+      store.growReservation({
+        reservationId: distinct.reservation.id,
+        incrementId: `inc-a-${index}`,
+        expectedGrowthCursor: cursor,
+        additionalUnits: 1,
+        budgets: [{ key: distinctBudget, limit: 3 }],
+      }),
+      store.growReservation({
+        reservationId: distinct.reservation.id,
+        incrementId: `inc-b-${index}`,
+        expectedGrowthCursor: cursor,
+        additionalUnits: 1,
+        budgets: [{ key: distinctBudget, limit: 3 }],
+      }),
+    ]);
+    assert.equal(
+      distinctResults.filter(result => result.status === 'fulfilled').length,
+      1,
+      `distinct increments ${index} must have exactly one winner`,
+    );
+    assert.equal(
+      distinctResults.filter(result => result.status === 'rejected').length,
+      1,
+      `distinct increments ${index} must reject exactly one stale cursor`,
+    );
+  }
+}
+
 async function testVectorConformance() {
   const report = await runVectorUsageStoreConformance({
     createStore(scenario) {
@@ -371,6 +453,7 @@ const tests = [
   ['portable UsageStore conformance', testPortableConformance],
   ['operation reconciliation conformance', testReconciliationConformance],
   ['progressive UsageStore conformance', testProgressiveConformance],
+  ['scalar growth concurrency stress', testScalarGrowthConcurrencyStress],
   ['vector UsageStore conformance', testVectorConformance],
   ['vector growth-vs-settle race stress', testVectorGrowthSettleRaceStress],
   ['multi-budget atomicity', testMultiBudgetAtomicity],
