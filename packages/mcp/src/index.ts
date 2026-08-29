@@ -7,6 +7,7 @@ import {
   type UsageLease,
   type UsageLeaseResumeState,
 } from 'mcp-usage-control';
+import { normalizeSettlementOutcome } from 'mcp-usage-control/settlement-outcomes';
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -658,7 +659,8 @@ async function settleOnce(
   executionError?: unknown,
 ): Promise<void> {
   try {
-    await lease.settle(actualUnits, outcome);
+    const canonicalOutcome = normalizeSettlementOutcome(outcome);
+    await lease.settle(actualUnits, canonicalOutcome);
   } catch (settlementError) {
     throw new UsageSettlementError(
       'Usage settlement failed; settlement state may be ambiguous',
