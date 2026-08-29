@@ -16,7 +16,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 publish可能な5 package manifestはすべて `0.10.0` に揃っています。**npmにはまだ公開していません。** first registry publicationは#6で追跡する別途explicit authorization必須の操作です。
 
-active product targetは **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6**、最後に新featureを追加しない **v1.0.0 stable promotion** です。
+active product targetは **v0.11.0 / #152 -> #157 -> #105 + #106 -> #24 -> #6**、最後に新featureを追加しない **v1.0.0 stable promotion** です。
 
 ```text
 v0.6 progressive growth [RELEASED]
@@ -79,26 +79,35 @@ second accounting truthを作らないため、次を明示します。
 
 release packagingでは3つの新subpathをnpm tarball内容とclean-consumer importで検証します。英日guideは [Operational usability](operational-usability.ja.md) を参照してください。
 
+release後監査で、Firestore recovery eventだけprovider-specific observer型を使い、common recovery event vocabularyに `firestore` が入っていないintegration gapを確認しました。これはaccounting stateの不具合ではなくtelemetry/type integration defectであり、v0.11 freeze前に修正します。
+
 ## Active target: v0.11.0 — accounting contract / completion / distribution / compatibility freeze
 
 v0.11はfeature expansionではなくfinal pre-v1 completion lineです。
 
 実行優先順:
 
-1. **#152 cost-bearing operation reservation lifecycle** — provider-backed cost-bearing work、shared accounting scope、idempotent retry、ambiguous outcomeのconservative handling、proven-no-effect releaseを既存reserve/liability/settlement modelで表現できるかproofし、不足時のみAPI追加
-2. **#105 Node support floor** と **#106 persisted-state compatibility** — runtime / storage compatibility boundaryをfreeze
-3. **#24 Cloudflare real-operation boundary** — real credential rotationとhonestなplatform-limit evidence statementを完了
-4. **#6 first npm publication** — public contract freeze後、separate explicit authorizationがある場合のみ実施
-5. **public API/name freeze + final release evidence**
+1. **#152 cost-bearing operation reservation lifecycle** — provider-backed cost-bearing work、shared accounting scope、idempotent retry、ambiguous outcomeのconservative handling、proven-no-effect releaseに加え、bounded maximum exposure、variable provider cost、delayed final usage evidenceまで既存reserve/liability/grow/settlement modelで表現できるかproofし、不足時のみAPI追加
+2. **#157 Firestore progressive growth-concurrency reliability** — Emulatorで観測した `Transaction is invalid or closed` を、fail-closed retry policyやgrowth atomicityを弱めず分類し、final v1 freeze前に反復evidenceを取る
+3. **#105 Node support floor** と **#106 persisted-state compatibility** — runtime / storage compatibility boundaryをfreeze
+4. **#24 Cloudflare real-operation boundary** — real credential rotationとhonestなplatform-limit evidence statementを完了
+5. **#6 first npm publication** — public contract freeze後、separate explicit authorizationがある場合のみ実施
+6. **public API/name freeze + final release evidence** — settlement outcome typingとrelease-safety gate reviewを含む
 
 次をresolveまたは明示scopeします。
 
 - entitlement / pricing / subscription state / provider policyはapplication-ownedのまま維持
 - cost-bearing workのshared accounting scope、operation identity、liability、settlement、no-effect/refund mappingを明文化
+- variable provider costはmaximum pre-reservationまたはadditional billable dispatch前のprogressive growthでboundし、平均見積りだけをhard spend capとして扱わない
+- provider retryが追加cost exposureを作る場合、追加dispatch前にreserve/growする
+- count quotaとprovider-cost budgetの単位が異なる場合は別dimensionのまま保持する
+- delayed final provider usage evidenceはsilent under-accountingではなく、bounded support policyを明示する
+- Firestore recovery observabilityをprovider-neutral operational monitorと型互換にする
+- #157を反復Emulator evidenceで分類・resolve/scopeし、ambiguous state-changing failureのblanket retryは導入しない
 - Node support、persisted-state upgrade/migration/rollback、newer-schema fail-close guaranteeをfreeze
-- 5 package名、exports/subpath、error/status vocabulary、lifecycle semanticsをfinal public-contract review
+- 5 package名、exports/subpath、error/status vocabulary、settlement outcome typing、lifecycle semanticsをfinal public-contract review
 - MCP Tasks / MRTRはstable upstreamと同等safety proofがあるsurfaceだけadoptし、それ以外は明示defer
-- production/package/source-release evidenceをgreenにする
+- production/package/source-release evidenceをgreenにし、release-critical provider checkがmerge policyで誤ってbypassされないようにする
 - npm publicationは別途authorizationがある場合だけ実施し、registry/provenance/clean-installまで確認
 
 v0.11 close時点でv1 blocker分類の未解決Issueを残しません。
@@ -116,6 +125,8 @@ v1.0前に:
 - first npm publicationを別途authorizationの下で実地検証
 - persisted-state compatibility / rollback boundaryを文書化
 - final production evidenceをgreenにする
+- #157などpre-v1 reliability follow-upをclose、またはevidence付きで明示scopeする
+- release-critical CI/provider evidenceをrequired aggregate gate、または同等強度のbranch-protection policyで保護する
 
 **v1.0自体では新featureやaccounting modelを追加しません。**
 
@@ -132,6 +143,7 @@ v1.0前に:
 | #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Completed / released |
 | #82 threshold/exhaustion signals | v0.10 | Completed / released |
 | #152 cost-bearing operation reservation lifecycle | v0.11 | **Active / accounting-contract freeze** |
+| #157 Firestore progressive growth-concurrency reliability | v0.11 | **Pre-v1 reliability evidence** |
 | #105 Node.js support floor | v0.11 | Runtime support freeze |
 | #106 persisted-store compatibility | v0.11 | Storage compatibility freeze |
 | #24 Cloudflare real operational evidence | v0.11 | Final production evidence |
@@ -143,5 +155,6 @@ v1.0前に:
 - GitHub/source releaseとnpm publicationはindependent authorization
 - GitHub/source release成功はregistry publicationを意味しない
 - provider claimは実測/test evidenceを超えて強くしない
+- v1前に、applicableなNode/package・Redis・Cloudflare・Firestore evidenceを表すrequired release-safety aggregate、または同等強度のbranch protectionを導入する
 
 [Release policy](releasing.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、各provider docsをproduction deployment前に確認してください。
