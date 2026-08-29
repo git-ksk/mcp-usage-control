@@ -6,7 +6,7 @@
 
 ## Supported runtime
 
-v1のsupported runtime floorは **Node.js 22+** です。Node.js 20はupstream EOL済みで、supported v1 runtime contractには含めません。現在のbranch protectionがlegacyな `test (20)` checkをrequiredとしているため、repositoryではNode 20 CI jobを一時的にcompatibility-only evidenceとして残します。このjobがgreenでもNode 20 supportを意味しません。
+supported runtime floorは **Node.js 22+** です。CI / release-safety evidenceはNode.js 22 / 24をcoverします。Node.js 20はupstream EOL済みで、supported / required CI contractには含めません。
 
 ## Issueを開く前に
 

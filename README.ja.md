@@ -68,11 +68,11 @@ remaining確認 -> paid work実行 -> counter加算
 
 5 package manifestは `0.13.0` で揃っています。**v0.13.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** v0.12がreleased baselineです。最終v1 auditで見つかった時計・renew uncertainty・historical budget cleanup・vector reserve reconciliation・input bound・shipped docs・Node/peer CIのgapを閉じる、boundedな **v0.13 v1-blocker closure** trancheを先に完了します。#6はseparate npm-publication gateのままでexplicit authorizationが必要です。
+**現在の実行順序:** v0.13.0がreleased source baselineで、boundedなv1-blocker closureは完了済みです。次のrelease milestoneは、このhardened surfaceをfeature追加なしで安定版へ昇格する **v1.0 stable promotion** です。#6はseparate npm-publication gateのままでexplicit authorizationが必要です。
 
 ## Freeze済みv1 candidate scope
 
-**v1 accounting lifecycle / storage contractはv0.11でfreeze済みです。** v0.13は最終auditで見つかったcorrectness / operations / distribution gapを閉じるhardening checkpointで、新しいbilling modelやbase reserve/liability/grow/renew/settle invariantは追加・変更しません。blocker closureがgreenになった後にv1 stable promotionへ進みます。
+**v1 accounting lifecycle / storage contractはv0.11でfreeze済みです。** v0.13で最終auditで見つかったcorrectness / operations / distribution gapを閉じるhardening checkpointを完了し、新しいbilling modelやbase reserve/liability/grow/renew/settle invariantは追加・変更していません。次のmilestoneはfeature-freeなv1 stable promotionです。
 
 | 領域 | current status | 境界 |
 | --- | --- | --- |

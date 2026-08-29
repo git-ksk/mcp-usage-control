@@ -68,11 +68,11 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.13.0`. **v0.13.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** v0.12 is the released baseline. A bounded **v0.13 v1-blocker closure** tranche now hardens authoritative flow expiry, renewal uncertainty, historical budget retirement, vector reserve reconciliation, input bounds, shipped documentation, Node 22/24 CI, and peer compatibility before stable promotion. Issue #6 remains a separate npm-publication gate that requires explicit authorization.
+**Current execution order:** v0.13.0 is the released source baseline and the bounded v1-blocker closure is complete. The next release milestone is **v1.0 as a feature-free stable promotion** of this hardened surface. Issue #6 remains a separate npm-publication gate that requires explicit authorization.
 
 ## Frozen v1 candidate scope
 
-The v1 accounting lifecycle/storage contract was frozen in v0.11. v0.13 is a corrective hardening checkpoint discovered by the final v1 audit: it closes correctness/operations/distribution gaps without introducing a new billing model or changing the base reserve/liability/grow/renew/settle invariants. Stable v1 promotion follows only after these blockers are closed.
+The v1 accounting lifecycle/storage contract was frozen in v0.11. v0.13 completed the corrective hardening checkpoint discovered by the final v1 audit, closing correctness/operations/distribution gaps without introducing a new billing model or changing the base reserve/liability/grow/renew/settle invariants. The next milestone is feature-free v1 stable promotion.
 
 | Area | Current status | Boundary |
 | --- | --- | --- |

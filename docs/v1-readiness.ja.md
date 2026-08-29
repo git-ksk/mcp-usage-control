@@ -125,9 +125,9 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 ## v1 promotion status
 
-v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177〜#184のbounded hardening checkpointを完了しました。exact-SHA release provenance、validated release artifact、supply-chain maintenance、incident response、current operator docs、competitive adopt/defer decision、additive non-authoritative quota-window UX projection、reproducible provider performance/cost evidenceを追加しても、frozen accounting lifecycle / persisted Store contractは再定義していません。
+v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177〜#184のbounded product/operations hardening checkpoint、v0.13.0で#191〜#198のfinal blocker-closure checkpointを完了しました。frozen accounting lifecycle / persisted Store contractは再定義していません。
 
-v1.0はそのhardened surfaceに対するfeature-free stable promotionのままです。
+**stable promotionに必要なsource-release evidenceは揃いました。v1.0はそのhardened surfaceに対するfeature-free stable promotionのままです。**
 
 ## npm distribution boundary
 
@@ -139,11 +139,11 @@ source releaseがregistry publicationを暗黙authorizeすることはありま�
 
 ## v1 promotion rule
 
-v1.0では **新accounting modelを追加しません**。boundedなv0.13 blocker-closure trancheをfrozen model上のfinal corrective checkpointとし、そのrelease evidenceがgreenになってからstable promotionします。npm publicationは#6で独立authorizationのままです。
+v1.0では **新accounting modelを追加しません**。boundedなv0.13 blocker-closure trancheは完了しrelease evidenceもgreenなので、v1.0はfrozen modelをstableへ昇格するstepです。npm publicationは#6で独立authorizationのままです。
 
 [Roadmap](roadmap.ja.md)、[Release policy](releasing.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、[Persisted-state compatibility](persisted-state-compatibility.ja.md)、[v1 public API freeze](v1-public-api-freeze.ja.md)、各provider docsでcurrent support boundaryを確認してください。
 
 
 ## v0.13 final blocker closure
 
-最終auditの#191〜#198で、multi-round flow expiry authority、shipped docs、Redis / Firestore historical-budget retirement、renew uncertainty signal、initial vector-reserve reconciliation、provider-neutral input bound、Node 20 CI退役、minimum/current peer compatibilityを閉じます。新しいcharging modelではなく、freeze済みaccounting model周囲のrecovery / operations hardeningです。#6は独立authorizationのままです。
+最終auditの#191〜#198は完了済みです。multi-round flow expiry authority、shipped docs、Redis / Firestore historical-budget retirement、renew uncertainty signal、initial vector-reserve reconciliation、provider-neutral input bound、Node 20 CI退役、minimum/current peer compatibilityを、新しいcharging modelを追加せずに閉じました。#6は独立authorizationのままです。

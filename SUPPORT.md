@@ -6,7 +6,7 @@
 
 ## Supported runtime
 
-The supported v1 runtime floor is **Node.js 22+**. Node.js 20 reached upstream EOL and is not part of the supported v1 runtime contract. The repository temporarily keeps a Node 20 CI job as compatibility-only evidence because the current branch-protection policy still requires that legacy check; passing that job does not restore Node 20 support.
+The supported runtime floor is **Node.js 22+**. CI and release-safety evidence cover Node.js 22 and 24. Node.js 20 reached upstream EOL and is not part of the supported or required CI contract.
 
 ## Before opening an issue
 

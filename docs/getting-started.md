@@ -56,7 +56,7 @@ pnpm check
 
 See [Use from source / local tarballs](using-from-source.md) for exact commands to install the packages into another application.
 
-**Node.js 22 or later is required for the supported v1 runtime.** Node.js 20 is EOL; a temporary Node 20 CI job may still run as compatibility-only evidence until the repository's required-check policy is migrated.
+**Node.js 22 or later is required.** Supported CI and release-safety evidence cover Node.js 22 and 24. Node.js 20 is EOL and is not part of the supported or required CI contract.
 
 ## Smallest example
 
