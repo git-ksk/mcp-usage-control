@@ -34,6 +34,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Atomic heterogeneous usage vectors](vector-usage.md) — v0.7 contract for atomically reserving, growing, and settling unlike units in one logical operation.
 - [Cost-bearing operations](cost-bearing-operations.md) — v0.11 mapping for bounded provider cost, shared accounting scopes, billable retries, conservative ambiguity, and proven-no-effect release.
 - [Persisted-state compatibility](persisted-state-compatibility.md) — v0.11/v1 Redis, Firestore, and Cloudflare upgrade, rollback, future-schema fail-closed, and accounting-domain reset contract.
+- [v1 public API and lifecycle freeze](v1-public-api-freeze.md) — final package names, public subpaths, settlement-outcome boundary, status/error vocabulary, scalar/vector parity, and MCP multi-round terminology.
 - [Vector MCP integration](vector-mcp-integration.md) — explicit MCP lifecycle for safely consuming vector capacity.
 - [MCP Tasks accounting](mcp-tasks-accounting.md) — the long-running task accounting state machine and its separation from business task/result replay.
 - [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
