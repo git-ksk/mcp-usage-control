@@ -27,7 +27,7 @@ pnpm check
 
 別projectへのinstallは [Source / local tarballから使う](docs/using-from-source.ja.md) を参照してください。
 
-要件は **Node.js 20+ / ESM**。CIではNode.js 20 / 22 / 24、Redis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
+要件は **Node.js 22+ / ESM**。Node.js 20はEOL済みで、supported v1 runtime contractには含めません。現在のlegacy required-check policyを移行するまでは `test (20)` をcompatibility-only evidenceとして一時的に残し、supported runtime evidenceはNode.js 22 / 24です。CIではさらにRedis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
 
 ## Core lifecycle
 
@@ -68,7 +68,7 @@ remaining確認 -> paid work実行 -> counter加算
 
 5 packageのmanifestは `0.10.0` で揃っています。**v0.10.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** **v0.10.0はrelease済み**です。active product targetは **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6** accounting-contract / final production-distribution evidence / public API-support freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。
+**現在の実行順序:** **v0.10.0はrelease済み**です。active product targetは **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6** accounting-contract / reliability / compatibility / release-safety / final production-distribution evidence / public API-support freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。Redis reliability follow-up #166は解決済みです。
 
 ## v0.5後に再評価するv1 scope
 
@@ -314,7 +314,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.10.0` がcurrent released source baselineです。package manifestは `0.10.0` です。active product targetは **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6 accounting/completion/distribution/API freeze**、その後feature-free v1.0 promotionへ進みます。
+`v0.10.0` がcurrent released source baselineです。package manifestは `0.10.0` です。active product targetは **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6 accounting/completion/distribution/API freeze**、その後feature-free v1.0 promotionへ進みます。
 
 **npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 

@@ -27,7 +27,7 @@ pnpm check
 
 See **[Use from source / local tarballs](docs/using-from-source.md)** for clean-consumer installation.
 
-Requirements: **Node.js 20+**, ESM. CI exercises Node.js 20/22/24, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
+Requirements: **Node.js 22+**, ESM. Node.js 20 is EOL and is not part of the supported v1 runtime contract. CI temporarily keeps `test (20)` as compatibility-only evidence until the legacy required-check policy is migrated; supported runtime evidence is Node.js 22/24. CI also exercises Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
 
 ## Core lifecycle
 
@@ -68,7 +68,7 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.10.0`. **v0.10.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.10.0 is released.** The active product target is **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6** accounting-contract, final production/distribution evidence, and public API/support freeze, followed by **v1.0.0** as a feature-free stable promotion.
+**Current execution order:** **v0.10.0 is released.** The active product target is **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6** accounting-contract, reliability, compatibility, release-safety, production/distribution evidence, and public API/support freeze, followed by **v1.0.0** as a feature-free stable promotion. Redis reliability follow-up #166 has been resolved.
 
 ## v1 scope under consideration after v0.5
 
@@ -330,7 +330,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.10.0` is the current released source baseline. The package manifests are `0.10.0`. The active product target is **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6 accounting/completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
+`v0.10.0` is the current released source baseline. The package manifests are `0.10.0`. The active product target is **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6 accounting/completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
 
 **npm publication remains a separate explicitly authorized operation and has not been completed.**
 

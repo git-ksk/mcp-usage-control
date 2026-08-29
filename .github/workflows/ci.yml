@@ -96,6 +96,16 @@ jobs:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
 
+      - name: Classify Node runtime evidence
+        if: needs.changes.outputs.run_full == 'true'
+        shell: bash
+        run: |
+          if [[ "${{ matrix.node }}" == "20" ]]; then
+            echo "::warning::Node 20 is EOL and is compatibility-only evidence. v1 supported runtime starts at Node 22."
+          else
+            echo "Node ${{ matrix.node }} is supported v1 runtime evidence."
+          fi
+
       - run: pnpm install --frozen-lockfile
         if: needs.changes.outputs.run_full == 'true'
 
@@ -126,6 +136,16 @@ jobs:
           for dir in packages/core packages/mcp packages/redis packages/cloudflare packages/firestore; do
             actual="$(node -p "require('./${dir}/package.json').version")"
             test "$actual" = "$expected"
+          done
+
+      - name: Verify public package Node support floor
+        if: needs.changes.outputs.run_full == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          for dir in packages/core packages/mcp packages/redis packages/cloudflare packages/firestore; do
+            actual="$(node -p "require('./${dir}/package.json').engines.node")"
+            test "$actual" = ">=22"
           done
 
       - name: Pack public packages with npm

@@ -2,7 +2,11 @@
 
 [English](SUPPORT.md) | [日本語](SUPPORT.ja.md)
 
-`mcp-usage-control` is currently a pre-alpha open-source project. Community support is best-effort and there is no commercial support SLA.
+`mcp-usage-control` is currently a pre-v1 open-source project. Community support is best-effort and there is no commercial support SLA.
+
+## Supported runtime
+
+The supported v1 runtime floor is **Node.js 22+**. Node.js 20 reached upstream EOL and is not part of the supported v1 runtime contract. The repository temporarily keeps a Node 20 CI job as compatibility-only evidence because the current branch-protection policy still requires that legacy check; passing that job does not restore Node 20 support.
 
 ## Before opening an issue
 
@@ -14,7 +18,7 @@ Check:
 - [Redis adapter](docs/redis.md)
 - existing GitHub issues
 
-For local development, run:
+For local development, use Node.js 22 or later and run:
 
 ```console
 pnpm install
@@ -49,7 +53,7 @@ Do not use a public issue for a vulnerability that could enable quota bypass, do
 
 Known pre-v1 limitations include:
 
-- package names and public APIs are not stable until the v0.10 freeze;
+- public API/name freeze is completed through the v0.11 line rather than assumed from earlier source releases;
 - npm registry publication remains deferred until the separately authorized first publish tracked in #6;
 - stable first-class MCP Tasks wire/runtime integration remains deferred while the upstream surface is experimental;
 - generic operation reconciliation is scalar-only in v0.8; vector initial-reserve ambiguity remains fail closed unless separately proven;

@@ -16,7 +16,7 @@ The pre-1.0 release line contains five publishable npm packages:
 
 A GitHub Release may be created before npm publication. Until registry publication is explicitly authorized, use the repository checkout or local tarballs documented in [Use from source / local tarballs](using-from-source.md).
 
-All five publishable packages use the same release version.
+All five publishable packages use the same release version and the same supported Node.js floor.
 
 ## Versioning
 
@@ -27,6 +27,10 @@ Semantic Versioning is used with the normal pre-1.0 caveat: a minor release may 
 - major: 1.0+ compatibility boundary.
 
 Breaking changes are called out prominently even when they occur in a pre-1.0 minor release.
+
+## Supported Node.js runtime
+
+The supported v1 runtime matrix is **Node.js 22 and 24**, with package metadata declaring `engines.node >=22`. Node.js 20 is EOL and is not a supported v1 runtime. A temporary `test (20)` CI job may remain as compatibility-only evidence until #160 migrates the legacy required-check policy; it must not be cited as support evidence.
 
 ## Pre-1.0 release gate
 
@@ -42,16 +46,17 @@ A pre-1.0 GitHub/source release is ready only when the applicable surfaces satis
 - Cloudflare Durable Objects + SQLite behavior, schema versioning, remote ACK ambiguity/reconciliation, gateway authentication, maintenance/pruning boundaries, and lazy cleanup/cost behavior are documented/tested;
 - Firestore transactional multi-budget behavior, shared-document contention/hotspot risk, host-clock lease semantics, expiry recovery, and server-client compatibility are documented/tested;
 - package names/exports/files are verified;
+- all public package manifests declare the frozen supported Node.js floor;
 - `pnpm-lock.yaml` is committed and CI uses `--frozen-lockfile`;
 - npm-pack tarballs are smoke-tested and do not contain workspace protocol dependencies;
-- clean-consumer imports pass;
+- clean-consumer imports pass on every supported Node.js major selected for the release;
 - Cloudflare is exercised against local workerd and Firestore against the Local Emulator Suite; deployed dogfood requirements remain adapter-specific;
 - English/Japanese user documentation matches the tagged code.
 
 ## GitHub/source release procedure
 
 1. update package versions, changelog, and bilingual docs;
-2. run the full Node.js 20/22/24 CI matrix with real Redis and frozen dependencies;
+2. run the supported Node.js 22/24 CI evidence with real Redis and frozen dependencies; while the legacy branch policy still requires it, also allow the explicitly compatibility-only Node 20 job to resolve;
 3. run Cloudflare workerd integration and Firestore Emulator integration for the tagged code where applicable;
 4. pack all public packages and inspect tarball contents;
 5. merge the release PR to `main`;
@@ -70,13 +75,13 @@ npm publication is a later, explicit operation. It must not happen merely becaus
 4. confirm the GitHub Release/tag to publish;
 5. manually run the `Publish npm` workflow with its explicit confirmation input;
 6. publish in dependency order: core -> MCP / Redis / Cloudflare / Firestore adapters;
-7. verify registry metadata and installation from a clean consumer project.
+7. verify registry metadata and installation from a clean consumer project on the supported Node.js floor.
 
 Prefer npm Trusted Publishing / OIDC on GitHub-hosted runners. Do not add long-lived npm tokens to repository files, logs, or release artifacts.
 
 ## npm publication runtime
 
-The manual publication workflow currently runs on Node.js 24. Node 24 is also part of the normal full CI evidence matrix, so publication tooling does not rely on a Node major outside the tested public-package matrix.
+The manual publication workflow currently runs on Node.js 24. Node 24 is a supported runtime and part of the normal release CI evidence matrix, so publication tooling does not rely on a Node major outside the tested public-package matrix.
 
 ## Release notes
 
