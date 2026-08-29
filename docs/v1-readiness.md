@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v0.10.0 is the current GitHub/source release baseline.** All five publishable package manifests remain aligned at `0.10.0` and require Node.js 22 or later.
+**v0.11.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.11.0` and require Node.js 22 or later.
 
 The packages remain **unpublished to npm**. First registry publication is separately tracked by #6 and requires explicit authorization independent from source releases.
 
@@ -20,13 +20,14 @@ The v0.11 freeze line has now resolved the accounting/reliability/runtime/storag
 - #152 froze provider-backed cost-bearing work onto the existing vector reserve/liability/grow/renew/settle contract;
 - #106 froze Redis/Firestore/Cloudflare persisted-state upgrade, rollback, future-schema fail-closed, and fresh-domain reset boundaries;
 - #161 froze the v1 package/lifecycle/status/error vocabulary and made MCP settlement alias normalization explicit;
-- #160 made the already-protected `test (22)` context an aggregate release-safety gate for applicable Node/Redis/package/Cloudflare/Firestore evidence.
+- #160 made the already-protected `test (22)` context an aggregate release-safety gate for applicable Node/Redis/package/Cloudflare/Firestore evidence;
+- #24 completed the real Monokura Cloudflare credential rotation, new-caller proof, and rotated-out credential rejection while preserving the existing accounting identity. Genuine Workers platform-limit exhaustion/overload was not naturally observed and is not claimed as deployed evidence.
 
-The only remaining v0.11 blocker is **#24 final real-Cloudflare operational evidence**, followed by final v0.11 release evidence. Issue #6 remains a separate publication gate and runs only when explicitly authorized.
+The v0.11 completion tranche is closed. Issue #6 remains a separate publication gate and runs only when explicitly authorized; it is not implicitly authorized by a source release.
 
 ## Verdict
 
-**The public accounting/runtime/storage/API/governance surface is frozen strongly enough for v1. The remaining blocker is production-evidence honesty for the Cloudflare adapter, not a core semantic or API decision.**
+**The public accounting/runtime/storage/API/governance surface and the required pre-v1 production-evidence boundary are frozen strongly enough for feature-free v1 stable promotion.**
 
 ## Stable accounting invariants
 
@@ -116,14 +117,19 @@ Store-facing/direct lease settlement outcomes intentionally remain extensible st
 
 `test (22)` is the protected aggregate release-safety gate. It requires the full Node/Redis/package/tarball/clean-consumer matrix and applicable Cloudflare workerd / Firestore Emulator evidence. `test (20)` remains a compatibility-only protected context. Provider skips are accepted only when the path classifier marks them non-applicable, and docs-only changes resolve required contexts through a lightweight path without deadlock.
 
-## What still blocks v1 promotion
+### Real Cloudflare operational evidence (#24) — complete
 
-1. **#24 Cloudflare real-operation evidence** — execute the documented real credential rotation and finalize the honest v1 production claim. A naturally occurring platform-limit event may be recorded, but shared quota must not be intentionally burned merely to manufacture one.
-2. **Final v0.11 release evidence** — supported Node/package checks, Redis, aggregate `test (22)`, Cloudflare workerd, Firestore Emulator, package tarballs/clean consumer, bilingual docs, and final public contract must all be green with no unresolved v1 blocker.
+The documented zero-downtime rotation was executed against the real Monokura deployment. New and old credentials both worked during overlap; Cloud Run moved to the new explicit Secret Manager version; a real `list_boards` caller succeeded on the new revision; and the retired credential was rejected afterward. The Durable Object/accounting identity remained unchanged and no Firestore quota fallback was enabled.
+
+A genuine Workers Free-plan exhaustion/platform-overload event did not occur naturally. The project therefore does not claim deployed empirical evidence for every platform-limit condition; that boundary remains explicit rather than being manufactured by burning shared quota.
+
+## v1 promotion status
+
+The v0.11 source-release gate is the final pre-v1 evidence checkpoint: supported Node/package checks, Redis, aggregate `test (22)`, Cloudflare workerd, Firestore Emulator, package tarballs/clean consumer, bilingual docs, and the final public contract must be green before the v0.11 tag is cut. Once the tagged v0.11 source release exists, no unresolved source-contract blocker remains for a feature-free v1 stable promotion.
 
 ## npm distribution boundary
 
-The source-release baseline remains `v0.10.0` until v0.11 is cut. npm publication is a separate operation and has not occurred.
+The source-release baseline is `v0.11.0`. npm publication is a separate operation and has not occurred.
 
 Issue #6 remains open until first publication is actually desired, **separately explicitly authorized**, completed, and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
 
@@ -131,6 +137,6 @@ A source release never implicitly authorizes registry publication.
 
 ## v1 promotion rule
 
-v1.0 should contain **no new feature or accounting model**. Promotion is allowed only after #24/final v0.11 evidence closes the remaining production-evidence boundary, the final source/package/provider evidence is green, and no issue remains classified as a v1 blocker.
+v1.0 should contain **no new feature or accounting model**. Promotion is a stable-label/source milestone over the frozen v0.11 surface and remains contingent on the tagged v0.11 release evidence being green. npm publication remains independently authorized under #6.
 
 See [Roadmap](roadmap.md), [Release policy](releasing.md), [Cost-bearing operations](cost-bearing-operations.md), [Persisted-state compatibility](persisted-state-compatibility.md), [v1 public API freeze](v1-public-api-freeze.md), and provider-specific documentation for the current support boundaries.

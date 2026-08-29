@@ -16,7 +16,7 @@
 
 **まだnpmへ公開していません。**
 
-`v0.10.0` がcurrent GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
+`v0.11.0` がcurrent GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,13 +66,13 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは `0.10.0` で揃っています。**v0.10.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+5 packageのmanifestは `0.11.0` で揃っています。**v0.11.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** **v0.10.0はrelease済み**です。active product targetは **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6** accounting-contract / reliability / compatibility / release-safety / final production-distribution evidence / public API-support freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。Redis reliability follow-up #166は解決済みです。
+**現在の実行順序:** v0.11のaccounting / reliability / runtime / storage / API / release-safety freezeとreal Cloudflare credential-rotation evidenceは完了しました。次のsource milestoneは **feature追加なしのv1.0.0 stable promotion** です。#6はseparate npm-publication gateのままで、explicit authorizationが必要です。
 
-## v0.5後に再評価するv1 scope
+## Freeze済みv1 candidate scope
 
-**v1 API freezeはまだfinalではありません**。v0.6 progressive growth、v0.7 atomic heterogeneous vectorに続き、v0.8ではbase `UsageStore`互換を維持したままread-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用しました。v0.10ではStore accounting modelを変えず、bounded operational usability、settlement outcome normalization/diagnostics、explicit scoped threshold helperを追加します。
+**v1 public accounting / runtime / storage / API surfaceはv0.11まででfreeze済みです。** v0.6 progressive growth、v0.7 atomic heterogeneous vector、v0.8 read-only scalar operation reconciliation、v0.10 operational usabilityを、base accounting invariantを変えずfrozen candidate surfaceとして維持します。v1.0は新たなcompatibility decisionを行うreleaseではなく、feature-free stable promotionを想定します。
 
 | 領域 | current status | 境界 |
 | --- | --- | --- |
@@ -235,7 +235,7 @@ RedisはLuaでatomic transition、Redis server `TIME` でlease / tombstone判定
 
 Durable Object + SQLite transaction domainを使います。remote pathは明示authentication付きHTTPS gatewayで、network / timeout ambiguityはsurfaceしblind retryしません。
 
-Issue #24には追加のreal platform operational evidenceが残っています。optional `mcp-usage-control-cloudflare/auth` helperではcurrent / previous Bearer tokenを使ったcontrolled credential rotationを提供します。
+real deployed dogfoodではmain accounting pathに加え、overlap acceptance、real caller cutover、rotated-out credential rejectionまで含むzero-downtime credential rotationを確認しました。Durable Object / accounting identityも維持されています。genuine Workers Free-plan exhaustion / platform overloadは自然観測していないため、全platform-limit条件まで実証済みとはclaimしません。optional `mcp-usage-control-cloudflare/auth` helperではcurrent / previous Bearer tokenを使ったcontrolled credential rotationを提供します。
 
 ### Firestore
 
@@ -314,7 +314,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.10.0` がcurrent released source baselineです。package manifestは `0.10.0` です。active product targetは **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6 accounting/completion/distribution/API freeze**、その後feature-free v1.0 promotionへ進みます。
+`v0.11.0` がcurrent released source baselineです。package manifestは `0.11.0` です。v0.11のaccounting / completion / API / release-safetyとreal Cloudflare production-evidence trancheは完了し、次のsource milestoneはfeature-free v1.0 promotionです。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
 
 **npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 

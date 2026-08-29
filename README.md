@@ -16,7 +16,7 @@ The project focuses on the boundary between execution and usage accounting. It i
 
 **The packages are not published to npm yet.**
 
-`v0.10.0` is the current GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
+`v0.11.0` is the current GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,13 +66,13 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.10.0`. **v0.10.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.11.0`. **v0.11.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.10.0 is released.** The active product target is **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6** accounting-contract, reliability, compatibility, release-safety, production/distribution evidence, and public API/support freeze, followed by **v1.0.0** as a feature-free stable promotion. Redis reliability follow-up #166 has been resolved.
+**Current execution order:** the v0.11 accounting/reliability/runtime/storage/API/release-safety freeze and real Cloudflare credential-rotation evidence are complete. The next source milestone is **v1.0.0 as a feature-free stable promotion**. Issue #6 remains a separate npm-publication gate that requires explicit authorization.
 
-## v1 scope under consideration after v0.5
+## Frozen v1 candidate scope
 
-The v1 API freeze is still not final. Following v0.6 progressive growth and v0.7 atomic heterogeneous vectors, v0.8 adopts read-only scalar operation reconciliation as another optional future-v1 Store capability while keeping the base `UsageStore` contract compatible. v0.10 adds bounded operational usability, settlement outcome normalization/diagnostics, and scoped threshold helpers without changing the Store accounting model.
+The v1 public accounting/runtime/storage/API surface is frozen through v0.11. v0.6 progressive growth, v0.7 atomic heterogeneous vectors, v0.8 read-only scalar operation reconciliation, and v0.10 operational usability remain in the frozen candidate surface without changing the base accounting invariants. v1.0 is intended as a feature-free stable promotion rather than another compatibility-decision release.
 
 | Area | Current status | Boundary |
 | --- | --- | --- |
@@ -249,7 +249,7 @@ Redis uses Lua for atomic transitions and Redis server `TIME` for lease/tombston
 
 The Cloudflare adapter uses a Durable Object + SQLite transaction domain. Remote applications use an explicitly authenticated HTTPS gateway. Network/timeout ambiguity is surfaced, not blindly retried.
 
-Real deployed dogfood has validated the main accounting path, while Issue #24 intentionally remains open for additional real-platform operational observations. Do not interpret the adapter as proven under every Cloudflare platform-limit condition.
+Real deployed dogfood has validated the main accounting path and a zero-downtime credential rotation, including overlap acceptance, real caller cutover, and rejection of the rotated-out credential. The Durable Object/accounting identity remained unchanged. A genuine Workers Free-plan exhaustion/platform-overload event has not been observed naturally, so do not interpret the adapter as proven under every Cloudflare platform-limit condition.
 
 The optional `mcp-usage-control-cloudflare/auth` helper supports a current and previous Bearer token to make controlled credential rotation possible without weakening the application-defined authorization boundary.
 
@@ -330,7 +330,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.10.0` is the current released source baseline. The package manifests are `0.10.0`. The active product target is **v0.11.0 / #152 -> #157 -> #105 + #106 -> #160 + #161 -> #24 -> #6 accounting/completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
+`v0.11.0` is the current released source baseline. The package manifests are `0.11.0`. The v0.11 accounting/completion/API/release-safety and real Cloudflare production-evidence tranche is complete; the next source milestone is feature-free v1.0 promotion. Issue #6 remains a separate explicitly authorized npm-publication gate.
 
 **npm publication remains a separate explicitly authorized operation and has not been completed.**
 
