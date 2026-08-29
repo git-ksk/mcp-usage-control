@@ -2,7 +2,7 @@
 
 Core package for concurrency-safe MCP usage enforcement. MCP and storage vendor independent.
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-0.3.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-0.9.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
 
 ## English
 
@@ -47,10 +47,21 @@ See [Memory store operations](../../docs/memory-store.md). For horizontal scale 
 
 For low-cardinality operational logs, `projectUsageEvent()` converts raw lifecycle events into a bounded shape that excludes identity IDs, reservation IDs, tool/budget identifiers, arbitrary outcomes, and application-defined denial text by default.
 
+### Operational helper subpaths (v0.10)
+
+The v0.10 operational surface is exposed through explicit subpaths so it remains separate from the authoritative Store contract:
+
+- `mcp-usage-control/operational` — bounded process-local lifecycle snapshots, static runtime identity, and explicit scoped quota projection.
+- `mcp-usage-control/settlement-outcomes` — canonical settlement vocabulary, finite alias normalization, and bounded `invalid_settlement_outcome` diagnostics.
+- `mcp-usage-control/thresholds` — pure absolute/percentage remaining-threshold evaluation and above -> reached crossing detection.
+
+These helpers never infer accounting windows, entitlement, pricing, refund eligibility, or provider health policy. See [Operational usability](../../docs/operational-usability.md).
+
 - [Current source/tarball usage](../../docs/using-from-source.md)
 - [Getting started](../../docs/getting-started.md)
 - [Memory store operations](../../docs/memory-store.md)
 - [Observability](../../docs/observability.md)
+- [Operational usability](../../docs/operational-usability.md)
 - [API reference](../../docs/api-reference.md)
 - [Architecture](../../docs/architecture.md)
 
@@ -99,10 +110,21 @@ capacity exhaustion時はaccounting / replay stateをsilent evictionせず `Memo
 
 low-cardinalityな運用logには `projectUsageEvent()` を使えます。raw lifecycle eventからidentity ID、reservation ID、tool / budget identifier、任意outcome、application定義denial textをdefaultで除外したbounded shapeへ変換します。
 
+### Operational helper subpath (v0.10)
+
+v0.10のoperational surfaceはauthoritative Store contractと分離した明示subpathとして公開します。
+
+- `mcp-usage-control/operational` — bounded process-local lifecycle snapshot、static runtime identity、明示scopeしたquota projection。
+- `mcp-usage-control/settlement-outcomes` — canonical settlement vocabulary、finite alias normalization、boundedな `invalid_settlement_outcome` diagnostic。
+- `mcp-usage-control/thresholds` — absolute / percentage remaining threshold評価と above -> reached crossing detectionのpure helper。
+
+これらはaccounting window、entitlement、pricing、refund可否、provider health policyを推測しません。詳しくは [Operational usability](../../docs/operational-usability.ja.md)。
+
 - [現在のsource / tarball利用手順](../../docs/using-from-source.ja.md)
 - [Getting started](../../docs/getting-started.ja.md)
 - [Memory Storeの長期運用](../../docs/memory-store.ja.md)
 - [Observability](../../docs/observability.ja.md)
+- [Operational usability](../../docs/operational-usability.ja.md)
 - [API reference](../../docs/api-reference.ja.md)
 - [Architecture](../../docs/architecture.ja.md)
 
