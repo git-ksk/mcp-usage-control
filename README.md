@@ -16,7 +16,7 @@ The project focuses on the boundary between execution and usage accounting. It i
 
 **The packages are not published to npm yet.**
 
-`v0.9.0` is the latest GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
+`v0.10.0` is the current GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,13 +66,13 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.9.0`. **v0.9.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.10.0`. **v0.10.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** **v0.9.0 is released.** The active product target is **v0.10.0 / #76 + #82 + #99** operational usability and dogfood diagnostics, followed by **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence and API freeze, and finally **v1.0.0** as a feature-free stable promotion.
+**Current execution order:** **v0.10.0 is released.** The active product target is **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6** accounting-contract, final production/distribution evidence, and public API/support freeze, followed by **v1.0.0** as a feature-free stable promotion.
 
 ## v1 scope under consideration after v0.5
 
-The v1 API freeze is still not final. Following v0.6 progressive growth and v0.7 atomic heterogeneous vectors, v0.8 adopts read-only scalar operation reconciliation as another optional future-v1 Store capability while keeping the base `UsageStore` contract compatible.
+The v1 API freeze is still not final. Following v0.6 progressive growth and v0.7 atomic heterogeneous vectors, v0.8 adopts read-only scalar operation reconciliation as another optional future-v1 Store capability while keeping the base `UsageStore` contract compatible. v0.10 adds bounded operational usability, settlement outcome normalization/diagnostics, and scoped threshold helpers without changing the Store accounting model.
 
 | Area | Current status | Boundary |
 | --- | --- | --- |
@@ -85,6 +85,7 @@ The v1 API freeze is still not final. Following v0.6 progressive growth and v0.7
 | Progressive reservation growth (#83) | **adopted in v0.6** | Optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic/lost-ACK/provider proof |
 | Heterogeneous multi-dimensional usage (#84) | **adopted in v0.7** | Optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
 | Operation reconciliation/status (#81) | **adopted in v0.8** | Optional scalar `OperationReconciliationStore`; read-only `absent`/`active`/`expired`/`settled` vocabulary, mismatch/unknown fail closed, provider-specific support matrix |
+| Operational usability (#76/#99/#82) | **adopted in v0.10** | Non-authoritative snapshot/runtime identity, canonical settlement diagnostics, explicit scoped threshold evaluation |
 | First-class MCP Tasks wire/runtime adapter | **scope depends on upstream stabilization** | Accounting semantics are defined; stable adapter is not yet claimed |
 | New stateless MRTR claim mode | **deferred unless justified** | No demonstrated advantage over shared one-time claim |
 | Billing / financial ledger / workflow replay | **out of scope** | Remains outside usage enforcement |
@@ -277,9 +278,11 @@ Portable conformance proves behavioral state-machine compatibility. Persistence,
 
 Tool arguments and raw exception messages are not captured automatically. Unique principal/operation/reservation/budget IDs should not be promoted to metric labels. `projectUsageEvent()` provides a low-cardinality projection for operational logging.
 
+v0.10 adds explicit provider-neutral operational helpers under `mcp-usage-control/operational`, canonical settlement vocabulary/diagnostics under `mcp-usage-control/settlement-outcomes`, and pure scoped threshold helpers under `mcp-usage-control/thresholds`. These remain non-authoritative and do not create a second accounting ledger.
+
 Observability is not a durable billing ledger.
 
-See [Observability](docs/observability.md).
+See [Observability](docs/observability.md) and [Operational usability](docs/operational-usability.md).
 
 ## Safety invariants
 
@@ -316,6 +319,7 @@ See [Observability](docs/observability.md).
 - [Cloudflare](docs/cloudflare.md)
 - [Firestore](docs/firestore.md)
 - [Observability](docs/observability.md)
+- [Operational usability](docs/operational-usability.md)
 - [API reference](docs/api-reference.md)
 - [Project positioning](docs/positioning.md)
 - [Roadmap](docs/roadmap.md)
@@ -326,7 +330,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.9.0` is the latest released source baseline. The package manifests are `0.9.0`. The active product target is **v0.10.0 / #76 + #82 + #99 operational usability**, followed by the v0.11 final completion/distribution/API-freeze gate.
+`v0.10.0` is the current released source baseline. The package manifests are `0.10.0`. The active product target is **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6 accounting/completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
 
 **npm publication remains a separate explicitly authorized operation and has not been completed.**
 

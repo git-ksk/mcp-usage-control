@@ -105,6 +105,14 @@ jobs:
             ! grep -q 'workspace:' <<<"$manifest"
             ! grep -q 'pack-workspace-deps' <<<"$manifest"
           done
+          version="${{ steps.release.outputs.version }}"
+          core_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-${version}.tgz")"
+          grep -qx 'package/dist/operational.js' <<<"$core_listing"
+          grep -qx 'package/dist/operational.d.ts' <<<"$core_listing"
+          grep -qx 'package/dist/settlement-outcomes.js' <<<"$core_listing"
+          grep -qx 'package/dist/settlement-outcomes.d.ts' <<<"$core_listing"
+          grep -qx 'package/dist/thresholds.js' <<<"$core_listing"
+          grep -qx 'package/dist/thresholds.d.ts' <<<"$core_listing"
 
       - name: Build release notes from changelog
         shell: bash

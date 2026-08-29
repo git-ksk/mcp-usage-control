@@ -8,6 +8,33 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.10.0] - 2026-08-29
+
+Tenth GitHub/source release focused on bounded operational usability and dogfood diagnostics. npm publication remains intentionally separate and deferred.
+
+### Added
+
+- Added `mcp-usage-control/operational` with process-local bounded lifecycle counters, static runtime identity/capability metadata, and explicit scoped quota projection. The surface is diagnostic only and never becomes enforcement or billing authority.
+- Added `mcp-usage-control/settlement-outcomes` with the canonical settlement vocabulary, bounded compatibility aliases, application-owned finite alias maps, and `InvalidSettlementOutcomeError` / `invalid_settlement_outcome` diagnostics that do not retain the rejected raw value.
+- Added `mcp-usage-control/thresholds` with pure remaining-units / remaining-ratio evaluation and crossing helpers over an explicitly selected quota scope. Accounting-window identity/reset state and notification delivery remain application-owned.
+- Added English/Japanese operational-usability guidance covering runtime identity, scoped remaining, settlement normalization, threshold crossing, privacy/cardinality boundaries, and the explicit non-claim around inferred active-reservation counts.
+
+### Operational safety / diagnostics
+
+- Closed #76, #99, and #82 without changing Store accounting transitions or provider storage schemas.
+- `UsageOperationalMonitor` exposes only evidence that can be represented without inventing a second accounting truth. Replayable/aggregate lifecycle events are not used to synthesize an authoritative active-reservation count.
+- Invalid settlement vocabulary is distinguishable from Store/backend unavailability before settlement dispatch, while diagnostic delivery remains best-effort and cannot replace the canonical normalization error or alter enforcement.
+- Observer/helper/notification failure cannot change admission, liability, renewal, settlement, replay, expiry, or quota outcomes.
+- Authoritative `remaining` is projected only after the application selects the exact budget/window; unlike vector dimensions are never collapsed into one synthetic utilization total.
+
+### Packaging / release evidence
+
+- All five public package manifests and the bounded core runtime identity are aligned at `0.10.0`.
+- CI verifies the new `operational`, `settlement-outcomes`, and `thresholds` files in the packed core tarball and imports all three subpaths from a clean consumer project.
+- The release gate remains Node 20/22/24 with real Redis, Cloudflare local workerd integration, Firestore Emulator integration, package-content inspection, and clean-consumer verification.
+- Source/local-tarball documentation no longer hard-codes an obsolete package version.
+- npm publication is not part of this GitHub/source release. First registry publication remains a separately authorized operation tracked by #6.
+
 ## [0.9.0] - 2026-08-22
 
 Ninth GitHub/source release focused on repository-wide safety hardening. npm publication remains intentionally separate and deferred.

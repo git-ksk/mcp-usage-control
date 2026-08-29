@@ -14,6 +14,10 @@ export type CanonicalSettlementOutcome = (typeof CANONICAL_SETTLEMENT_OUTCOMES)[
 
 export type SettlementOutcomeAliases = Readonly<Record<string, CanonicalSettlementOutcome>>;
 
+export interface SettlementOutcomeDiagnosticSink {
+  onInvalidSettlementOutcome(): void | Promise<void>;
+}
+
 /**
  * Compatibility aliases used by the built-in MCP adapter and older integrations.
  * New integrations should emit the canonical vocabulary directly.
@@ -48,18 +52,36 @@ export function isCanonicalSettlementOutcome(value: unknown): value is Canonical
 /**
  * Normalize a bounded consumer/domain outcome before it crosses the usage boundary.
  * Invalid vocabulary fails before Store settlement and is distinguishable from backend failure.
+ * Diagnostic delivery is best-effort and can never replace the bounded normalization error.
  */
 export function normalizeSettlementOutcome(
   value: unknown,
   aliases: SettlementOutcomeAliases = DEFAULT_SETTLEMENT_OUTCOME_ALIASES,
+  diagnostics?: SettlementOutcomeDiagnosticSink,
 ): CanonicalSettlementOutcome {
   if (isCanonicalSettlementOutcome(value)) return value;
   if (typeof value !== 'string' || value.length === 0 || value.length > 128) {
-    throw new InvalidSettlementOutcomeError();
+    return rejectInvalidSettlementOutcome(diagnostics);
   }
   const normalized = aliases[value];
   if (normalized === undefined || !isCanonicalSettlementOutcome(normalized)) {
-    throw new InvalidSettlementOutcomeError();
+    return rejectInvalidSettlementOutcome(diagnostics);
   }
   return normalized;
+}
+
+function rejectInvalidSettlementOutcome(
+  diagnostics: SettlementOutcomeDiagnosticSink | undefined,
+): never {
+  if (diagnostics !== undefined) {
+    try {
+      const result = diagnostics.onInvalidSettlementOutcome();
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        void (result as Promise<void>).catch(() => undefined);
+      }
+    } catch {
+      // Diagnostics are not part of settlement normalization or enforcement.
+    }
+  }
+  throw new InvalidSettlementOutcomeError();
 }

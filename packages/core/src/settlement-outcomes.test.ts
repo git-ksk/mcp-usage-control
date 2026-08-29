@@ -40,6 +40,28 @@ describe('settlement outcome normalization', () => {
     expect(String(error)).not.toContain('provider-body-with-secret-token');
   });
 
+  it('notifies a bounded diagnostic sink without exposing the invalid value', () => {
+    let count = 0;
+    expect(() =>
+      normalizeSettlementOutcome('bad-domain-value', undefined, {
+        onInvalidSettlementOutcome() {
+          count += 1;
+        },
+      }),
+    ).toThrow(InvalidSettlementOutcomeError);
+    expect(count).toBe(1);
+  });
+
+  it('does not let diagnostic sink failure replace the normalization error', () => {
+    expect(() =>
+      normalizeSettlementOutcome('bad-domain-value', undefined, {
+        onInvalidSettlementOutcome() {
+          throw new Error('diagnostic sink failed');
+        },
+      }),
+    ).toThrow(InvalidSettlementOutcomeError);
+  });
+
   it('rejects malformed aliases rather than weakening the canonical contract', () => {
     expect(() =>
       normalizeSettlementOutcome('domain_value', {

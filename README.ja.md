@@ -16,7 +16,7 @@
 
 **まだnpmへ公開していません。**
 
-`v0.9.0` がlatest GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
+`v0.10.0` がcurrent GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,13 +66,13 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは `0.9.0` で揃っています。**v0.9.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+5 packageのmanifestは `0.10.0` で揃っています。**v0.10.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** **v0.9.0はrelease済み**です。active product targetは **v0.10.0 / #76 + #82 + #99** operational usability / dogfood diagnostics、続いて **v0.11.0 / #24 + #6 + #105 + #106** final production/distribution evidence + API freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。
+**現在の実行順序:** **v0.10.0はrelease済み**です。active product targetは **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6** accounting-contract / final production-distribution evidence / public API-support freeze、最後にfeature追加なしの **v1.0.0** stable promotionです。
 
 ## v0.5後に再評価するv1 scope
 
-**v1 API freezeはまだfinalではありません**。v0.6 progressive growth、v0.7 atomic heterogeneous vectorに続き、v0.8ではbase `UsageStore`互換を維持したままread-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用します。
+**v1 API freezeはまだfinalではありません**。v0.6 progressive growth、v0.7 atomic heterogeneous vectorに続き、v0.8ではbase `UsageStore`互換を維持したままread-only scalar operation reconciliationをoptional future-v1 Store capabilityとして採用しました。v0.10ではStore accounting modelを変えず、bounded operational usability、settlement outcome normalization/diagnostics、explicit scoped threshold helperを追加します。
 
 | 領域 | current status | 境界 |
 | --- | --- | --- |
@@ -85,6 +85,7 @@ remaining確認 -> paid work実行 -> counter加算
 | progressive reservation growth (#83) | **v0.6で採用** | optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic / lost-ACK / provider proof |
 | heterogeneous multi-dimensional usage (#84) | **v0.7で採用** | optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
 | operation reconciliation/status (#81) | **v0.8で採用** | optional scalar `OperationReconciliationStore`; read-only `absent` / `active` / `expired` / `settled`、mismatch / unknownはfail closed、Store別support matrix |
+| operational usability (#76/#99/#82) | **v0.10で採用** | non-authoritative snapshot/runtime identity、canonical settlement diagnostics、explicit scoped threshold evaluation |
 | first-class MCP Tasks adapter | **upstream stabilization次第** | accounting semanticsは定義済み、stable adapter未宣言 |
 | new stateless MRTR claim mode | **必要性が出るまでdeferred** | shared one-time claimより明確な利点なし |
 | billing / financial ledger / workflow replay | **out of scope** | enforcement外 |
@@ -259,7 +260,13 @@ portable conformanceはbehavioral state-machine compatibilityを証明します�
 
 `UsageObserver` はenforcement transaction外のstructured lifecycle eventです。observer failureがdeny/errorをallowへ変えたりsettlement stateを変更したりすることはありません。
 
-raw tool arguments / exception messageは自動収集しません。`projectUsageEvent()` はlow-cardinalityな運用log projectionを提供します。observabilityはdurable billing ledgerではありません。
+raw tool arguments / exception messageは自動収集しません。`projectUsageEvent()` はlow-cardinalityな運用log projectionを提供します。
+
+v0.10では `mcp-usage-control/operational` にprovider-neutral operational helper、`mcp-usage-control/settlement-outcomes` にcanonical settlement vocabulary/diagnostics、`mcp-usage-control/thresholds` にpureなscoped threshold helperを追加します。いずれもnon-authoritativeで、second accounting ledgerを作りません。
+
+observabilityはdurable billing ledgerではありません。
+
+詳しくは [Observability](docs/observability.ja.md) と [Operational usability](docs/operational-usability.ja.md)。
 
 ## Safety invariant
 
@@ -296,6 +303,7 @@ raw tool arguments / exception messageは自動収集しません。`projectUsag
 - [Cloudflare](docs/cloudflare.ja.md)
 - [Firestore](docs/firestore.ja.md)
 - [Observability](docs/observability.ja.md)
+- [Operational usability](docs/operational-usability.ja.md)
 - [API reference](docs/api-reference.ja.md)
 - [Project positioning](docs/positioning.ja.md)
 - [Roadmap](docs/roadmap.ja.md)
@@ -306,7 +314,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.9.0` がlatest released source baselineです。package manifestは `0.9.0` です。active product targetは **v0.10.0 / #76 + #82 + #99 operational usability**、その後にv0.11 final completion/distribution/API-freeze gateへ進みます。
+`v0.10.0` がcurrent released source baselineです。package manifestは `0.10.0` です。active product targetは **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6 accounting/completion/distribution/API freeze**、その後feature-free v1.0 promotionへ進みます。
 
 **npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 

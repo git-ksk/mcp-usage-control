@@ -28,15 +28,19 @@ const control = new UsageControl(store, policy, { observer: monitor });
 console.log(JSON.stringify(monitor.snapshot()));
 ```
 
-snapshotに含まれるのは、boundedなprocess-local lifecycle counter、phase別error count、optionalなstatic runtime identity、最後に観測したevent timestampだけです。principal ID、operation ID、reservation ID、tool名、budget key、raw error、tool argumentは含みません。
+snapshotに含まれるのは、boundedなprocess-local lifecycle counter、phase別error count、正確に観測できるreserve / settle attempt count、optionalなstatic runtime identity、最後に観測したlifecycle event timestampです。principal ID、operation ID、reservation ID、tool名、budget key、raw error、不正なsettlement value、tool argumentは含みません。
+
+`observedAttempts.reserve` はreserve accepted / denied / error eventだけから算出し、`observedAttempts.settle` はsettlement completed / error eventだけから算出します。現在の `UsageEvent` contractは成功した `markLiable()` / `renew()` eventをemitしないため、v0.10では不完全なevidenceからmark-liable / renewのattemptやsuccess countを推測しません。phase別failureは `errors.markLiable` / `errors.renew` で確認できます。
 
 このcounterは **non-authoritative telemetry** です。event replayで同じlifecycle eventが再度観測されることがあり、process再起動ではprocess-local counterがリセットされます。snapshotからquota balance、billing total、replay decisionを導出しないでください。
 
 operational subpathから `MCP_USAGE_CONTROL_VERSION` をexportし、core package manifestのversionと同期させます。`createUsageRuntimeIdentity()` にはstaticなprovider mode、bounded capability flag、optionalなstorage schema versionも指定できます。provider側でstableな意味をdocumentできるschema versionだけを出し、意味が不安定なら省略してください。
 
-### Retentionとquota stateを分離する
+### provider-neutral active reservation countを出さない理由
 
-`MemoryUsageStore.stats()` はretained bookkeeping resourceを示します。これは「active billable operation数」でもauthoritative remaining quotaでもありません。retention/resource health、lifecycle telemetry、scoped accounting balanceは分離して扱います。
+v0.10ではlifecycle eventの差し引きから `activeReservations` を作りません。reserve replayではaccepted eventが再度観測されることがあり、distributed recoveryはreservation identifierなしのaggregate countとしてemitされる場合があります。これらを単純に加減すると、もっともらしいけれど誤ったactive countを作る可能性があります。
+
+provider-specific resource stateは、そのproviderが意味を正確に定義できる場合だけ公開してください。`MemoryUsageStore.stats()` はretained bookkeeping resourceを示しますが、「active billable operation数」でもauthoritative remaining quotaでもありません。retention/resource health、lifecycle telemetry、scoped accounting balanceは分離して扱います。
 
 複数budgetや異種vector dimensionをまたいだ1つのglobal `consumedUnits` は出さないでください。同じreservationが複数budgetへ参加でき、異なるdimensionを1つのsynthetic totalへ潰すと意味が壊れます。
 
@@ -61,17 +65,16 @@ helper自身はbudget keyを受け取りません。window名、reset rule、aut
 
 ## Canonical settlement outcome
 
-domain固有のoutcomeはusage boundaryへ渡す前にnormalizeします。
+domain固有のoutcomeはusage boundaryへ渡す前にnormalizeします。optionalなdiagnostic sinkとしてoperational monitorも渡せます。
 
 ```ts
-import {
-  InvalidSettlementOutcomeError,
-  normalizeSettlementOutcome,
-} from 'mcp-usage-control/settlement-outcomes';
+import { normalizeSettlementOutcome } from 'mcp-usage-control/settlement-outcomes';
 
-const outcome = normalizeSettlementOutcome('invalid_browser_request', {
-  invalid_browser_request: 'invalid_arguments',
-});
+const outcome = normalizeSettlementOutcome(
+  'invalid_browser_request',
+  { invalid_browser_request: 'invalid_arguments' },
+  monitor,
+);
 
 await lease.settle(0, outcome);
 ```
@@ -90,7 +93,7 @@ canonical vocabularyは以下です。
 
 default alias mapでは、既存integration向けに `success`、`tool_error`、`error` などのbounded compatibilityを維持します。
 
-不正なvocabularyは `InvalidSettlementOutcomeError` をthrowし、bounded codeは `invalid_settlement_outcome` です。不正なraw value自体はerrorへ保持しません。これにより、fail-closed settlementを弱めずに、local integration/configuration bugとStore/backend unavailableを区別できます。
+不正なvocabularyは `InvalidSettlementOutcomeError` をthrowし、bounded codeは `invalid_settlement_outcome` です。不正なraw value自体はerrorやmonitorへ保持しません。monitorをdiagnostic sinkとして渡した場合、`invalidSettlementOutcomes` がbest-effortでincrementします。diagnostic sinkがthrow/rejectしても無視され、canonical normalization errorを置き換えたりenforcement behaviorを変えたりしません。
 
 settlement normalizationはrefund可否を決めません。provider evidenceからcanonical outcomeとactual unitsへmapする責任はapplication側にあります。dispatch後のambiguous failureを、provider errorが返ったという理由だけで `proven_no_effect` にしないでください。
 
@@ -126,6 +129,18 @@ const state = evaluateUsageQuotaThreshold(current, threshold);
 exhaustion crossingには `{ kind: 'remaining_units', value: 0 }` を使います。
 
 Slack、email、webhook、queue、dedupe persistence、notification retry policyはcore外です。alert sinkの失敗でadmissionやsettlementを変更してはいけません。
+
+## v1 scope decision
+
+v0.10 surfaceはfuture v1 contractへoptional / read-only operational toolingとして採用します。
+
+- bounded process-local lifecycle / error diagnostics
+- 意味が安定している場合だけ出すbounded static runtime identity
+- explicit scoped quota projection
+- canonical settlement outcome normalizationとbounded invalid-input diagnosis
+- pureなthreshold / exhaustion evaluationとcrossing semantics
+
+provider-neutral active-reservation推測、notification delivery、accounting-window ownership、entitlement / pricing / subscription state、cross-budget / vector synthetic totalは、推測して取り込まず明示的にcore外とします。
 
 ## Safety summary
 

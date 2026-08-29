@@ -1,7 +1,8 @@
 import type { UsageEvent, UsageObserverHandler } from './observability.js';
+import type { SettlementOutcomeDiagnosticSink } from './settlement-outcomes.js';
 
 export const MCP_USAGE_CONTROL_PACKAGE_NAME = 'mcp-usage-control';
-export const MCP_USAGE_CONTROL_VERSION = '0.9.0';
+export const MCP_USAGE_CONTROL_VERSION = '0.10.0';
 
 export type UsageRuntimeProvider = 'memory' | 'redis' | 'firestore' | 'cloudflare' | 'custom';
 export type UsageRuntimeCapability =
@@ -34,6 +35,11 @@ export interface UsageOperationalErrorCounters {
   settle: number;
 }
 
+export interface UsageOperationalObservedAttempts {
+  reserve: number;
+  settle: number;
+}
+
 export interface UsageOperationalLifecycleCounters {
   eventsObserved: number;
   reserveAccepted: number;
@@ -41,6 +47,8 @@ export interface UsageOperationalLifecycleCounters {
   settlementsCompleted: number;
   pendingReservationsReleased: number;
   liableReservationsRetained: number;
+  invalidSettlementOutcomes: number;
+  observedAttempts: UsageOperationalObservedAttempts;
   errors: UsageOperationalErrorCounters;
 }
 
@@ -106,13 +114,19 @@ export function projectScopedQuota(limit: number, remaining: number): ScopedQuot
  * Process-local bounded lifecycle counters derived from UsageEvent.
  * This observer is deliberately non-authoritative and never infers quota truth.
  */
-export class UsageOperationalMonitor implements UsageObserverHandler {
+export class UsageOperationalMonitor
+  implements UsageObserverHandler, SettlementOutcomeDiagnosticSink
+{
   private readonly identity: UsageRuntimeIdentity | undefined;
   private counters: UsageOperationalLifecycleCounters = emptyCounters();
   private lastEventAt: number | undefined;
 
   constructor(identity?: UsageRuntimeIdentity) {
     this.identity = identity === undefined ? undefined : createUsageRuntimeIdentity(identity);
+  }
+
+  onInvalidSettlementOutcome(): void {
+    this.counters.invalidSettlementOutcomes = increment(this.counters.invalidSettlementOutcomes);
   }
 
   onEvent(event: UsageEvent): void {
@@ -123,14 +137,17 @@ export class UsageOperationalMonitor implements UsageObserverHandler {
       case 'reserve.accepted':
       case 'vector.reserve.accepted':
         this.counters.reserveAccepted = increment(this.counters.reserveAccepted);
+        this.counters.observedAttempts.reserve = increment(this.counters.observedAttempts.reserve);
         return;
       case 'reserve.denied':
       case 'vector.reserve.denied':
         this.counters.reserveDenied = increment(this.counters.reserveDenied);
+        this.counters.observedAttempts.reserve = increment(this.counters.observedAttempts.reserve);
         return;
       case 'settlement.completed':
       case 'vector.settlement.completed':
         this.counters.settlementsCompleted = increment(this.counters.settlementsCompleted);
+        this.counters.observedAttempts.settle = increment(this.counters.observedAttempts.settle);
         return;
       case 'reservation.recovered':
       case 'vector.reservation.recovered':
@@ -143,6 +160,11 @@ export class UsageOperationalMonitor implements UsageObserverHandler {
       case 'operation.error': {
         const key = errorCounterKey(event.phase);
         this.counters.errors[key] = increment(this.counters.errors[key]);
+        if (event.phase === 'reserve') {
+          this.counters.observedAttempts.reserve = increment(this.counters.observedAttempts.reserve);
+        } else if (event.phase === 'settle') {
+          this.counters.observedAttempts.settle = increment(this.counters.observedAttempts.settle);
+        }
         return;
       }
     }
@@ -153,6 +175,7 @@ export class UsageOperationalMonitor implements UsageObserverHandler {
       ...(this.identity === undefined ? {} : { identity: cloneIdentity(this.identity) }),
       lifecycle: {
         ...this.counters,
+        observedAttempts: { ...this.counters.observedAttempts },
         errors: { ...this.counters.errors },
       },
       ...(this.lastEventAt === undefined ? {} : { lastEventAt: this.lastEventAt }),
@@ -168,6 +191,11 @@ function emptyCounters(): UsageOperationalLifecycleCounters {
     settlementsCompleted: 0,
     pendingReservationsReleased: 0,
     liableReservationsRetained: 0,
+    invalidSettlementOutcomes: 0,
+    observedAttempts: {
+      reserve: 0,
+      settle: 0,
+    },
     errors: {
       quote: 0,
       reserve: 0,
