@@ -41,6 +41,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Accounting-window budget keys](accounting-window-keys.md) — deterministic calendar-day/month key construction with explicit timezone and accounting-identity migration hazards.
 - [API reference](api-reference.md) — the current public source API and package entry points.
 - [Observability](observability.md) — lifecycle events, privacy, cardinality, and best-effort delivery.
+- [Operational usability](operational-usability.md) — v0.10 bounded health snapshots, canonical settlement outcomes, and threshold/exhaustion helpers.
 - [Roadmap](roadmap.md) — current priorities and post-v1 boundaries.
 - [v1.0 readiness review](v1-readiness.md) — production-readiness audit, blocker classification, stable/deferred boundary, and release-time checks.
 
