@@ -56,7 +56,7 @@ pnpm check
 
 See [Use from source / local tarballs](using-from-source.md) for exact commands to install the packages into another application.
 
-Node.js 20 or later is required.
+**Node.js 22 or later is required for the supported v1 runtime.** Node.js 20 is EOL; a temporary Node 20 CI job may still run as compatibility-only evidence until the repository's required-check policy is migrated.
 
 ## Smallest example
 
@@ -220,6 +220,7 @@ Use the same `operationId` when retrying the same logical operation.
 
 Before putting the library on an enforcement path:
 
+- run on Node.js 22 or later;
 - derive principal and tenant identity from trusted server-side context;
 - use stable `operationId` values for retries;
 - return every applicable daily/monthly/tenant budget in one quote;
