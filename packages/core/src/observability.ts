@@ -23,6 +23,8 @@ interface RequestIdentityFields {
   operationId: string;
 }
 
+export type UsageRecoveryStore = 'memory' | 'redis' | 'cloudflare' | 'firestore';
+
 export type UsageEvent =
   | (UsageEventBase &
       RequestIdentityFields & {
@@ -86,7 +88,7 @@ export type UsageEvent =
       })
   | (UsageEventBase & {
       type: 'vector.reservation.recovered';
-      store: 'memory' | 'redis' | 'cloudflare';
+      store: UsageRecoveryStore;
       recovery: 'pending_released' | 'liable_retained';
       reservationId?: string;
       principalId?: string;
@@ -98,7 +100,7 @@ export type UsageEvent =
     })
   | (UsageEventBase & {
       type: 'reservation.recovered';
-      store: 'memory' | 'redis' | 'cloudflare';
+      store: UsageRecoveryStore;
       recovery: 'pending_released' | 'liable_retained';
       /** Distributed-store recovery IDs are opaque hashes; memory-store IDs are local reference IDs. */
       reservationId?: string;
@@ -147,7 +149,7 @@ export interface UsageLogRecord {
   source?: 'policy' | 'store' | 'runtime';
   denialReason?: UsageLogDenialReason;
   errorClass?: UsageLogErrorClass;
-  store?: 'memory' | 'redis' | 'cloudflare';
+  store?: UsageRecoveryStore;
   recovery?: 'pending_released' | 'liable_retained';
   reservedUnits?: number;
   actualUnits?: number;
