@@ -6,7 +6,7 @@
 
 > **現在の配布状況:** packageはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) に従ってlocal core + Redis tarballをinstallし、`redis@6.2.0` を組み合わせてください。
 
-v0.8 source lineはRedis 7 / node-redis 6.2.xでtestしています。release matrixは現在Node.js 20 / 22 / 24を実行しますが、future v1のsupported Node.js floorはcompatibility CIから暗黙決定せず、v0.10の#105で明示判断します。
+current v0.11 / v1-frozen source lineはRedis 7 / node-redis 6.2.xでtestしています。supported v1 runtimeはNode.js 22+です。Node.js 20はcompatibility CI evidenceとしてのみ残しており、supported runtime contractには含みません。
 
 ## Atomic multi-budget model
 
@@ -25,7 +25,7 @@ admissionを `GET -> compare -> SET` に分割せず、multi-budgetもclient-sid
 
 これによりdaily / monthly / tenant等の複数budgetに参加するoperationでもpartial reserve / partial releaseを防ぎます。
 
-## v0.1 key model
+## Redis key model
 
 transactional keyはすべて1つのconfigurable Redis Cluster hash tagを共有します。default:
 
@@ -45,7 +45,7 @@ raw principal / tenant / operation / tool / budget identifierはRedis key name�
 
 上記keyは同じhash slotへ置き、すべてのLua transitionをRedis Cluster上で `CROSSSLOT` なしに実行できるようにします。
 
-v0.1はhorizontal write distributionよりcorrectnessを優先します。将来複数usage domainへshardする場合でも、1 atomic admissionに参加するbudgetは同じtransaction domainに置く必要があります。
+current designはhorizontal write distributionよりcorrectnessを優先します。将来複数usage domainへshardする場合でも、1 atomic admissionに参加するbudgetは同じtransaction domainに置く必要があります。
 
 ## Pending / cost-liable expiry
 
@@ -102,7 +102,7 @@ observer deliveryはbest-effortでRedis transactionの外側です。telemetry�
 
 `cleanupBatchSize` は1 admissionあたりのexpired lease / tombstone cleanup量を制限します。stale stateが1 batchを超える場合は一部が次回admissionまで残ります。
 
-v0.1はglobal lease indexなのでcleanup backlogはusage domain全体のcapacity recoveryを保守的に遅らせる可能性があります。availability trade-offでありquota bypassではありません。
+current designはglobal lease indexなのでcleanup backlogはusage domain全体のcapacity recoveryを保守的に遅らせる可能性があります。availability trade-offでありquota bypassではありません。
 
 crash / abandonment量が多い場合はstale-state pressureをmonitorし `cleanupBatchSize` を調整してください。
 
@@ -116,7 +116,7 @@ month:user-42:2026-08
 month:tenant-org-7:2026-08
 ```
 
-keyを変えると新accounting bucketになります。v0.1は `used` budget fieldへ自動TTLを付けません。generic retentionでvalid accounting stateを消すことを避けるためです。削除はapplication自身のwindow lifecycle上safeな場合のみ行ってください。
+keyを変えると新accounting bucketになります。Storeは `used` budget fieldへ自動TTLを付けません。generic retentionでvalid accounting stateを消すことを避けるためです。削除はapplication自身のwindow lifecycle上safeな場合のみ行ってください。
 
 ## Atomicityとdurabilityは別
 
@@ -136,7 +136,7 @@ financial-grade durable accountingが必要ならRedisはenforcement layerとし
 
 Redis writeはcommit済みでもclientがACKを失うことがあります。
 
-v0.1の挙動:
+current acknowledgement behavior:
 
 - admission ACK loss -> 同logical operationのretryはduplicateとしてblock。別operationはreserved capacityを観測。
 - `markLiable` ACK loss -> write済みなら後のexpiryもcost-liableとして保守的charge。
@@ -185,7 +185,7 @@ CIの実Redis 7 test:
 - observabilityはbest-effort / non-durableでquota ledgerではない。
 - billing、payment、authentication、analytics backendは内蔵しません。
 
-## Operation reconciliation (v0.8)
+## Operation reconciliation
 
 `RedisUsageStore` はoptional scalar `OperationReconciliationStore` を実装します。lookupはRedis `TIME` / `HGET` / `ZSCORE`だけを使うread-only Lua scriptで、capacity reserve/release、liability、lease、settlement、replay stateを変更しません。expected reserved units / hashed budget identityがretained stateと一致しなければfail closedします。
 

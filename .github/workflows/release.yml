@@ -7,12 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to validate/release (for example v0.2.0)
+        description: Existing release tag to validate/release (for example v0.12.0)
         required: true
         type: string
 
 permissions:
   contents: write
+  checks: read
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -47,16 +50,42 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ steps.release.outputs.tag }}
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - name: Verify protected exact-SHA release evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          tagged_sha="$(git rev-parse "${TAG}^{commit}")"
+
+          if ! git merge-base --is-ancestor "$tagged_sha" origin/main; then
+            echo "release tag $TAG points to $tagged_sha, which is not reachable from protected main" >&2
+            exit 1
+          fi
+
+          checks="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/${GITHUB_REPOSITORY}/commits/${tagged_sha}/check-runs?per_page=100")"
+          passing="$(jq '[.check_runs[] | select(.name == "test (22)" and .conclusion == "success")] | length' <<<"$checks")"
+          if [[ "$passing" -lt 1 ]]; then
+            echo "exact tagged SHA $tagged_sha has no successful aggregate test (22) evidence" >&2
+            exit 1
+          fi
+
+          printf 'release tag %s is bound to protected-main SHA %s with test (22) success\n' "$TAG" "$tagged_sha"
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 10.15.0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           package-manager-cache: false
@@ -114,6 +143,58 @@ jobs:
           grep -qx 'package/dist/thresholds.js' <<<"$core_listing"
           grep -qx 'package/dist/thresholds.d.ts' <<<"$core_listing"
 
+      - name: Install the exact packed bytes in a clean consumer
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/muc-release-consumer
+          mkdir -p /tmp/muc-release-consumer
+          cd /tmp/muc-release-consumer
+          npm init -y >/dev/null
+          npm install \
+            "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz" \
+            "/tmp/muc-packs/mcp-usage-control-mcp-${VERSION}.tgz" \
+            "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz" \
+            "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz" \
+            "/tmp/muc-packs/mcp-usage-control-firestore-${VERSION}.tgz" \
+            @modelcontextprotocol/server@2.0.0 redis@6.2.0 --ignore-scripts
+          node --input-type=module <<'NODE'
+          import { MemoryUsageStore, UsageControl, createWindowedBudgetKey } from 'mcp-usage-control';
+          import { projectScopedQuota, projectScopedQuotaWindow } from 'mcp-usage-control/operational';
+          import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
+          import { protectTool } from 'mcp-usage-control-mcp';
+          import { RedisUsageStore } from 'mcp-usage-control-redis';
+          import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
+          if (![
+            MemoryUsageStore,
+            UsageControl,
+            createWindowedBudgetKey,
+            projectScopedQuota,
+            projectScopedQuotaWindow,
+            FirestoreUsageStore,
+            protectTool,
+            RedisUsageStore,
+            CloudflareUsageStore,
+            RemoteCloudflareUsageStore,
+          ].every(Boolean)) throw new Error('release artifact import smoke test failed');
+          NODE
+
+      - name: Generate release checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /tmp/muc-packs
+          sha256sum ./*.tgz > SHA256SUMS
+          test "$(wc -l < SHA256SUMS)" -eq 5
+          sha256sum --check SHA256SUMS
+
+      - name: Attest validated package artifacts
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: '/tmp/muc-packs/*.tgz'
+
       - name: Build release notes from changelog
         shell: bash
         env:
@@ -126,18 +207,40 @@ jobs:
             capture { print }
           ' CHANGELOG.md > /tmp/release-notes.md
           test -s /tmp/release-notes.md
+          cat >> /tmp/release-notes.md <<'NOTES'
 
-      - name: Create GitHub Release
+          ---
+
+          The attached `.tgz` files are the exact package artifacts validated by this release workflow. Verify them with `SHA256SUMS` and GitHub artifact attestations. Their presence does **not** mean the packages were published to npm; registry publication remains separately authorized.
+          NOTES
+
+      - name: Create or verify immutable GitHub Release assets
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
+          shopt -s nullglob
+          assets=(/tmp/muc-packs/*.tgz /tmp/muc-packs/SHA256SUMS)
+          test "${#assets[@]}" -eq 6
+
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "GitHub Release $TAG already exists; skipping"
+            rm -rf /tmp/muc-existing-assets
+            mkdir -p /tmp/muc-existing-assets
+            gh release download "$TAG" --dir /tmp/muc-existing-assets
+            for asset in "${assets[@]}"; do
+              name="$(basename "$asset")"
+              test -f "/tmp/muc-existing-assets/$name"
+              cmp --silent "$asset" "/tmp/muc-existing-assets/$name" || {
+                echo "existing release asset differs from validated bytes: $name" >&2
+                exit 1
+              }
+            done
+            echo "GitHub Release $TAG already exists with identical validated assets; leaving it immutable"
           else
             gh release create "$TAG" \
+              "${assets[@]}" \
               --verify-tag \
               --title "$TAG" \
               --notes-file /tmp/release-notes.md

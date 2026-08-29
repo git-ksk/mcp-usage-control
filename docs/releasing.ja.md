@@ -70,11 +70,13 @@ pre-1.0 GitHub/source releaseは、対象surfaceについて次を満たした�
 1. package version、changelog、英日docsを更新。
 2. release PRでaggregate `test (22)` を必須とし、Node.js 22 / 24、実Redis、package / tarball / clean-consumer、該当provider integrationのevidenceを確認する。legacy `test (20)` がprotectedな間はcompatibility-only contextとしてresolveさせる。
 3. public CI外にあるadapter固有のdeployed dogfood要件を確認する。
-4. release PRを `main` へmerge。
+4. release PRをprotected `main` へmerge。
 5. test済みexact commitへ `vX.Y.Z` tag。
-6. 同tag / changelog entryからGitHub Releaseを作成。
+6. `GitHub Release` workflowでtagged SHAが `main` からreachableで、exact SHAのaggregate `test (22)` がsuccessしていることを証明。
+7. 5 tarballを1回だけpack/validateし、そのexact bytesをclean consumerへinstall、`SHA256SUMS` とGitHub artifact attestationを生成。
+8. exact validated tarball + checksum manifestをGitHub Release assetとして作成。rerun時は既存assetをsilent replaceせずbyte-for-byte一致を検証。
 
-`GitHub Release` workflowはnpm publishを行いません。
+`GitHub Release` workflowはnpm publishを行いません。tagが存在してもprotected `main` からreachableでない、またはexact SHAにsuccessful `test (22)` evidenceが無い場合はrelease authorizationとして扱いません。
 
 ## npm publication procedure
 
@@ -109,6 +111,10 @@ manual publish workflowは現在Node.js 24で実行します。Node 24はsupport
 ## Storage schema
 
 Redis / Cloudflare / Firestore storage layoutはimplementation detailですが、既存enforcement stateを持つdeploymentへ影響し得ます。v0.1以降にexisting stateを安全にreadできないschema changeを行う場合はmigration / reset noteを目立つ形で付けます。
+
+## Emergency / known-bad release
+
+[Known-bad release containment / emergency hotfix runbook](incident-response.ja.md) を使います。persisted enforcement stateに対してgeneric rollbackをsafeとは仮定しません。
 
 ## Security fixes
 

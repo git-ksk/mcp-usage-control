@@ -125,7 +125,9 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 ## v1 promotion status
 
-v0.11 source-release gateがfinal pre-v1 evidence checkpointです。v0.11 tagをcutする前にsupported Node / package check、Redis、aggregate `test (22)`、Cloudflare workerd、Firestore Emulator、package tarball / clean consumer、英日docs、final public contractをすべてgreenにします。tagged v0.11 source release成立後は、feature-free v1 stable promotionに対するunresolved source-contract blockerはありません。
+v0.11でaccounting / runtime / storage / API freezeを確立しました。release後のproduct auditにより、#177〜#184を閉じるboundedなv0.12 hardening checkpointを追加します。対象はexact-SHA release provenance、validated release artifact、supply-chain maintenance、incident response、current operator docs、competitive adopt/defer decision、additive non-authoritative quota-window UX projection、reproducible provider performance/cost evidenceです。frozen accounting lifecycle / persisted Store contractは再定義しません。
+
+v0.12をfull release-safety evidence greenでtagしblockerをcloseした後、v1.0はそのhardened surfaceに対するfeature-free stable promotionのままです。
 
 ## npm distribution boundary
 
@@ -137,6 +139,6 @@ source releaseがregistry publicationを暗黙authorizeすることはありま�
 
 ## v1 promotion rule
 
-v1.0では **新featureやaccounting modelを追加しません**。frozen v0.11 surfaceをstable label/source milestoneへpromotionする位置づけで、tagged v0.11 release evidenceがgreenであることを前提とします。npm publicationは#6で独立authorizationのままです。
+v1.0では **新featureやaccounting modelを追加しません**。hardened v0.12 surfaceをstable label/source milestoneへpromotionする位置づけで、tagged v0.12 release evidenceがgreenであることを前提とします。npm publicationは#6で独立authorizationのままです。
 
 [Roadmap](roadmap.ja.md)、[Release policy](releasing.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、[Persisted-state compatibility](persisted-state-compatibility.ja.md)、[v1 public API freeze](v1-public-api-freeze.ja.md)、各provider docsでcurrent support boundaryを確認してください。

@@ -8,7 +8,7 @@
 quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 ```
 
-generic gateway、billing ledger、governance system、workflow engineへ広げるのではなく、この境界のcorrectness / production usabilityを深めます。戦略上の境界は [Project positioning](positioning.ja.md) を参照してください。
+generic gateway、billing ledger、governance system、workflow engineへ広げるのではなく、この境界のcorrectness / production usabilityを深めます。戦略上の境界は [Project positioning](positioning.ja.md) と継続更新する [競合capability map](competitive-capabilities.ja.md) を参照してください。
 
 ## 現在のbaseline
 
@@ -23,6 +23,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
+ -> v0.12 product/operations hardening [IN PROGRESS]
  -> v1.0 feature-free stable promotion
 ```
 
@@ -133,7 +134,9 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 ## 現在の実行順序
 
-v0.11 completion trancheはclose済みです。次のsource milestoneは **feature追加なしのv1.0 stable promotion** です。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
+v0.11 completion trancheはclose済みです。release後のproduct auditで、v1前にboundedな **v0.12 product/operations hardening** tranche (#177〜#184) を追加しました。frozen accounting lifecycle / persisted Store contractを再定義しないadditive operational/developer helperだけを許可し、#183はv1 API freezeに明示されたadditive-helper allowanceの範囲です。同じtrancheでrelease provenance、incident response、dependency maintenance、stale docs、competitive decision、provider benchmark evidenceをhardeningします。
+
+v0.12 releaseとこれらIssue close後、**v1.0はv0.12 surfaceに対するfeature-free stable promotion** のままです。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
@@ -171,6 +174,13 @@ v1.0前に:
 | #161 settlement/public lifecycle typing | v0.11 | **Completed; public API/name freeze** |
 | #160 required release-safety enforcement | v0.11 | **Completed; aggregate `test (22)` gate** |
 | #24 Cloudflare real operational evidence | v0.11 | **Completed; real rotation/caller/rejection proof、platform-limit未観測boundaryを明示** |
+| #177 / #178 release provenance + validated artifact | v0.12 | **In progress; accounting semantics変更なし** |
+| #179 dependency/action supply-chain maintenance | v0.12 | **In progress** |
+| #180 known-bad release / hotfix runbook | v0.12 | **In progress** |
+| #181 current operator-doc baseline cleanup | v0.12 | **In progress** |
+| #182 maintained competitive capability decision | v0.12 | **In progress; positioning guardrail** |
+| #183 safe quota-window/reset UX projection | v0.12 | **In progress; additive non-authoritative helper** |
+| #184 provider benchmark / cost-profile harness | v0.12 | **In progress; non-blocking performance evidence** |
 | #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization必須** |
 
 ## Release policy
@@ -181,4 +191,4 @@ v1.0前に:
 - GitHub/source release成功はregistry publicationを意味しない
 - aggregate required release-safety gateはrelease policyで約束するevidenceと常に一致させる
 
-[Release policy](releasing.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、各provider docsをproduction deployment前に確認してください。
+[Release policy](releasing.ja.md)、[Provider benchmark harness](provider-benchmarks.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、各provider docsをproduction deployment前に確認してください。

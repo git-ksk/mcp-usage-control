@@ -70,11 +70,13 @@ A pre-1.0 GitHub/source release is ready only when the applicable surfaces satis
 1. update package versions, changelog, and bilingual docs;
 2. require aggregate `test (22)` release-safety evidence for the release PR, including Node.js 22/24, real Redis, package/tarball/clean-consumer checks, and applicable provider integration; allow the compatibility-only `test (20)` context to resolve while it remains protected;
 3. verify any adapter-specific deployed dogfood requirement that is outside public CI;
-4. merge the release PR to `main`;
+4. merge the release PR to protected `main`;
 5. tag the exact tested commit as `vX.Y.Z`;
-6. create the GitHub Release from the same tag and changelog entry.
+6. let the `GitHub Release` workflow prove that the tagged SHA is reachable from `main` and has a successful exact-SHA aggregate `test (22)` check;
+7. validate/package the five tarballs once, install those exact bytes in a clean consumer, generate `SHA256SUMS`, and create GitHub artifact attestations;
+8. create the GitHub Release with those exact validated tarballs plus the checksum manifest. Existing release assets are verified byte-for-byte on a rerun rather than silently replaced.
 
-The `GitHub Release` workflow never publishes to npm.
+The `GitHub Release` workflow never publishes to npm. A tag that is not reachable from protected `main`, or whose exact SHA lacks successful `test (22)` evidence, is not release-authorized even if the tag itself exists.
 
 ## npm publication procedure
 
@@ -109,6 +111,10 @@ Each release should state:
 ## Storage schema
 
 Redis, Cloudflare, and Firestore storage layouts are implementation details but changes can affect deployments carrying existing enforcement state. Any post-v0.1 change that cannot safely read existing state must include a prominent migration/reset note.
+
+## Emergency / known-bad releases
+
+Use [Known-bad release containment and emergency hotfix runbook](incident-response.md). A generic rollback is never assumed safe for persisted enforcement state.
 
 ## Security fixes
 

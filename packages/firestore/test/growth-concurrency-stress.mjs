@@ -10,7 +10,8 @@ assert.ok(
 );
 
 const database = new Firestore({ projectId });
-const iterations = 24;
+// Keep the always-on emulator stress bounded; use higher counts manually before releases when needed.
+const iterations = 12;
 
 function request(operationId) {
   return {

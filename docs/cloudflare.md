@@ -186,21 +186,21 @@ Coverage includes:
 - gateway authentication;
 - observer failure isolation.
 
-## Operation reconciliation (v0.8)
+## Operation reconciliation
 
-`mcp-usage-control-cloudflare/reconciliation` adopts the common v0.8 scalar operation-status vocabulary. `reconcileRemoteCloudflareOperation()` is the generic read-only entry point; existing `reconcileRemoteCloudflareReserve()` remains as a v0.7-compatible alias. The authenticated lookup never creates a reservation or releases, renews, or settles usage.
+`mcp-usage-control-cloudflare/reconciliation` uses the current frozen scalar operation-status vocabulary. `reconcileRemoteCloudflareOperation()` is the generic read-only entry point; existing `reconcileRemoteCloudflareReserve()` remains as a v0.7-compatible alias. The authenticated lookup never creates a reservation or releases, renews, or settles usage.
 
 See [Operation reconciliation/status](operation-reconciliation.md) and [Cloudflare reserve ACK reconciliation](cloudflare-reserve-reconciliation.md) for the fail-closed boundary.
 
 ## Current limitations
 
-- every budget in one reservation uses the same quoted/actual unit count, matching core v0.1;
+- scalar reservations apply the same quoted/actual unit count to every participating budget; vector accounting is available through the separate vector capability;
 - one Durable Object instance serializes one configured transaction domain;
 - cleanup is lazy/bounded;
 - historical used-budget row retention is application-specific;
 - remote gateway authentication/credential rotation is application responsibility;
 - this enforcement state is not a financial-grade accounting ledger;
-- MCP multi-round `input_required` remains outside v0.1 `protectTool()` support.
+- `protectTool()` remains intentionally single-round; opt-in `protectMultiRoundTool()` provides the supported multi-round `input_required` accounting path.
 
 ## Atomic heterogeneous vector usage (v0.7 / schema v3)
 

@@ -8,7 +8,7 @@ This roadmap protects the project's core category: **failure-safe transactional 
 quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 ```
 
-The project should deepen correctness and production usability at that boundary rather than expand into a generic gateway, billing ledger, governance system, or workflow engine. See [Project positioning](positioning.md).
+The project should deepen correctness and production usability at that boundary rather than expand into a generic gateway, billing ledger, governance system, or workflow engine. See [Project positioning](positioning.md) and the maintained [Competitive capability map](competitive-capabilities.md).
 
 ## Current baseline
 
@@ -23,6 +23,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
+ -> v0.12 product/operations hardening [IN PROGRESS]
  -> v1.0 feature-free stable promotion
 ```
 
@@ -133,7 +134,9 @@ No genuine Workers Free-plan exhaustion/platform-overload event occurred natural
 
 ## Current execution order
 
-The v0.11 completion tranche is closed. The next source milestone is **v1.0 as a feature-free stable promotion**. Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
+The v0.11 completion tranche is closed. A post-release product audit opened one bounded **v0.12 product/operations hardening** tranche (#177-#184) before v1. It may add only additive operational/developer helpers that do not redefine the frozen accounting lifecycle or persisted Store contract; #183 fits the explicit additive-helper allowance in the v1 API freeze. Release provenance, incident response, dependency maintenance, stale docs, competitive decisions, and provider benchmark evidence are hardened in the same tranche.
+
+After v0.12 is released and these issues are closed, **v1.0 remains a feature-free stable promotion over the v0.12 surface**. Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
 
 ## v1 completion definition
 
@@ -171,6 +174,13 @@ Before v1.0:
 | #161 settlement/public lifecycle typing | v0.11 | **Completed; public API/name freeze** |
 | #160 required release-safety enforcement | v0.11 | **Completed; aggregate `test (22)` gate** |
 | #24 Cloudflare real operational evidence | v0.11 | **Completed; real rotation/caller/rejection proof, platform-limit non-observation explicitly bounded** |
+| #177 / #178 release provenance + validated artifacts | v0.12 | **In progress; no accounting-semantic change** |
+| #179 dependency/action supply-chain maintenance | v0.12 | **In progress** |
+| #180 known-bad release/hotfix runbook | v0.12 | **In progress** |
+| #181 current operator-doc baseline cleanup | v0.12 | **In progress** |
+| #182 maintained competitive capability decisions | v0.12 | **In progress; positioning guardrail** |
+| #183 safe quota-window/reset UX projection | v0.12 | **In progress; additive non-authoritative helper** |
+| #184 provider benchmark/cost-profile harness | v0.12 | **In progress; non-blocking performance evidence** |
 | #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization required** |
 
 ## Release policy
@@ -181,4 +191,4 @@ Before v1.0:
 - A GitHub/source release never implies registry publication.
 - The aggregate required release-safety gate must remain aligned with the evidence promised by release policy.
 
-See [Release policy](releasing.md), [v1.0 readiness review](v1-readiness.md), [Cost-bearing operations](cost-bearing-operations.md), and provider-specific documentation before production deployment.
+See [Release policy](releasing.md), [Provider benchmark harness](provider-benchmarks.md), [v1.0 readiness review](v1-readiness.md), [Cost-bearing operations](cost-bearing-operations.md), and provider-specific documentation before production deployment.

@@ -53,6 +53,8 @@ cost-liable lease expires  -> conservativeなfull chargeを保持
 
 新機能はこのpositioningに照らして判断します。admission、liability、settlement、replay、recovery、MCP execution boundaryを強くするものはcore候補です。gatewayやbilling platform化する機能はcoreへ入れません。
 
+隣接製品とのevidence-basedな継続比較は [競合capability map](competitive-capabilities.ja.md) を参照してください。
+
 ## MCP-native direction
 
 MCP固有の開発は、accounting correctnessへ直接影響するprotocol semanticsを優先します。

@@ -45,6 +45,10 @@ credential、token、cookie、secretを含むconnection string、raw production 
 
 feature-request templateを使用し、use case、維持すべきsafety invariant、その変更がcoreとadapterのどちらに属するべきかを説明してください。
 
+## Dependency advisory
+
+supported lineのdependency / GitHub Actions advisoryは [SECURITY.ja.md](SECURITY.ja.md) のautomated check / triage policyで扱います。Critical/Highではaffected dependency/action、supported releaseへのimpact、applicability / exploitability判断、判明していればsafe target versionを記録します。
+
 ## Security issue
 
 quota bypass、double spending、unauthorized access、cross-tenant leakage、inconsistent settlementにつながるvulnerabilityにはpublic Issueを使用しないでください。[SECURITY.ja.md](SECURITY.ja.md) に従ってください。
@@ -56,7 +60,7 @@ quota bypass、double spending、unauthorized access、cross-tenant leakage、in
 - public API / name freezeはolder source releaseから暗黙に仮定せず、v0.11 lineで完了させる
 - npm registry publicationは#6の明示authorization付きfirst publishまでdeferred
 - stableなfirst-class MCP Tasks wire/runtime integrationはupstream surfaceがexperimentalな間deferred
-- v0.8のgeneric operation reconciliationはscalar-onlyで、vector initial-reserve ambiguityは別proofがない限りfail closed
+- generic operation reconciliationはscalar-onlyで、vector initial-reserve ambiguityは別proofがない限りfail closed
 - lease loss後の厳密なprovider-specific fencingはgeneric coreの責務外
 - billing、payment、authentication、analytics backendをcoreへ内蔵しない
 

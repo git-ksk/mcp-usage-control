@@ -125,7 +125,9 @@ A genuine Workers Free-plan exhaustion/platform-overload event did not occur nat
 
 ## v1 promotion status
 
-The v0.11 source-release gate is the final pre-v1 evidence checkpoint: supported Node/package checks, Redis, aggregate `test (22)`, Cloudflare workerd, Firestore Emulator, package tarballs/clean consumer, bilingual docs, and the final public contract must be green before the v0.11 tag is cut. Once the tagged v0.11 source release exists, no unresolved source-contract blocker remains for a feature-free v1 stable promotion.
+v0.11 established the accounting/runtime/storage/API freeze. The post-release product audit adds a bounded v0.12 hardening checkpoint for #177-#184: exact-SHA release provenance, validated release artifacts, supply-chain maintenance, incident response, current operator docs, competitive adopt/defer decisions, additive non-authoritative quota-window UX projection, and reproducible provider performance/cost evidence. None may redefine the frozen accounting lifecycle or persisted Store contract.
+
+Once v0.12 is tagged with the full release-safety evidence green and these blockers are closed, v1.0 remains a feature-free stable promotion over that hardened surface.
 
 ## npm distribution boundary
 
@@ -137,6 +139,6 @@ A source release never implicitly authorizes registry publication.
 
 ## v1 promotion rule
 
-v1.0 should contain **no new feature or accounting model**. Promotion is a stable-label/source milestone over the frozen v0.11 surface and remains contingent on the tagged v0.11 release evidence being green. npm publication remains independently authorized under #6.
+v1.0 should contain **no new feature or accounting model**. Promotion is a stable-label/source milestone over the hardened v0.12 surface and remains contingent on the tagged v0.12 release evidence being green. npm publication remains independently authorized under #6.
 
 See [Roadmap](roadmap.md), [Release policy](releasing.md), [Cost-bearing operations](cost-bearing-operations.md), [Persisted-state compatibility](persisted-state-compatibility.md), [v1 public API freeze](v1-public-api-freeze.md), and provider-specific documentation for the current support boundaries.
