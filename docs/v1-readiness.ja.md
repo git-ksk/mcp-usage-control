@@ -12,18 +12,21 @@
 
 packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
 
-v0.11 completion lineでは、最初のaccounting / reliability / runtime trancheを解消しました。
+v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / governance trancheを解消しました。
 
-- #166 Redis renewed-lease reliabilityはcross-file `FLUSHDB` test interferenceが原因と判明し、Redis runtime semanticsを変えずに修正
-- #105でsupported Node.js floorを **22+** にfreeze。Node 22/24がsupported evidence、Node 20はcurrent required check context維持中のみcompatibility-only
+- #166 Redis renewed-lease reliabilityはcross-file `FLUSHDB` interferenceが原因と判明し、Redis runtime semanticsを変えずに修正
+- #105でsupported Node.js floorを **22+** にfreeze。Node 22/24がsupported evidence、Node 20はcompatibility-only
 - #157でFirestore Emulator progressive-growth contentionを分類し、`INVALID_ARGUMENT`をStore runtime retryへ追加せず反復diagnostic stressを導入
-- #152でprovider-backed cost-bearing workを既存のvector reserve / liability / grow / renew / settle contractへfreezeし、billing-specific public primitiveは追加しない
+- #152でprovider-backed cost-bearing workを既存のvector reserve / liability / grow / renew / settle contractへfreeze
+- #106でRedis / Firestore / Cloudflare persisted-stateのupgrade、rollback、future-schema fail-closed、fresh-domain reset境界をfreeze
+- #161でv1 package / lifecycle / status / error vocabularyをfreezeし、MCP settlement alias normalizationを明示
+- #160でprotectedな `test (22)` をapplicableなNode / Redis / package / Cloudflare / Firestore evidenceのaggregate release-safety gateへ変更
 
-残るactive v0.11 sequenceは **#106 persisted-state compatibility -> #160 release-safety enforcement + #161 public API/name freeze -> #24 final Cloudflare evidence -> final v0.11 release evidence** です。#6は別publication gateで、明示authorizationがある場合だけ実行します。
+残るv0.11 blockerは **#24 final real-Cloudflare operational evidence** と、その後のfinal v0.11 release evidenceだけです。#6は別publication gateで、明示authorizationがある場合だけ実行します。
 
 ## 判定
 
-**accounting modelはstrong v1 candidateのままで、主要semantic / runtime reliability decisionはfreezeできました。ただしremaining compatibility、API、production evidence、merge governance gateを閉じるまでv1.0 promotionはしません。**
+**public accounting / runtime / storage / API / governance surfaceはv1候補としてfreezeできました。残るblockerはCloudflare adapterのproduction-evidence honestyであり、core semanticやAPIの未決定事項ではありません。**
 
 ## Stable accounting invariant
 
@@ -74,8 +77,6 @@ observer / diagnostic failureはadmission、liability、renewal、growth、settl
 
 既存public surfaceで十分で、v0.11では **billing-specific accounting primitiveを追加しません**。
 
-採用するcompositionは次です。
-
 ```text
 application-owned entitlement / accounting scope / pricing
   -> bounded maximum exposureをatomic vector reserve
@@ -85,53 +86,40 @@ application-owned entitlement / accounting scope / pricing
   -> authoritative actual usageでsettle
 ```
 
-focused proofで次を確認します。
-
-- 複数caller principalがopaque budget keyを通じて1つのapplication-selected shared accounting scopeを消費できる
-- count quotaとprovider-cost budgetを別vector dimensionとして維持する
-- provider costはapplication-defined safe integer / fixed-scale unitを使う
-- settlementはsuccessfully reserved exposureを超えず、unused capacityをreleaseする
-- pre-dispatchでno effectを証明できれば0 settleできる
-- billable retryは追加exposureのgrowth成功後だけdispatchする
-- growth denyでretry dispatchを止める
-- post-dispatch / liable ambiguityはreserved exposureをconservativeに保持する
-- stable logical operation identityでduplicate reservationを防ぐ
-
-providerがcontrollable pre-growth boundaryなしでunbounded costを増やせる場合、このlibraryによるhard spend capをclaimしてはいけません。delayed provider usageはleaseをauthoritatively保持 / renewできる間、またはinitial reservationがdefensible maximumをcoverする場合だけbounded supportします。durable post-hoc financial reconciliationはcore外です。
+focused proofではshared accounting scope、count / provider-costの別dimension、safe integer / fixed-scale cost unit、bounded settlement、proven-no-effect release、retry pre-growth、growth-denial stop、conservative liable ambiguity、duplicate-operation protectionを確認しています。
 
 詳しくは [Cost-bearing operation](cost-bearing-operations.ja.md)。
 
-## v0.11 reliability / runtime evidence
+## v0.11 reliability / compatibility / API evidence
 
 ### Redis renewal reliability (#166) — complete
 
-renewed-lease failureは、複数Vitest fileが1つのRedis DBを共有しながら独立に `FLUSHDB` していたことが原因でした。Redis runtime renewalはRedis server `TIME`を維持し、test harnessをserial化してtiming proofを広げました。修正後はNode 20/22/24 evidenceがpassしています。
+renewed-lease failureは、複数Vitest fileが1つのRedis DBを共有しながら独立に `FLUSHDB` していたことが原因でした。Redis runtime renewalはRedis server `TIME`を維持し、test harnessをserial化してtiming proofを広げました。
 
 ### Firestore progressive growth contention (#157) — complete
 
-Firestore Emulatorはidentical-increment / distinct-increment contentionの両方で `3 INVALID_ARGUMENT: Transaction is invalid or closed.` を返す場合があります。
-
-runtime retry allow-listはdefinitive transaction abortだけに維持し、`INVALID_ARGUMENT`をblanket retryしません。
-
-diagnostic stressでは既存idempotency fenceによるauthoritative resolutionをproofします。
-
-- identical increment ambiguity + observed winner -> exact replayが `accepted + replayed` とcommitted reserved totalへ収束
-- distinct stale-cursor loser ambiguity -> exact replayがauthoritative `UsageStateError`へ収束
-- distinct replayがunexpected commitした場合はpossible double-commit invariant violationとしてtest failure
-
-実際にambiguity-resolution pathを踏みながら24-iteration Emulator runを反復passし、このstressをFirestore integration gateへ追加しました。
+Firestore Emulatorはidentical-increment / distinct-increment contentionで `3 INVALID_ARGUMENT: Transaction is invalid or closed.` を返す場合があります。runtime retryはdefinitive transaction abortだけに限定したまま、existing idempotency fenceによるauthoritative resolutionをdiagnostic stressでproofし、integration gateへ入れました。
 
 ### Node.js support floor (#105) — complete
 
-5 public package manifestはすべて `engines.node >=22` です。Node.js 22 / 24をsupported v1 runtime evidenceとします。Node 20はEOLでv1 support対象外ですが、#160でprotected required-check policyを安全にmigrationできるまでCI contextのみcompatibility-onlyとして残します。
+5 public package manifestはすべて `engines.node >=22` です。Node.js 22 / 24をsupported v1 runtime evidenceとします。Node 20はEOLでcompatibility-onlyです。
+
+### Persisted-state compatibility (#106) — complete
+
+Redisの新規stateは `schemaVersion: 1`、exact legacy unversioned stateはin-place互換読取、unsupported future versionはmutation前にfail closedです。Firestoreはversioned reservation / budget documentとunknown-version rejection、Cloudflare Durable Objectsはexplicit SQLite migrationとfuture-schema rejectionを維持します。provider別upgrade / rollback / reset境界もdocument済みです。
+
+### Public API/name freeze (#161) — complete
+
+Store-facing / direct lease settlement outcomeは意図的にextensible stringを維持し、portable canonical vocabularyは `mcp-usage-control/settlement-outcomes` に置きます。built-in MCP adapterはcompatibility aliasをauthoritative settlement前にnormalizeします。package名、current subpath、lifecycle/status/error vocabulary、scalar/vector parity、MCP multi-round scopeもfreeze済みです。
+
+### Aggregate release-safety enforcement (#160) — complete
+
+`test (22)` はprotected aggregate release-safety gateです。Node / Redis / package / tarball / clean-consumer matrix全体と、applicableなCloudflare workerd / Firestore Emulator evidenceを必須にします。`test (20)` はcompatibility-only protected contextです。provider skipはpath classifierが非該当と判定した場合だけ許可し、docs-only変更はlightweight pathでrequired contextをdeadlockさせずresolveします。
 
 ## v1 promotionまでの残件
 
-1. **#106 persisted-store compatibility** — Redis / Firestore / Cloudflareのschema/version ownership、upgrade behavior、rollback safety、newer-schema fail-closed behavior、operator reset/migration boundaryをfreeze
-2. **#161 public API/name freeze** — settlement outcome typing boundary、package名、exports/subpath、error/status vocabulary、lifecycle terminology、scalar/vector parity、MCP Tasks/MRTR scopeをfinal review
-3. **#160 release-safety enforcement** — path-aware provider safety checkは存在するが、applicableなrelease-critical evidenceをbypassできないrequired-check / ruleset policyをfinalize。current connectorではbranch protection writeができないためadministrative stepは明示残件
-4. **#24 Cloudflare real-operation evidence** — real credential rotationを実施し、honestなv1 production claimをfinalize。platform-limit eventを作るためだけにshared quotaを意図的に消費しない
-5. **final v0.11 release evidence** — supported Node/package check、Redis、Cloudflare workerd、Firestore Emulator、package tarball / clean consumer、英日docs、final public contractをすべてgreenにし、unresolved v1 blockerを0にする
+1. **#24 Cloudflare real-operation evidence** — real credential rotationを実施し、honestなv1 production claimをfinalize。platform-limit eventを作るためだけにshared quotaを意図的に消費しない
+2. **final v0.11 release evidence** — supported Node/package check、Redis、aggregate `test (22)`、Cloudflare workerd、Firestore Emulator、package tarball / clean consumer、英日docs、final public contractをすべてgreenにし、unresolved v1 blockerを0にする
 
 ## npm distribution boundary
 
@@ -143,6 +131,6 @@ source releaseがregistry publicationを暗黙authorizeすることはありま�
 
 ## v1 promotion rule
 
-v1.0では **新featureやaccounting modelを追加しません**。v0.11でremaining compatibility / API / production / governance gateを閉じ、public surfaceをfreezeし、release-critical evidenceをaccidental bypassから保護し、final evidenceがgreenで、v1 blocker分類のIssueが0になった場合だけpromotionします。
+v1.0では **新featureやaccounting modelを追加しません**。#24 / final v0.11 evidenceで残るproduction-evidence boundaryを閉じ、final source/package/provider evidenceがgreenで、v1 blocker分類のIssueが0になった場合だけpromotionします。
 
-[Roadmap](roadmap.ja.md)、[Release policy](releasing.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、各provider docsでcurrent support boundaryを確認してください。
+[Roadmap](roadmap.ja.md)、[Release policy](releasing.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、[Persisted-state compatibility](persisted-state-compatibility.ja.md)、[v1 public API freeze](v1-public-api-freeze.ja.md)、各provider docsでcurrent support boundaryを確認してください。
