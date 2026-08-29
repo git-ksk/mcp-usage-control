@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.8.0` に揃っています。**v0.8.0がlatest GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredしています。
+このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.10.0` に揃っています。**v0.10.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredしています。
 
 behavior / failure guaranteeは [Architecture](architecture.ja.md) / [Store実装contract](store-contract.ja.md)、v1 stable / deferred境界は [v1.0 readiness review](v1-readiness.ja.md) を参照してください。
 
@@ -76,7 +76,6 @@ interface UsagePolicy {
 `budgets` がmulti-budget形式です。全参加budgetへ同じquoted unitsをatomicにreserveします。`budget` は1 budget用convenience formです。empty list / duplicate keyはrejectします。
 
 policy denial reasonはobservabilityへ出る場合があるため、unrestricted diagnostic textではなくbounded non-secret reason codeを推奨します。
-
 
 ### Weighted credit policy helper
 
@@ -342,15 +341,7 @@ interface UsageObserverHandler {
 type UsageObserver = UsageObserverHandler | undefined;
 ```
 
-current lifecycle event:
-
-- `reserve.accepted`
-- `reserve.denied`
-- `settlement.completed`
-- `reservation.recovered`
-- `operation.error`
-
-observer deliveryはbest-effortでenforcement transactionの外側です。返されたPromiseはawaitせず、sync throw / async rejectionもaccounting outcomeを変えません。
+current lifecycle eventにはscalar/vector reserve、settlement、recovery、`operation.error` が含まれます。observer deliveryはbest-effortでenforcement transactionの外側です。返されたPromiseはawaitせず、sync throw / async rejectionもaccounting outcomeを変えません。
 
 `UsageEventMetadata` はexplicit opt-in `Record<string, string | number | boolean | null>` です。
 
@@ -365,6 +356,69 @@ observabilityでありtransactional ledgerではありません。
 - `UsageStateError` — invalid / expired / missing / conflicting Store・resume state
 - `UsageDeniedError` — programmatic denial reasonを保持しつつ、thrown messageはgeneric
 - `MemoryUsageStoreCapacityError` — boundedなin-memory operation / budget-key retentionが上限に達した状態。accounting stateをevictせず保持し、fail closedする
+
+## `mcp-usage-control/operational` (v0.10)
+
+```ts
+import {
+  MCP_USAGE_CONTROL_PACKAGE_NAME,
+  MCP_USAGE_CONTROL_VERSION,
+  UsageOperationalMonitor,
+  createUsageRuntimeIdentity,
+  projectScopedQuota,
+} from 'mcp-usage-control/operational';
+```
+
+`createUsageRuntimeIdentity()` はbounded static diagnostic metadataを構築します。package name/version、provider (`memory` / `redis` / `firestore` / `cloudflare` / `custom`)、optional capability flag、provider側でstableな意味をdocumentできる場合だけoptional storage schema versionを含めます。
+
+`UsageOperationalMonitor` はprocess-local `UsageObserverHandler` です。`snapshot()` はbounded lifecycle/error counter、optional runtime identity、last observed event timestampを返します。principal / operation / reservation / tool / budget identifierを公開せず、replayable / aggregate eventからauthoritative active-reservation数を推測しません。
+
+`projectScopedQuota(limit, remaining)` はapplicationが選択済みの **authoritative budget/window 1つ** を `{ limit, remaining, used, exhausted, utilization }` へprojectします。budget keyを受け取らず、window discovery/resetも行いません。
+
+これらはnon-authoritative helperで、enforcementを変更できません。
+
+## `mcp-usage-control/settlement-outcomes` (v0.10)
+
+```ts
+import {
+  CANONICAL_SETTLEMENT_OUTCOMES,
+  DEFAULT_SETTLEMENT_OUTCOME_ALIASES,
+  InvalidSettlementOutcomeError,
+  isCanonicalSettlementOutcome,
+  normalizeSettlementOutcome,
+} from 'mcp-usage-control/settlement-outcomes';
+```
+
+canonical value:
+
+- `authorization_denied`
+- `invalid_arguments`
+- `pre_dispatch_rejected`
+- `pre_dispatch_no_effect`
+- `cancelled_before_dispatch`
+- `completed`
+- `proven_no_effect`
+- `dispatched_conservative`
+- `cancelled_after_dispatch`
+
+`normalizeSettlementOutcome()` はcanonical valueをそのまま受け取り、bounded compatibility aliasとapplication-owned finite alias map（例: `invalid_browser_request -> invalid_arguments`）を利用できます。
+
+unsupported / malformed vocabularyはcode `invalid_settlement_outcome` の `InvalidSettlementOutcomeError` をthrowします。rejectしたraw valueはerrorへ保持しません。optional best-effort diagnostic sinkはbounded codeを観測できますが、normalization errorを置換したりsettlement behaviorを変更したりできません。
+
+## `mcp-usage-control/thresholds` (v0.10)
+
+```ts
+import {
+  didUsageQuotaThresholdCross,
+  evaluateUsageQuotaThreshold,
+} from 'mcp-usage-control/thresholds';
+```
+
+対応thresholdは `{ kind: 'remaining_units', value: N }` と `{ kind: 'remaining_ratio', value: 0..1 }` です。
+
+helperはexplicit `ScopedQuotaSnapshot` のみを対象にします。`didUsageQuotaThresholdCross(previous, current, threshold)` はabove -> reached transitionを返し、previous state persistenceとaccounting-window resetはcallerが所有します。configured limitが変わった場合、同一windowと推測せずrejectします。notification delivery / retry / deduplicationはcore外です。
+
+詳しくは [Operational usability](operational-usability.ja.md)。
 
 ## `mcp-usage-control/conformance`
 
