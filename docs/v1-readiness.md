@@ -12,7 +12,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 The packages remain **unpublished to npm**. First registry publication remains separately tracked by #6 and requires explicit authorization independent from source releases.
 
-The active decision gate is now **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6 accounting-contract, completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
+The active decision gate is now **v0.11.0 / #152 -> #157 -> #105 + #106 -> #24 -> #6 accounting-contract, reliability, completion/distribution/API freeze**, followed by feature-free v1.0 promotion.
 
 ## Verdict
 
@@ -37,13 +37,15 @@ Already proven/adopted:
 
 What still blocks v1 promotion:
 
-- explicit cost-bearing operation lifecycle mapping and shared accounting-scope proof (#152);
+- explicit cost-bearing operation lifecycle mapping and shared accounting-scope proof (#152), including maximum exposure, retry cost, variable-cost growth boundaries, and delayed provider usage evidence;
+- Firestore progressive growth-concurrency reliability classification and repeated evidence (#157);
 - explicit v1 Node.js support floor (#105);
 - persisted-store migration/rollback/newer-schema compatibility contract (#106);
 - final Cloudflare real-operation boundary (#24);
 - separately authorized first npm publication and registry/provenance dogfood (#6);
-- final public package/export/API terminology freeze;
+- final public package/export/API terminology and settlement-outcome typing freeze;
 - final MCP Tasks / MRTR scope decisions;
+- a required release-safety gate, or an equally strong branch-protection policy, covering applicable release-critical CI/provider evidence;
 - final full production/distribution evidence with no unresolved v1 blocker.
 
 ## Stable accounting invariants
@@ -65,6 +67,7 @@ These must remain true through v0.11 and v1.0:
 13. Observability cannot change enforcement state.
 14. Provider durability/time/HA/lost-ACK limits remain explicit.
 15. Entitlement, subscription, pricing catalog, and provider-health policy remain application-owned rather than becoming a second authority inside MCPUsage.
+16. Hard provider-spend enforcement is claimed only when maximum billable exposure is reserved before dispatch or additional exposure is atomically grown before further billable work.
 
 ## Adopted v1 capability candidates
 
@@ -92,6 +95,8 @@ Important non-claims are part of the contract: active-reservation counts are not
 
 The release/package gate verifies the new public subpaths in tarball contents and clean-consumer imports.
 
+A post-v0.10 audit found that Firestore recovery events used a provider-specific observer type while the common recovery event vocabulary omitted `firestore`. This is a telemetry/type-integration defect, not an accounting-state defect. v0.11 must keep provider-neutral recovery observability type-compatible across all built-in Stores.
+
 ## v0.9 safety-hardening evidence carried forward
 
 The v0.9 audit focused on capability intersections rather than new product surface. It closed #116-#127 and Firestore blocker #143 while preserving scalar/vector accounting, replay, liability, expiry/recovery, and fail-closed contracts.
@@ -102,11 +107,12 @@ Firestore outer retry remains limited to definitive transaction aborts: gRPC `AB
 
 Before v1 stable promotion, v0.11 must close or explicitly scope, in priority order:
 
-1. **#152 cost-bearing operation reservation lifecycle** — prove the frozen reserve/liability/settlement contract is sufficient for provider-backed billable work, shared accounting scopes, retry/idempotency, conservative ambiguous outcomes, and proven-no-effect release; add new surface only if the current model is insufficient.
-2. **#105 supported Node.js floor** and **#106 persisted-store compatibility** — freeze runtime and state compatibility guarantees.
-3. **#24 Cloudflare real-operation evidence** — complete credential rotation and the final honest production-evidence boundary.
-4. **#6 first npm publication** — only after separate explicit authorization and after the public contract is frozen.
-5. package names, exports/subpaths, errors/status vocabulary, public lifecycle semantics, MCP Tasks/MRTR decisions, and final integration/package/deployed/manual evidence.
+1. **#152 cost-bearing operation reservation lifecycle** — prove the frozen reserve/liability/grow/settlement contract is sufficient for provider-backed billable work, shared accounting scopes, retry/idempotency, conservative ambiguous outcomes, proven-no-effect release, bounded maximum exposure, distinct count/cost dimensions, and delayed final provider usage evidence; add new surface only if the current model is insufficient.
+2. **#157 Firestore progressive growth-concurrency reliability** — classify the observed Emulator `Transaction is invalid or closed` failure and obtain repeated evidence without broadening retry of ambiguous state-changing failures or weakening growth-concurrency invariants.
+3. **#105 supported Node.js floor** and **#106 persisted-store compatibility** — freeze runtime and state compatibility guarantees.
+4. **#24 Cloudflare real-operation evidence** — complete credential rotation and the final honest production-evidence boundary.
+5. **#6 first npm publication** — only after separate explicit authorization and after the public contract is frozen.
+6. package names, exports/subpaths, errors/status vocabulary, settlement outcome typing, public lifecycle semantics, MCP Tasks/MRTR decisions, release-safety branch protection, and final integration/package/deployed/manual evidence.
 
 ## Distribution boundary
 
@@ -116,6 +122,6 @@ The current source-release baseline is `v0.10.0` and the five manifests are `0.1
 
 ## v1 promotion rule
 
-v1.0 should contain **no new feature or accounting model**. Promotion is allowed only when the v0.11 completion criteria are satisfied, the public surface is frozen, final evidence is green, and there is no unresolved issue still classified as a v1 blocker.
+v1.0 should contain **no new feature or accounting model**. Promotion is allowed only when the v0.11 completion criteria are satisfied, the public surface is frozen, final evidence is green, release-critical CI/provider evidence is protected from accidental bypass, and there is no unresolved issue still classified as a v1 blocker.
 
 See [Roadmap](roadmap.md), [Release policy](releasing.md), and provider-specific documentation for the current support boundaries.
