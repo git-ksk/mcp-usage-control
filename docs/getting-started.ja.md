@@ -116,7 +116,7 @@ pnpm check
 
 別applicationへinstallする手順は [Source / local tarballから使う](using-from-source.ja.md) を参照してください。
 
-Node.js 20以上が必要です。
+**supported v1 runtimeではNode.js 22以上が必要です。** Node.js 20はEOL済みです。現在のrequired-check policy移行が終わるまでNode 20 CI jobが一時的に残る場合がありますが、これはcompatibility-only evidenceでありNode 20 supportを意味しません。
 
 ## 最小構成
 
@@ -296,6 +296,7 @@ replay protectionの範囲は次です。
 
 ## 本番導入前の確認
 
+- Node.js 22以上で実行する
 - principal / tenantをclient入力からそのまま信用しない
 - retryでは同じlogical operationに同じ `operationId` を使う
 - 日次・月次・tenant上限など必要なbudgetを1回のquoteへ含める
