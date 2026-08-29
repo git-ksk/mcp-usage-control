@@ -106,7 +106,7 @@ export function projectScopedQuota(limit: number, remaining: number): ScopedQuot
  * This observer is deliberately non-authoritative and never infers quota truth.
  */
 export class UsageOperationalMonitor implements UsageObserverHandler {
-  private readonly identity?: UsageRuntimeIdentity;
+  private readonly identity: UsageRuntimeIdentity | undefined;
   private counters: UsageOperationalLifecycleCounters = emptyCounters();
   private lastEventAt: number | undefined;
 
