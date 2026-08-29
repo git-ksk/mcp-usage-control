@@ -13,6 +13,21 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./operational": {
+      "types": "./dist/operational.d.ts",
+      "import": "./dist/operational.js",
+      "default": "./dist/operational.js"
+    },
+    "./settlement-outcomes": {
+      "types": "./dist/settlement-outcomes.d.ts",
+      "import": "./dist/settlement-outcomes.js",
+      "default": "./dist/settlement-outcomes.js"
+    },
+    "./thresholds": {
+      "types": "./dist/thresholds.d.ts",
+      "import": "./dist/thresholds.js",
+      "default": "./dist/thresholds.js"
+    },
     "./conformance": {
       "types": "./dist/store-conformance.d.ts",
       "import": "./dist/store-conformance.js",
@@ -28,6 +43,18 @@
     "dist/observability.js.map",
     "dist/observability.d.ts",
     "dist/observability.d.ts.map",
+    "dist/operational.js",
+    "dist/operational.js.map",
+    "dist/operational.d.ts",
+    "dist/operational.d.ts.map",
+    "dist/settlement-outcomes.js",
+    "dist/settlement-outcomes.js.map",
+    "dist/settlement-outcomes.d.ts",
+    "dist/settlement-outcomes.d.ts.map",
+    "dist/thresholds.js",
+    "dist/thresholds.js.map",
+    "dist/thresholds.d.ts",
+    "dist/thresholds.d.ts.map",
     "dist/weighted-credits.js",
     "dist/weighted-credits.js.map",
     "dist/weighted-credits.d.ts",
