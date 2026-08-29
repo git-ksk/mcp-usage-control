@@ -60,7 +60,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run --no-file-parallelism",
     "prepack": "node ../../scripts/pack-workspace-deps.mjs prepare",
     "postpack": "node ../../scripts/pack-workspace-deps.mjs restore"
   },
