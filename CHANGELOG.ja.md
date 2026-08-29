@@ -8,6 +8,33 @@
 
 現在entryはありません。
 
+## [0.10.0] - 2026-08-29
+
+10回目のGitHub/source releaseです。bounded operational usabilityとdogfood diagnosticsを主対象とし、npm publicationは引き続き別操作としてdeferredします。
+
+### Added
+
+- `mcp-usage-control/operational` を追加。process-localなbounded lifecycle counter、static runtime identity / capability metadata、明示scope済みquota projectionを提供します。diagnostic専用で、enforcement / billing authorityにはしません。
+- `mcp-usage-control/settlement-outcomes` を追加。canonical settlement vocabulary、bounded compatibility alias、application-owned finite alias map、rejectしたraw valueを保持しない `InvalidSettlementOutcomeError` / `invalid_settlement_outcome` diagnosticを提供します。
+- `mcp-usage-control/thresholds` を追加。明示選択済みquota scopeに対するremaining-units / remaining-ratioのpure evaluation / crossing helperを提供します。accounting-window identity / reset stateとnotification deliveryはapplication-ownedです。
+- runtime identity、scoped remaining、settlement normalization、threshold crossing、privacy/cardinality boundary、active-reservation数を推測しないnon-claimを扱う英日operational-usability guideを追加しました。
+
+### Operational safety / diagnostics
+
+- Store accounting transitionやprovider storage schemaを変更せず #76 / #99 / #82 をcloseしました。
+- `UsageOperationalMonitor` はsecond accounting truthを作らず表現できるevidenceだけを公開します。replayable / aggregate lifecycle eventからauthoritative active-reservation数を合成しません。
+- invalid settlement vocabularyはStore/backend unavailabilityとsettlement dispatch前に区別できます。diagnostic deliveryはbest-effortで、canonical normalization errorを置換したりenforcementを変更したりしません。
+- observer / helper / notification failureはadmission、liability、renewal、settlement、replay、expiry、quota outcomeを変更できません。
+- authoritative `remaining` はapplicationが正しいbudget/windowを選択した後だけprojectし、異なるvector dimensionを1 synthetic utilizationへ潰しません。
+
+### Packaging / release evidence
+
+- 5 public package manifestとbounded core runtime identityを `0.10.0` に同期しました。
+- CIで新しい `operational` / `settlement-outcomes` / `thresholds` をcore tarball内容として検証し、clean consumer projectから3 subpathすべてを実importします。
+- release gateはNode 20/22/24、real Redis、Cloudflare local workerd、Firestore Emulator、package-content inspection、clean-consumer verificationを維持します。
+- source / local-tarball docsから古い固定package versionを除去しました。
+- npm publicationはこのGitHub/source releaseに含めません。first registry publicationは#6で追跡するseparate explicit authorization必須の操作です。
+
 ## [0.9.0] - 2026-08-22
 
 9回目のGitHub/source release。repository全体のsafety hardeningを主対象とし、npm publicationは引き続き別操作としてdeferredしています。
