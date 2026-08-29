@@ -61,7 +61,7 @@ renewal failureに見えた現象はtest harness raceでした。parallel Vitest
 
 ### #105 Node.js support floor — complete
 
-v1 supported runtime floorは **Node.js 22+** です。Node 22 / 24をsupported evidence matrixとします。Node 20はEOLで、#160によりprotected merge policyを安全に移行できるまでtemporary compatibility-only check contextとしてだけ残します。
+v1 supported runtime floorは **Node.js 22+** です。Node 22 / 24をsupported evidence matrixとします。Node 20はEOLで、compatibility-only protected contextとしてだけ残します。
 
 ### #157 Firestore growth-concurrency reliability — complete
 
@@ -90,16 +90,47 @@ application-owned opaque budget keyでshared accounting bucketを既に表現で
 
 詳しくは [Cost-bearing operation](cost-bearing-operations.ja.md)。
 
+### #106 persisted-state compatibility — complete
+
+v1前のdurable provider互換境界をfreezeしました。
+
+- Redisは新規reservation stateへ `schemaVersion: 1` を書き、既存pre-v1 unversioned recordはin-placeで互換読取し、future versionはmutation前にrejectします。
+- Firestoreはreservation / budget documentの `schemaVersion: 1` を維持し、unknown versionをrejectします。
+- Cloudflare Durable ObjectsはSQLite schema v3までのexplicit migrationを維持し、future schema versionをrejectします。
+- provider別のupgrade / rollback safety、backup / restore、fresh accounting-domain reset境界を英日でdocumentしました。
+
+詳しくは [Persisted-state compatibility](persisted-state-compatibility.ja.md)。
+
+### #161 public API/name freeze — complete
+
+不要なStore migrationを増やさず、v1 public vocabularyをfreezeしました。
+
+- direct scalar/vector Store・lease settlement outcomeは意図的にextensibleな `string` を維持します。
+- portable canonical classificationは `mcp-usage-control/settlement-outcomes` で提供します。
+- built-in MCP adapterはcompatibility aliasをauthoritative settlement前にnormalizeします。
+- package名、current public subpath、lifecycle/status/error vocabulary、scalar/vector parity、MCP multi-round naming/scopeをfreezeしました。
+
+詳しくは [v1 public API freeze](v1-public-api-freeze.ja.md)。
+
+### #160 aggregate release-safety enforcement — complete
+
+既存protected context名を維持したまま意味を強化しました。
+
+- `test (20)` はlegacy compatibility required contextで、v1 support evidenceではありません。
+- `test (22)` はaggregate release-safety required contextです。
+- applicableなNode / Redis / package / tarball / clean-consumer、Cloudflare workerd、Firestore Emulator failureは `test (22)` へ伝播します。
+- provider workはpath classifierが非該当と判定した場合だけskipを許可します。
+- docs-only変更はlightweight pathを使い、protected contextをdeadlockさせずresolveします。
+
+これによりbranch-protection context renameのadmin操作なしで、release-critical evidenceのaccidental bypassを防ぎます。
+
 ## Active v0.11 execution order
 
-残る順序は次です。
+残るのはfinal production / evidence trancheだけです。
 
-1. **#106 persisted-state compatibility** — Redis / Firestore / Cloudflareのschema/version ownership、upgrade behavior、downgrade/rollback safety、newer-schema fail-closed behavior、operator reset/migration boundaryをfreeze
-2. **#161 public API/name freeze** — final settlement-outcome typing boundaryを決定し、scalar/vector parity、package名、exports/subpath、error/status vocabulary、lifecycle terminology、MCP Tasks/MRTR scopeをreview
-3. **#160 release-safety enforcement** — applicableなsupported Node/package/Redis/Cloudflare/Firestore evidenceをaccidental bypassできないrequired-check / ruleset policyへ仕上げる。path-aware `cloudflare-safety` / `firestore-safety` は導入済みだが、current connectorではbranch-protection writeができないためadministrative mutationは残る
-4. **#24 Cloudflare real-operation boundary** — documented real credential rotationを実行し、honestなv1 platform-limit claimをfinalize。overload/exhaustion eventを作るためだけにshared Free-plan quotaを消費しない
-5. **final v0.11 release evidence** — supported Node/package check、Redis、Cloudflare workerd、Firestore Emulator、tarball / clean-consumer validation、英日docs、final public-contract reviewを全greenにしunresolved v1 blockerを0にする
-6. **#6 first npm publication** — public contract freeze後、separate explicit authorizationがある場合だけ実施し、registry/provenance/clean-installまでverify
+1. **#24 Cloudflare real-operation boundary** — documented real credential rotationを実行し、honestなv1 platform-limit claimをfinalize。overload/exhaustion eventを作るためだけにshared Free-plan quotaを消費しない
+2. **final v0.11 release evidence** — supported Node/package check、Redis、aggregate `test (22)`、Cloudflare workerd、Firestore Emulator、tarball / clean-consumer validation、英日docs、final public-contract reviewを全greenにしunresolved v1 blockerを0にする
+3. **#6 first npm publication** — public contract freeze後、separate explicit authorizationがある場合だけ実施し、registry/provenance/clean-installまでverify
 
 ## 「v1 complete」の定義
 
@@ -112,7 +143,7 @@ v1.0前に:
 - package名、exports、lifecycle semantics、Store support claim、Node support、MCP integration boundaryをfreeze
 - cost-bearing workをfrozen accounting lifecycleへmappingし、billing authorityをcoreへ持ち込まない
 - persisted-state upgrade / rollback boundaryをdocument / test
-- release-critical evidenceをrequired stable safety checkまたは同等強度のbranch policyで保護
+- release-critical evidenceをaggregate required release-safety gateで保護
 - Cloudflare production claimをobserved evidenceと一致させる
 - final source/package/provider evidenceをgreenにする
 - v1 blocker分類のIssueを0にする
@@ -133,9 +164,9 @@ v1.0前に:
 | #105 Node.js support floor | v0.11 | **Completed; Node 22+** |
 | #157 Firestore progressive growth concurrency | v0.11 | **Completed; diagnostic stress in gate** |
 | #152 cost-bearing operation lifecycle | v0.11 | **Existing vector/growth lifecycle上でfreeze** |
-| #106 persisted-store compatibility | v0.11 | **Active storage compatibility freeze** |
-| #161 settlement/public lifecycle typing | v0.11 | **Pending public API/name freeze** |
-| #160 required release-safety enforcement | v0.11 | **Workflow foundation complete / branch-policy enforcement pending** |
+| #106 persisted-store compatibility | v0.11 | **Completed; provider compatibility contract frozen** |
+| #161 settlement/public lifecycle typing | v0.11 | **Completed; public API/name freeze** |
+| #160 required release-safety enforcement | v0.11 | **Completed; aggregate `test (22)` gate** |
 | #24 Cloudflare real operational evidence | v0.11 | **Pending final production evidence** |
 | #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization必須** |
 
@@ -145,6 +176,6 @@ v1.0前に:
 - GitHub/source releaseとnpm publicationはindependent authorization
 - provider claimはobserved/test evidenceを超えて強くしない
 - GitHub/source release成功はregistry publicationを意味しない
-- stable promotion前にprovider safety checkをActionsで出すだけでなくmerge policyでenforceする
+- aggregate required release-safety gateはrelease policyで約束するevidenceと常に一致させる
 
 [Release policy](releasing.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、各provider docsをproduction deployment前に確認してください。
