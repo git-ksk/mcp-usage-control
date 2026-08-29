@@ -61,13 +61,13 @@ The apparent renewal failure was a test-harness race: parallel Vitest files shar
 
 ### #105 Node.js support floor — complete
 
-The v1 supported runtime floor is **Node.js 22+**. Node 22/24 are the supported evidence matrix. Node 20 is EOL and remains only as a temporary compatibility-only check context until the protected merge policy can be migrated safely under #160.
+The v1 supported runtime floor is **Node.js 22+**. Node 22/24 are the supported evidence matrix. Node 20 is EOL and remains only as a compatibility-only protected context.
 
 ### #157 Firestore growth-concurrency reliability — complete
 
 The Firestore Emulator can surface `3 INVALID_ARGUMENT: Transaction is invalid or closed.` during progressive-growth contention. The Store does not blanket-retry it.
 
-The integration gate now includes repeated diagnostic stress that distinguishes authoritative stale-cursor rejection from provider ambiguity and resolves only the exact logical increment through the existing idempotency fence. Both same-increment and distinct-increment ambiguity paths have been observed and resolved without weakening one-winner/double-commit invariants.
+The integration gate includes repeated diagnostic stress that distinguishes authoritative stale-cursor rejection from provider ambiguity and resolves only the exact logical increment through the existing idempotency fence. Both same-increment and distinct-increment ambiguity paths have been observed and resolved without weakening one-winner/double-commit invariants.
 
 ### #152 cost-bearing operation lifecycle — frozen on existing primitives
 
@@ -90,16 +90,47 @@ Opaque application-owned budget keys already represent a shared accounting bucke
 
 See [Cost-bearing operations](cost-bearing-operations.md).
 
+### #106 persisted-state compatibility — complete
+
+The durable-provider compatibility boundary is frozen before v1.
+
+- Redis writes `schemaVersion: 1` for new reservation state, continues to read exact pre-v1 unversioned records in place, and rejects unsupported future versions before mutation.
+- Firestore keeps explicit `schemaVersion: 1` reservation/budget documents and rejects unknown versions.
+- Cloudflare Durable Objects keep explicit SQLite schema migrations through v3 and reject future schema versions.
+- provider-specific upgrade/rollback safety, backup/restore expectations, and fresh accounting-domain resets are documented in English/Japanese.
+
+See [Persisted-state compatibility](persisted-state-compatibility.md).
+
+### #161 public API/name freeze — complete
+
+The v1 public vocabulary is frozen without introducing an unnecessary Store migration.
+
+- direct scalar/vector Store and lease settlement outcomes remain intentionally extensible `string` values;
+- portable canonical classification remains available through `mcp-usage-control/settlement-outcomes`;
+- the built-in MCP adapter normalizes compatibility aliases before authoritative settlement;
+- package names, current public subpaths, lifecycle/status/error vocabulary, scalar/vector parity, and MCP multi-round naming/scope are frozen.
+
+See [v1 public API freeze](v1-public-api-freeze.md).
+
+### #160 aggregate release-safety enforcement — complete
+
+The existing protected context names were preserved while strengthening their semantics.
+
+- `test (20)` remains the legacy compatibility required context and is not v1 support evidence.
+- `test (22)` is now the aggregate release-safety required context.
+- applicable Node/Redis/package/tarball/clean-consumer, Cloudflare workerd, and Firestore Emulator failures propagate into `test (22)`.
+- provider work is skipped only when the path classifier marks it non-applicable.
+- docs-only changes use a lightweight path and still resolve the protected contexts without deadlock.
+
+This closes the earlier governance gap without requiring an administrative branch-protection context rename.
+
 ## Active v0.11 execution order
 
-The remaining sequence is now:
+Only the final production/evidence tranche remains:
 
-1. **#106 persisted-state compatibility** — freeze Redis, Firestore, and Cloudflare schema/version ownership, upgrade behavior, downgrade/rollback safety, newer-schema fail-closed behavior, and operator reset/migration boundaries.
-2. **#161 public API/name freeze** — decide the final settlement-outcome typing boundary; review scalar/vector parity, package names, exports/subpaths, error/status vocabulary, lifecycle terminology, and MCP Tasks/MRTR scope.
-3. **#160 release-safety enforcement** — finish the required-check/ruleset policy so applicable supported Node/package/Redis/Cloudflare/Firestore evidence cannot be accidentally bypassed. Path-aware `cloudflare-safety` and `firestore-safety` checks already exist; the administrative branch-protection write remains pending because the current connector is read-only for that mutation.
-4. **#24 Cloudflare real-operation boundary** — execute documented real credential rotation and finalize the honest v1 platform-limit claim. Do not burn shared Free-plan quota solely to manufacture an overload/exhaustion event.
-5. **final v0.11 release evidence** — supported Node/package checks, Redis, Cloudflare workerd, Firestore Emulator, tarball/clean-consumer validation, bilingual docs, and final public-contract review all green with no unresolved v1 blocker.
-6. **#6 first npm publication** — only if separately explicitly authorized, after the public contract is frozen. Registry/provenance/clean-install verification is part of that separate operation.
+1. **#24 Cloudflare real-operation boundary** — execute documented real credential rotation and finalize the honest v1 platform-limit claim. Do not burn shared Free-plan quota solely to manufacture an overload/exhaustion event.
+2. **final v0.11 release evidence** — supported Node/package checks, Redis, aggregate `test (22)`, Cloudflare workerd, Firestore Emulator, tarball/clean-consumer validation, bilingual docs, and final public-contract review all green with no unresolved v1 blocker.
+3. **#6 first npm publication** — only if separately explicitly authorized, after the public contract is frozen. Registry/provenance/clean-install verification is part of that separate operation.
 
 ## v1 completion definition
 
@@ -112,7 +143,7 @@ Before v1.0:
 - package names, exports, lifecycle semantics, Store support claims, Node support, and MCP integration boundaries are frozen;
 - cost-bearing work is mapped to the frozen accounting lifecycle without adding billing authority to core;
 - persisted-state upgrade/rollback boundaries are documented and tested;
-- release-critical evidence is protected by required stable safety checks or an equally strong branch policy;
+- release-critical evidence is protected by the aggregate required release-safety gate;
 - Cloudflare production claims match observed evidence;
 - final source/package/provider evidence is green;
 - no issue remains classified as a v1 blocker.
@@ -133,9 +164,9 @@ Before v1.0:
 | #105 Node.js support floor | v0.11 | **Completed; Node 22+** |
 | #157 Firestore progressive growth concurrency | v0.11 | **Completed; diagnostic stress in gate** |
 | #152 cost-bearing operation lifecycle | v0.11 | **Frozen on existing vector/growth lifecycle** |
-| #106 persisted-store compatibility | v0.11 | **Active storage compatibility freeze** |
-| #161 settlement/public lifecycle typing | v0.11 | **Pending public API/name freeze** |
-| #160 required release-safety enforcement | v0.11 | **Workflow foundation complete; branch-policy enforcement pending** |
+| #106 persisted-store compatibility | v0.11 | **Completed; provider compatibility contract frozen** |
+| #161 settlement/public lifecycle typing | v0.11 | **Completed; public API/name freeze** |
+| #160 required release-safety enforcement | v0.11 | **Completed; aggregate `test (22)` gate** |
 | #24 Cloudflare real operational evidence | v0.11 | **Pending final production evidence** |
 | #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization required** |
 
@@ -145,6 +176,6 @@ Before v1.0:
 - GitHub/source releases and npm publication remain independently authorized operations.
 - Provider claims must not exceed observed/tested evidence.
 - A GitHub/source release never implies registry publication.
-- Stable provider safety checks must be enforced by merge policy before stable promotion, not merely emitted by Actions.
+- The aggregate required release-safety gate must remain aligned with the evidence promised by release policy.
 
 See [Release policy](releasing.md), [v1.0 readiness review](v1-readiness.md), [Cost-bearing operations](cost-bearing-operations.md), and provider-specific documentation before production deployment.
