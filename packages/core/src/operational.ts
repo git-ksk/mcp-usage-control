@@ -67,6 +67,7 @@ export function createUsageRuntimeIdentity(input: UsageRuntimeIdentityInput): Us
   const packageVersion = input.packageVersion ?? MCP_USAGE_CONTROL_VERSION;
   validateStaticIdentifier(packageName, 'packageName', 128);
   validateStaticIdentifier(packageVersion, 'packageVersion', 64);
+  validateProvider(input.provider);
   if (input.storageSchemaVersion !== undefined) {
     validateStaticIdentifier(input.storageSchemaVersion, 'storageSchemaVersion', 64);
   }
@@ -111,7 +112,7 @@ export class UsageOperationalMonitor implements UsageObserverHandler {
   private lastEventAt: number | undefined;
 
   constructor(identity?: UsageRuntimeIdentity) {
-    this.identity = identity === undefined ? undefined : cloneIdentity(identity);
+    this.identity = identity === undefined ? undefined : createUsageRuntimeIdentity(identity);
   }
 
   onEvent(event: UsageEvent): void {
@@ -198,6 +199,18 @@ function cloneIdentity(identity: UsageRuntimeIdentity): UsageRuntimeIdentity {
     ...identity,
     capabilities: [...identity.capabilities],
   };
+}
+
+function validateProvider(value: string): asserts value is UsageRuntimeProvider {
+  if (
+    value !== 'memory' &&
+    value !== 'redis' &&
+    value !== 'firestore' &&
+    value !== 'cloudflare' &&
+    value !== 'custom'
+  ) {
+    throw new TypeError('Unsupported usage runtime provider');
+  }
 }
 
 function validateCapability(value: string): asserts value is UsageRuntimeCapability {
