@@ -16,7 +16,7 @@ pre-1.0 release lineには5つのpublish可能なnpm packageがあります。
 
 npm publishを明示承認する前でもGitHub Releaseは作成できます。registry公開までは [Source / local tarballから使う](using-from-source.ja.md) のrepository checkout / local tarball手順を使います。
 
-5つのpublish可能なpackageは常に同じrelease versionを使います。
+5つのpublish可能なpackageは常に同じrelease versionと同じsupported Node.js floorを使います。
 
 ## Versioning
 
@@ -27,6 +27,10 @@ Semantic Versioningを使います。pre-1.0ではminor releaseにintentional br
 - major: 1.0以降のcompatibility boundary。
 
 pre-1.0 minorでもbreaking changeはrelease notesで明示します。
+
+## Supported Node.js runtime
+
+v1のsupported runtime matrixは **Node.js 22 / 24** で、package metadataは `engines.node >=22` を宣言します。Node.js 20はEOL済みでsupported v1 runtimeではありません。#160でlegacy required-check policyを移行するまでは `test (20)` CI jobをcompatibility-only evidenceとして一時的に残せますが、support evidenceとして扱いません。
 
 ## Pre-1.0 release gate
 
@@ -42,16 +46,17 @@ pre-1.0 GitHub/source releaseは、対象surfaceについて次を満たした�
 - Cloudflare Durable Objects + SQLite behavior、schema versioning、remote ACK ambiguity / reconciliation、gateway authentication、maintenance / pruning boundary、lazy cleanup / cost behaviorをdocument / test済み。
 - Firestore transactional multi-budget behavior、shared document contention / hotspot risk、host-clock lease semantics、expiry recovery、server-client compatibilityをdocument / test済み。
 - package name / exports / filesを確認済み。
+- 全public package manifestがfrozen supported Node.js floorを宣言。
 - `pnpm-lock.yaml` commit済み、CIは `--frozen-lockfile`。
 - npm-pack tarballをsmoke testし、workspace protocol dependencyがartifactへ残らない。
-- clean-consumer importがpass。
+- releaseでsupportする全Node.js majorのclean-consumer importがpass。
 - Cloudflareをlocal workerd、FirestoreをLocal Emulator Suiteでintegration testし、deployed dogfood要件はadapterごとに扱う。
 - tagged codeと英日user documentationが一致。
 
 ## GitHub/source release procedure
 
 1. package version、changelog、英日docsを更新。
-2. Node.js 20 / 22 / 24 + 実Redis + frozen dependencyのfull CI matrixを実行。
+2. Node.js 22 / 24のsupported CI evidence + 実Redis + frozen dependencyを実行。legacy branch policyがrequiredとしている間だけ、compatibility-onlyなNode 20 jobもresolveさせる。
 3. 対象codeについてCloudflare workerd integrationとFirestore Emulator integrationを実行。
 4. public packageをpackしtarball contentを検証。
 5. release PRを `main` へmerge。
@@ -70,13 +75,13 @@ npm publishは後日の明示的な別工程です。Git tag / GitHub Releaseが
 4. publish対象のGitHub Release / tagを確認。
 5. `Publish npm` workflowをexplicit confirmation付きで手動実行。
 6. dependency順にpublish: core -> MCP / Redis / Cloudflare / Firestore adapter。
-7. clean consumer projectからregistry metadata / installをverify。
+7. supported Node.js floorのclean consumer projectからregistry metadata / installをverify。
 
 GitHub-hosted runnerではnpm Trusted Publishing / OIDCを優先します。long-lived npm tokenをrepository file、log、release artifactへ入れません。
 
 ## npm publication runtime
 
-manual publish workflowは現在Node.js 24で実行します。Node 24もnormal full CI evidence matrixに含めるため、publish toolingがpublic packageで未検証のNode majorだけに依存する状態を作りません。
+manual publish workflowは現在Node.js 24で実行します。Node 24はsupported runtimeでnormal release CI evidence matrixにも含めるため、publish toolingがpublic packageで未検証のNode majorだけに依存する状態を作りません。
 
 ## Release notes
 
