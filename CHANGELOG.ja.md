@@ -8,6 +8,31 @@
 
 現在entryはありません。
 
+## [0.11.0] - 2026-08-29
+
+11回目のGitHub/source releaseで、v1前のfinal completion freezeです。npm publicationはseparate explicit authorizationが必要な別操作のままで、今回は実行しません。
+
+### Pre-v1 contract freeze
+
+- provider-backed cost-bearing workを、billing-specific authorityをcoreへ追加せず、既存のatomic reserve -> liability -> growth -> renewal -> settlement lifecycle上へfreezeしました (#152)。
+- supported runtime floorをNode.js 22+へfreezeし、Node 22/24をsupported evidence、Node 20をcompatibility-only evidenceとしました (#105)。
+- existing accounting domainをresetせず、Redis / Firestore / Cloudflare Durable Objectsのpersisted-state upgrade / rollback / future-schema boundaryをfinalizeしました (#106)。
+- package名、current public subpath、lifecycle/status/error vocabulary、scalar/vector parity、MCP multi-round naming/scopeをv1向けにfreezeしました (#161)。
+- ambiguous runtime retry semanticsを広げず、Redis renewed-lease proofとFirestore progressive-growth contention evidenceをhardeningしました (#166, #157)。
+
+### Release safety / real Cloudflare evidence
+
+- protected `test (22)` を、supported Node / Redis / package / tarball / clean-consumer evidenceとapplicableなCloudflare workerd / Firestore Emulator integrationを束ねるaggregate release-safety gateにしました (#160)。
+- real `monokura-mcp-usage-control` に対してMonokuraのzero-downtime credential rotationを完了。overlapでnew / old credentialが両方accepted、Cloud Run callerを新Secret Manager versionへ切替、real `list_boards` caller成功、retire後のold credential rejectionまで確認しました (#24)。
+- rotation中も既存Durable Object / accounting identityを維持し、fresh ledger / accounting domainを作らず、Firestore fallbackも有効化していません。
+- validation中にgenuine Workers Free-plan exhaustion / platform overloadは自然発生していません。shared quotaを意図的に消費して再現せず、production claimはobserved deployed behavior + 既存local/workerd synthetic 429/503 fail-closed evidenceの範囲へ明示的に限定します。
+
+### Packaging / distribution boundary
+
+- 5 public package manifestを `0.11.0` に揃え、`engines.node >=22` を維持します。
+- source tagをcutする前のfinal release gateでreal Redis、package/tarball inspection、clean-consumer import、Cloudflare workerd、Firestore Emulator evidenceを確認します。
+- npm publicationはこのGitHub/source releaseに含めません。first registry publicationは#6でdeferしたまま、separate explicit authorizationが必要です。
+
 ## [0.10.0] - 2026-08-29
 
 10回目のGitHub/source releaseです。bounded operational usabilityとdogfood diagnosticsを主対象とし、npm publicationは引き続き別操作としてdeferredします。

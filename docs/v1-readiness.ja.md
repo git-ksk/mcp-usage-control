@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v0.10.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.10.0` に揃い、Node.js 22以上をrequireします。
+**v0.11.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.11.0` に揃い、Node.js 22以上をrequireします。
 
 packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
 
@@ -21,12 +21,13 @@ v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / g
 - #106でRedis / Firestore / Cloudflare persisted-stateのupgrade、rollback、future-schema fail-closed、fresh-domain reset境界をfreeze
 - #161でv1 package / lifecycle / status / error vocabularyをfreezeし、MCP settlement alias normalizationを明示
 - #160でprotectedな `test (22)` をapplicableなNode / Redis / package / Cloudflare / Firestore evidenceのaggregate release-safety gateへ変更
+- #24でreal Monokura Cloudflare credential rotation、新caller proof、rotated-out credential rejectionを既存accounting identityのまま完了。genuine Workers platform-limit exhaustion / overloadは自然観測しておらず、deployed evidenceとしてclaimしません。
 
-残るv0.11 blockerは **#24 final real-Cloudflare operational evidence** と、その後のfinal v0.11 release evidenceだけです。#6は別publication gateで、明示authorizationがある場合だけ実行します。
+v0.11 completion trancheはclose済みです。#6はseparate publication gateで、明示authorizationがある場合だけ実行し、source releaseから暗黙authorizeしません。
 
 ## 判定
 
-**public accounting / runtime / storage / API / governance surfaceはv1候補としてfreezeできました。残るblockerはCloudflare adapterのproduction-evidence honestyであり、core semanticやAPIの未決定事項ではありません。**
+**public accounting / runtime / storage / API / governance surfaceと、v1前に必要なproduction-evidence boundaryはfeature-free v1 stable promotionに十分な形でfreezeできました。**
 
 ## Stable accounting invariant
 
@@ -116,14 +117,19 @@ Store-facing / direct lease settlement outcomeは意図的にextensible string�
 
 `test (22)` はprotected aggregate release-safety gateです。Node / Redis / package / tarball / clean-consumer matrix全体と、applicableなCloudflare workerd / Firestore Emulator evidenceを必須にします。`test (20)` はcompatibility-only protected contextです。provider skipはpath classifierが非該当と判定した場合だけ許可し、docs-only変更はlightweight pathでrequired contextをdeadlockさせずresolveします。
 
-## v1 promotionまでの残件
+### Real Cloudflare operational evidence (#24) — complete
 
-1. **#24 Cloudflare real-operation evidence** — real credential rotationを実施し、honestなv1 production claimをfinalize。platform-limit eventを作るためだけにshared quotaを意図的に消費しない
-2. **final v0.11 release evidence** — supported Node/package check、Redis、aggregate `test (22)`、Cloudflare workerd、Firestore Emulator、package tarball / clean consumer、英日docs、final public contractをすべてgreenにし、unresolved v1 blockerを0にする
+document済みzero-downtime rotationをreal Monokura deploymentで実行しました。overlap中はnew / old credentialが両方成功し、Cloud Runを新しいexplicit Secret Manager versionへ切替、新revisionでreal `list_boards` callerが成功し、その後retired credential rejectionも確認しました。Durable Object / accounting identityは維持し、Firestore quota fallbackも有効化していません。
+
+genuine Workers Free-plan exhaustion / platform overloadは自然発生していません。そのため全platform-limit条件のdeployed empirical evidenceまではclaimせず、shared quotaを意図的に燃やして再現しないboundaryを維持します。
+
+## v1 promotion status
+
+v0.11 source-release gateがfinal pre-v1 evidence checkpointです。v0.11 tagをcutする前にsupported Node / package check、Redis、aggregate `test (22)`、Cloudflare workerd、Firestore Emulator、package tarball / clean consumer、英日docs、final public contractをすべてgreenにします。tagged v0.11 source release成立後は、feature-free v1 stable promotionに対するunresolved source-contract blockerはありません。
 
 ## npm distribution boundary
 
-source-release baselineはv0.11をcutするまで `v0.10.0` のままです。npm publicationは別操作で、まだ実行していません。
+source-release baselineは `v0.11.0` です。npm publicationは別操作で、まだ実行していません。
 
 #6はfirst publicationを実際に希望し、**separate explicit authorization** を行い、package ownership / availability、provenance、registry metadata、package content、clean-consumer installをverifyするまでopenのままです。
 
@@ -131,6 +137,6 @@ source releaseがregistry publicationを暗黙authorizeすることはありま�
 
 ## v1 promotion rule
 
-v1.0では **新featureやaccounting modelを追加しません**。#24 / final v0.11 evidenceで残るproduction-evidence boundaryを閉じ、final source/package/provider evidenceがgreenで、v1 blocker分類のIssueが0になった場合だけpromotionします。
+v1.0では **新featureやaccounting modelを追加しません**。frozen v0.11 surfaceをstable label/source milestoneへpromotionする位置づけで、tagged v0.11 release evidenceがgreenであることを前提とします。npm publicationは#6で独立authorizationのままです。
 
 [Roadmap](roadmap.ja.md)、[Release policy](releasing.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、[Persisted-state compatibility](persisted-state-compatibility.ja.md)、[v1 public API freeze](v1-public-api-freeze.ja.md)、各provider docsでcurrent support boundaryを確認してください。

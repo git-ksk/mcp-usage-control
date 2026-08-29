@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.10.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.10.0`, require Node.js 22+, and remain unpublished to npm.
+**v0.11.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.11.0`, require Node.js 22+, and remain unpublished to npm.
 
 First npm publication is a separately authorized operation tracked by #6. Source-release progress never implies registry publication.
 
@@ -22,7 +22,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.8 scalar operation reconciliation [RELEASED]
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [RELEASED]
- -> v0.11 accounting/completion/distribution/API freeze [ACTIVE]
+ -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v1.0 feature-free stable promotion
 ```
 
@@ -50,6 +50,7 @@ Across every remaining release:
 | **v0.8.0** | Optional read-only scalar operation reconciliation through `OperationReconciliationStore` | Released / adopted |
 | **v0.9.0** | Repository-wide safety hardening #116-#127 plus Firestore race blocker #143 | Released / complete |
 | **v0.10.0** | Operational snapshot/runtime identity, canonical settlement diagnostics, scoped threshold/exhaustion helpers | Released / adopted |
+| **v0.11.0** | Pre-v1 accounting/runtime/storage/API freeze, aggregate release-safety gate, real Cloudflare rotation evidence | Released / complete |
 
 Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
@@ -124,13 +125,15 @@ The existing protected context names were preserved while strengthening their se
 
 This closes the earlier governance gap without requiring an administrative branch-protection context rename.
 
-## Active v0.11 execution order
+### #24 Cloudflare real operational evidence — complete
 
-Only the final production/evidence tranche remains:
+The real Monokura dogfood deployment completed the documented zero-downtime credential rotation. The overlap window accepted both credentials, the Cloud Run caller moved to the new Secret Manager version, a real `list_boards` call succeeded on the new revision, and the rotated-out credential was rejected after retirement. The existing Durable Object/accounting identity remained unchanged and no Firestore fallback was enabled.
 
-1. **#24 Cloudflare real-operation boundary** — execute documented real credential rotation and finalize the honest v1 platform-limit claim. Do not burn shared Free-plan quota solely to manufacture an overload/exhaustion event.
-2. **final v0.11 release evidence** — supported Node/package checks, Redis, aggregate `test (22)`, Cloudflare workerd, Firestore Emulator, tarball/clean-consumer validation, bilingual docs, and final public-contract review all green with no unresolved v1 blocker.
-3. **#6 first npm publication** — only if separately explicitly authorized, after the public contract is frozen. Registry/provenance/clean-install verification is part of that separate operation.
+No genuine Workers Free-plan exhaustion/platform-overload event occurred naturally. Shared quota was not intentionally burned to manufacture one, so the v1 Cloudflare claim stays limited to the deployed behavior actually observed plus the existing local/workerd synthetic 429/503 fail-closed evidence.
+
+## Current execution order
+
+The v0.11 completion tranche is closed. The next source milestone is **v1.0 as a feature-free stable promotion**. Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
 
 ## v1 completion definition
 
@@ -167,7 +170,7 @@ Before v1.0:
 | #106 persisted-store compatibility | v0.11 | **Completed; provider compatibility contract frozen** |
 | #161 settlement/public lifecycle typing | v0.11 | **Completed; public API/name freeze** |
 | #160 required release-safety enforcement | v0.11 | **Completed; aggregate `test (22)` gate** |
-| #24 Cloudflare real operational evidence | v0.11 | **Pending final production evidence** |
+| #24 Cloudflare real operational evidence | v0.11 | **Completed; real rotation/caller/rejection proof, platform-limit non-observation explicitly bounded** |
 | #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization required** |
 
 ## Release policy

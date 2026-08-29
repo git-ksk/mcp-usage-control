@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v0.10.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.10.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
+**v0.11.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.11.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
 
 first npm publicationは#6で追跡するseparate explicit authorization必須の操作です。source-release progressがregistry publicationを意味することはありません。
 
@@ -22,7 +22,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.8 scalar operation reconciliation [RELEASED]
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [RELEASED]
- -> v0.11 accounting/completion/distribution/API freeze [ACTIVE]
+ -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v1.0 feature-free stable promotion
 ```
 
@@ -50,6 +50,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.8.0** | `OperationReconciliationStore` によるoptional read-only scalar operation reconciliation | Release済み / Adopted |
 | **v0.9.0** | repository-wide safety hardening #116〜#127 + Firestore race blocker #143 | Release済み / Complete |
 | **v0.10.0** | operational snapshot/runtime identity、canonical settlement diagnostics、scoped threshold/exhaustion helper | Release済み / Adopted |
+| **v0.11.0** | pre-v1 accounting/runtime/storage/API freeze、aggregate release-safety gate、real Cloudflare rotation evidence | Release済み / Complete |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -124,13 +125,15 @@ v1前のdurable provider互換境界をfreezeしました。
 
 これによりbranch-protection context renameのadmin操作なしで、release-critical evidenceのaccidental bypassを防ぎます。
 
-## Active v0.11 execution order
+### #24 Cloudflare real operational evidence — complete
 
-残るのはfinal production / evidence trancheだけです。
+real Monokura dogfood deploymentでdocument済みzero-downtime credential rotationを完了しました。overlap windowではnew / old credentialを両方acceptし、Cloud Run callerを新Secret Manager versionへ切替、新revision上のreal `list_boards` callが成功し、retire後はrotated-out credentialをrejectしました。既存Durable Object / accounting identityは維持し、Firestore fallbackも有効化していません。
 
-1. **#24 Cloudflare real-operation boundary** — documented real credential rotationを実行し、honestなv1 platform-limit claimをfinalize。overload/exhaustion eventを作るためだけにshared Free-plan quotaを消費しない
-2. **final v0.11 release evidence** — supported Node/package check、Redis、aggregate `test (22)`、Cloudflare workerd、Firestore Emulator、tarball / clean-consumer validation、英日docs、final public-contract reviewを全greenにしunresolved v1 blockerを0にする
-3. **#6 first npm publication** — public contract freeze後、separate explicit authorizationがある場合だけ実施し、registry/provenance/clean-installまでverify
+genuine Workers Free-plan exhaustion / platform overloadは自然発生していません。shared quotaを意図的に消費して再現せず、v1 Cloudflare claimは実際にobservedしたdeployed behavior + 既存local/workerd synthetic 429/503 fail-closed evidenceの範囲へ限定します。
+
+## 現在の実行順序
+
+v0.11 completion trancheはclose済みです。次のsource milestoneは **feature追加なしのv1.0 stable promotion** です。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
@@ -167,7 +170,7 @@ v1.0前に:
 | #106 persisted-store compatibility | v0.11 | **Completed; provider compatibility contract frozen** |
 | #161 settlement/public lifecycle typing | v0.11 | **Completed; public API/name freeze** |
 | #160 required release-safety enforcement | v0.11 | **Completed; aggregate `test (22)` gate** |
-| #24 Cloudflare real operational evidence | v0.11 | **Pending final production evidence** |
+| #24 Cloudflare real operational evidence | v0.11 | **Completed; real rotation/caller/rejection proof、platform-limit未観測boundaryを明示** |
 | #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization必須** |
 
 ## Release policy

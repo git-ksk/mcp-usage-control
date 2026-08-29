@@ -8,6 +8,31 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.11.0] - 2026-08-29
+
+Eleventh GitHub/source release and final pre-v1 completion freeze. npm publication remains a separate explicitly authorized operation and was not performed.
+
+### Pre-v1 contract freeze
+
+- Froze provider-backed cost-bearing work on the existing atomic reserve -> liability -> growth -> renewal -> settlement lifecycle without adding billing-specific authority to core (#152).
+- Froze the supported runtime floor at Node.js 22+, with Node 22/24 as supported evidence and Node 20 retained only as compatibility evidence (#105).
+- Finalized persisted-state upgrade/rollback/future-schema boundaries for Redis, Firestore, and Cloudflare Durable Objects without resetting existing accounting domains (#106).
+- Froze package names, current public subpaths, lifecycle/status/error vocabulary, scalar/vector parity, and MCP multi-round naming/scope for v1 (#161).
+- Hardened Redis renewed-lease proof and Firestore progressive-growth contention evidence without broadening ambiguous runtime retry semantics (#166, #157).
+
+### Release safety and real Cloudflare evidence
+
+- Made the protected `test (22)` context the aggregate release-safety gate over supported Node/Redis/package/tarball/clean-consumer evidence plus applicable Cloudflare workerd and Firestore Emulator integration (#160).
+- Completed a real zero-downtime Monokura credential rotation against `monokura-mcp-usage-control`: overlap accepted new and old credentials, the Cloud Run caller moved to the new Secret Manager version, the real `list_boards` caller succeeded, and the rotated-out credential was rejected after retirement (#24).
+- Preserved the existing Durable Object/accounting identity during rotation; no fresh ledger/accounting domain was created and no Firestore fallback was enabled.
+- No genuine Workers Free-plan exhaustion/platform-overload event occurred naturally during validation. Shared quota was not intentionally burned to manufacture one, so the production claim remains explicitly limited to observed deployed behavior plus existing local/workerd synthetic 429/503 fail-closed evidence.
+
+### Packaging / distribution boundary
+
+- All five public package manifests are aligned at `0.11.0` and retain `engines.node >=22`.
+- The final release gate covers real Redis, package/tarball inspection, clean-consumer imports, Cloudflare workerd, and Firestore Emulator evidence before the source tag is cut.
+- npm publication is not part of this GitHub/source release. First registry publication remains deferred under #6 and requires separate explicit authorization.
+
 ## [0.10.0] - 2026-08-29
 
 Tenth GitHub/source release focused on bounded operational usability and dogfood diagnostics. npm publication remains intentionally separate and deferred.
