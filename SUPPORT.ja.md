@@ -2,7 +2,11 @@
 
 [English](SUPPORT.md) | [日本語](SUPPORT.ja.md)
 
-`mcp-usage-control` は現在pre-alphaのopen-source projectです。community supportはbest-effortで、commercial support SLAはありません。
+`mcp-usage-control` は現在pre-v1のopen-source projectです。community supportはbest-effortで、commercial support SLAはありません。
+
+## Supported runtime
+
+v1のsupported runtime floorは **Node.js 22+** です。Node.js 20はupstream EOL済みで、supported v1 runtime contractには含めません。現在のbranch protectionがlegacyな `test (20)` checkをrequiredとしているため、repositoryではNode 20 CI jobを一時的にcompatibility-only evidenceとして残します。このjobがgreenでもNode 20 supportを意味しません。
 
 ## Issueを開く前に
 
@@ -14,7 +18,7 @@
 - [Redis adapter](docs/redis.ja.md)
 - 既存のGitHub Issue
 
-local developmentでは次を実行してください。
+local developmentではNode.js 22以上を使い、次を実行してください。
 
 ```console
 pnpm install
@@ -49,7 +53,7 @@ quota bypass、double spending、unauthorized access、cross-tenant leakage、in
 
 既知のpre-v1 limitationには次があります。
 
-- package名 / public APIはv0.10 freezeまでstableではない
+- public API / name freezeはolder source releaseから暗黙に仮定せず、v0.11 lineで完了させる
 - npm registry publicationは#6の明示authorization付きfirst publishまでdeferred
 - stableなfirst-class MCP Tasks wire/runtime integrationはupstream surfaceがexperimentalな間deferred
 - v0.8のgeneric operation reconciliationはscalar-onlyで、vector initial-reserve ambiguityは別proofがない限りfail closed
