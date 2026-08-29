@@ -4,6 +4,12 @@
 
 > **Current distribution status:** the packages are not published to npm yet. Until the first registry publish completes, use the repository checkout or locally packed tarballs described here.
 
+## GitHub Release artifacts
+
+Starting with release-workflow hardening after v0.11.0, source releases attach the five **exact CI-validated package tarballs** plus `SHA256SUMS`, with GitHub artifact attestations generated for the same tarballs. Verify the checksum before installing an attached archive; do not assume a similarly named local rebuild is byte-identical.
+
+These assets are package/source distribution only. They do not authorize or imply npm registry publication.
+
 ## 1. Clone and verify the repository
 
 ```console

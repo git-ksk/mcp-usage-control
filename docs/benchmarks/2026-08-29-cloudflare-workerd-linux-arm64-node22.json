@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-29T13:03:33.449Z",
+  "provider": "cloudflare",
+  "runId": "1a037ed4ed874110",
+  "environment": {
+    "node": "v22.23.2",
+    "platform": "linux-arm64",
+    "iterations": 5,
+    "concurrency": 4,
+    "ttlMs": 60000,
+    "target": "http://127.0.0.1:8799/v1/usage-store",
+    "transport": "remote Durable Object gateway"
+  },
+  "warning": "Local/emulator measurements are environment-specific evidence, not universal SLOs.",
+  "scenarios": [
+    {
+      "name": "scalar.reserve.allow",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 8.244,
+        "p95": 56.991,
+        "p99": 56.991,
+        "min": 6.505,
+        "max": 56.991
+      }
+    },
+    {
+      "name": "scalar.reserve.deny",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.038,
+        "p95": 7.815,
+        "p99": 7.815,
+        "min": 4.722,
+        "max": 7.815
+      }
+    },
+    {
+      "name": "scalar.reserve.multi_budget",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 7.609,
+        "p95": 15.986,
+        "p99": 15.986,
+        "min": 5.383,
+        "max": 15.986
+      }
+    },
+    {
+      "name": "scalar.mark_liable",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 6.497,
+        "p95": 11.918,
+        "p99": 11.918,
+        "min": 5.135,
+        "max": 11.918
+      }
+    },
+    {
+      "name": "scalar.renew",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.09,
+        "p95": 5.363,
+        "p99": 5.363,
+        "min": 4.641,
+        "max": 5.363
+      }
+    },
+    {
+      "name": "scalar.settle",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.255,
+        "p95": 5.635,
+        "p99": 5.635,
+        "min": 4.461,
+        "max": 5.635
+      }
+    },
+    {
+      "name": "progressive.grow",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 4.941,
+        "p95": 8.372,
+        "p99": 8.372,
+        "min": 4.579,
+        "max": 8.372
+      }
+    },
+    {
+      "name": "vector.reserve",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.31,
+        "p95": 6.792,
+        "p99": 6.792,
+        "min": 4.975,
+        "max": 6.792
+      }
+    },
+    {
+      "name": "vector.grow",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.418,
+        "p95": 6.371,
+        "p99": 6.371,
+        "min": 4.797,
+        "max": 6.371
+      }
+    },
+    {
+      "name": "vector.settle",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.248,
+        "p95": 6.887,
+        "p99": 6.887,
+        "min": 4.724,
+        "max": 6.887
+      }
+    },
+    {
+      "name": "reconciliation.active_lookup",
+      "supported": true,
+      "samples": 5,
+      "ok": 5,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 4.036,
+        "p95": 6.946,
+        "p99": 6.946,
+        "min": 3.705,
+        "max": 6.946
+      }
+    },
+    {
+      "name": "contention.shared_hot_budget",
+      "supported": true,
+      "samples": 20,
+      "ok": 20,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 7.791,
+        "p95": 8.737,
+        "p99": 8.777,
+        "min": 4.275,
+        "max": 8.777
+      },
+      "accepted": 10,
+      "denied": 10,
+      "batchConcurrency": 4
+    },
+    {
+      "name": "recovery.bounded",
+      "supported": false,
+      "reason": "provider surface does not expose this benchmark operation"
+    }
+  ]
+}

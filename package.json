@@ -3,11 +3,17 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.15.0",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "pnpm -r test",
-    "check": "pnpm build && pnpm test"
+    "check": "pnpm build && pnpm test",
+    "benchmark:memory": "node scripts/benchmark-usage-store.mjs memory",
+    "benchmark:redis": "node scripts/benchmark-usage-store.mjs redis",
+    "benchmark:firestore": "node scripts/benchmark-usage-store.mjs firestore",
+    "benchmark:cloudflare": "node scripts/benchmark-usage-store.mjs cloudflare"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

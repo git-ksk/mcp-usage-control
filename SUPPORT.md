@@ -45,6 +45,10 @@ Do not include credentials, tokens, cookies, connection strings with secrets, ra
 
 Use the feature-request template and explain the intended use case, required safety invariant, and why the change belongs in core versus an adapter.
 
+## Dependency advisories
+
+Supported-line dependency and GitHub Actions advisories are triaged through the automated checks described in [SECURITY.md](SECURITY.md). Critical/high advisories should include the affected dependency/action, supported release impact, applicability/exploitability assessment, and safe target version when known.
+
 ## Security issues
 
 Do not use a public issue for a vulnerability that could enable quota bypass, double spending, unauthorized access, cross-tenant leakage, or inconsistent settlement. Follow [SECURITY.md](SECURITY.md).
@@ -56,7 +60,7 @@ Known pre-v1 limitations include:
 - public API/name freeze is completed through the v0.11 line rather than assumed from earlier source releases;
 - npm registry publication remains deferred until the separately authorized first publish tracked in #6;
 - stable first-class MCP Tasks wire/runtime integration remains deferred while the upstream surface is experimental;
-- generic operation reconciliation is scalar-only in v0.8; vector initial-reserve ambiguity remains fail closed unless separately proven;
+- generic operation reconciliation is scalar-only; vector initial-reserve ambiguity remains fail closed unless separately proven;
 - strict provider-specific fencing after lease loss is outside the generic core;
 - billing, payment, authentication, and analytics backends are not built into core.
 

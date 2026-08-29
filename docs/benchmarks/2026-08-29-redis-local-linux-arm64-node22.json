@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-29T12:20:46.878Z",
+  "provider": "redis",
+  "runId": "fa442639753443eb",
+  "environment": {
+    "node": "v22.23.2",
+    "platform": "linux-arm64",
+    "iterations": 10,
+    "concurrency": 4,
+    "ttlMs": 60000,
+    "target": "redis://host.docker.internal:6389",
+    "redis": "node-redis 6.2.x"
+  },
+  "warning": "Local/emulator measurements are environment-specific evidence, not universal SLOs.",
+  "scenarios": [
+    {
+      "name": "scalar.reserve.allow",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 1.231,
+        "p95": 2.905,
+        "p99": 2.905,
+        "min": 1.123,
+        "max": 2.905
+      }
+    },
+    {
+      "name": "scalar.reserve.deny",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.927,
+        "p95": 1.049,
+        "p99": 1.049,
+        "min": 0.892,
+        "max": 1.049
+      }
+    },
+    {
+      "name": "scalar.reserve.multi_budget",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.981,
+        "p95": 8.843,
+        "p99": 8.843,
+        "min": 0.942,
+        "max": 8.843
+      }
+    },
+    {
+      "name": "scalar.mark_liable",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.769,
+        "p95": 0.916,
+        "p99": 0.916,
+        "min": 0.698,
+        "max": 0.916
+      }
+    },
+    {
+      "name": "scalar.renew",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.685,
+        "p95": 0.823,
+        "p99": 0.823,
+        "min": 0.636,
+        "max": 0.823
+      }
+    },
+    {
+      "name": "scalar.settle",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.679,
+        "p95": 0.838,
+        "p99": 0.838,
+        "min": 0.652,
+        "max": 0.838
+      }
+    },
+    {
+      "name": "progressive.grow",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.798,
+        "p95": 1.135,
+        "p99": 1.135,
+        "min": 0.771,
+        "max": 1.135
+      }
+    },
+    {
+      "name": "vector.reserve",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.861,
+        "p95": 1.458,
+        "p99": 1.458,
+        "min": 0.789,
+        "max": 1.458
+      }
+    },
+    {
+      "name": "vector.grow",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.909,
+        "p95": 1.288,
+        "p99": 1.288,
+        "min": 0.831,
+        "max": 1.288
+      }
+    },
+    {
+      "name": "vector.settle",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.74,
+        "p95": 1.027,
+        "p99": 1.027,
+        "min": 0.72,
+        "max": 1.027
+      }
+    },
+    {
+      "name": "reconciliation.active_lookup",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.657,
+        "p95": 0.922,
+        "p99": 0.922,
+        "min": 0.627,
+        "max": 0.922
+      }
+    },
+    {
+      "name": "contention.shared_hot_budget",
+      "supported": true,
+      "samples": 40,
+      "ok": 40,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 1.193,
+        "p95": 1.318,
+        "p99": 1.392,
+        "min": 1.022,
+        "max": 1.392
+      },
+      "accepted": 20,
+      "denied": 20,
+      "batchConcurrency": 4
+    },
+    {
+      "name": "recovery.bounded",
+      "supported": false,
+      "reason": "provider surface does not expose this benchmark operation"
+    }
+  ]
+}

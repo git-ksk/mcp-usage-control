@@ -2,7 +2,7 @@ import type { UsageEvent, UsageObserverHandler } from './observability.js';
 import type { SettlementOutcomeDiagnosticSink } from './settlement-outcomes.js';
 
 export const MCP_USAGE_CONTROL_PACKAGE_NAME = 'mcp-usage-control';
-export const MCP_USAGE_CONTROL_VERSION = '0.11.0';
+export const MCP_USAGE_CONTROL_VERSION = '0.12.0';
 
 export type UsageRuntimeProvider = 'memory' | 'redis' | 'firestore' | 'cloudflare' | 'custom';
 export type UsageRuntimeCapability =
@@ -66,6 +66,11 @@ export interface ScopedQuotaSnapshot {
   utilization: number;
 }
 
+export interface ScopedQuotaWindowSnapshot extends ScopedQuotaSnapshot {
+  /** Exclusive epoch-millisecond end of the known accounting window. */
+  resetsAt: number;
+}
+
 /**
  * Build a bounded, static runtime descriptor suitable for health output.
  * Identity is diagnostic only and must never participate in admission decisions.
@@ -108,6 +113,19 @@ export function projectScopedQuota(limit: number, remaining: number): ScopedQuot
     exhausted: remaining === 0,
     utilization: limit === 0 ? 1 : (limit - remaining) / limit,
   };
+}
+
+/**
+ * Add a caller-selected known reset boundary to one scoped quota projection.
+ * The boundary is policy/UX metadata only and is never inferred from a budget key.
+ */
+export function projectScopedQuotaWindow(
+  limit: number,
+  remaining: number,
+  resetsAt: number,
+): ScopedQuotaWindowSnapshot {
+  assertNonNegativeSafeInteger(resetsAt, 'resetsAt');
+  return { ...projectScopedQuota(limit, remaining), resetsAt };
 }
 
 /**

@@ -4,6 +4,12 @@
 
 > **現在の配布状況:** packageはまだnpmへ公開していません。初回registry publishが完了するまでは、repository checkoutまたはローカルでpackしたtarballを使ってください。
 
+## GitHub Release artifact
+
+release-workflow hardening以降のsource releaseでは、5つの**exact CI-validated package tarball**と `SHA256SUMS` をattachし、同じtarballへGitHub artifact attestationを生成します。attached archiveをinstallする場合はchecksumをverifyし、同名のlocal rebuildがbyte-identicalとは仮定しないでください。
+
+これらはpackage/source distribution用assetであり、npm registry publicationをauthorize / implyしません。
+
 ## 1. Repositoryをcloneして検証
 
 ```console

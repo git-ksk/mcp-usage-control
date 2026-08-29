@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.11.0` に揃っています。**v0.11.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredしています。
+このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.12.0` に揃っています。**v0.12.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredしています。
 
 behavior / failure guaranteeは [Architecture](architecture.ja.md) / [Store実装contract](store-contract.ja.md)、v1 stable / deferred境界は [v1.0 readiness review](v1-readiness.ja.md) を参照してください。
 
@@ -122,7 +122,7 @@ Free / Plus月次creditsの完全なcomposition例は [サブスク型MCP credit
 
 ### `createWindowedBudgetKey()`
 
-一般的な日次/月次budget identityには `createWindowedBudgetKey({ period, timeZone, namespace, clock? })` を使えます。`key({ scope, id, now? })` でdeterministicかつcomponent-safeなkeyを作ります。設定したtimezone文字列自体もaccounting identityへ含まれるため、timezone / namespace / period / scope形式を変えると既存stateのrollover semanticsを黙って変えるのではなく、意図的に別keyを選びます。詳しくは[利用枠の期間を表すbudget key](accounting-window-keys.ja.md)を参照してください。
+一般的な日次/月次budget identityには `createWindowedBudgetKey({ period, timeZone, namespace, clock? })` を使えます。`key({ scope, id, now? })` でdeterministicかつcomponent-safeなkeyを作ります。`window({ scope, id, now? })` は同じtimezone/calendar計算から、そのkeyとinclusiveな `startsAt` / exclusiveな `endsAt` を一緒に返します。`endsAt` はknown next-resetとしてclient UXへ使えますが、non-authoritative metadataであり、任意のapplication-defined keyからresetを推測することはありません。設定したtimezone文字列自体もaccounting identityへ含まれるため、timezone / namespace / period / scope形式を変えると既存stateのrollover semanticsを黙って変えるのではなく、意図的に別keyを選びます。詳しくは[利用枠の期間を表すbudget key](accounting-window-keys.ja.md)を参照してください。
 
 ### `UsageStore`
 

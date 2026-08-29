@@ -8,11 +8,11 @@
 quote -> atomic reserve -> mark liable -> execute -> renew -> settle
 ```
 
-generic gateway、billing ledger、governance system、workflow engineへ広げるのではなく、この境界のcorrectness / production usabilityを深めます。戦略上の境界は [Project positioning](positioning.ja.md) を参照してください。
+generic gateway、billing ledger、governance system、workflow engineへ広げるのではなく、この境界のcorrectness / production usabilityを深めます。戦略上の境界は [Project positioning](positioning.ja.md) と継続更新する [競合capability map](competitive-capabilities.ja.md) を参照してください。
 
 ## 現在のbaseline
 
-**v0.11.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.11.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
+**v0.12.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.12.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
 
 first npm publicationは#6で追跡するseparate explicit authorization必須の操作です。source-release progressがregistry publicationを意味することはありません。
 
@@ -23,6 +23,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.9 repository-wide safety hardening [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
+ -> v0.12 product/operations hardening [RELEASED]
  -> v1.0 feature-free stable promotion
 ```
 
@@ -51,6 +52,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.9.0** | repository-wide safety hardening #116〜#127 + Firestore race blocker #143 | Release済み / Complete |
 | **v0.10.0** | operational snapshot/runtime identity、canonical settlement diagnostics、scoped threshold/exhaustion helper | Release済み / Adopted |
 | **v0.11.0** | pre-v1 accounting/runtime/storage/API freeze、aggregate release-safety gate、real Cloudflare rotation evidence | Release済み / Complete |
+| **v0.12.0** | product/operations hardening: release provenance/artifact、supply-chain maintenance、incident runbook、競合判断、quota-window projection、provider benchmark | Release済み / Complete |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -133,7 +135,9 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 ## 現在の実行順序
 
-v0.11 completion trancheはclose済みです。次のsource milestoneは **feature追加なしのv1.0 stable promotion** です。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
+boundedな **v0.12 product/operations hardening** tranche (#177〜#184) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。#183はadditive-helper allowance内に留め、release provenance / artifact、incident response、dependency maintenance、current docs、competitive decision、provider benchmark evidenceをfrozen surfaceの周囲でhardeningしました。
+
+**v1.0はv0.12 surfaceに対するfeature-free stable promotion** のままです。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
@@ -171,7 +175,14 @@ v1.0前に:
 | #161 settlement/public lifecycle typing | v0.11 | **Completed; public API/name freeze** |
 | #160 required release-safety enforcement | v0.11 | **Completed; aggregate `test (22)` gate** |
 | #24 Cloudflare real operational evidence | v0.11 | **Completed; real rotation/caller/rejection proof、platform-limit未観測boundaryを明示** |
-| #6 first npm publication | separate v0.11/v1 distribution gate | **Open; explicit authorization必須** |
+| #177 / #178 release provenance + validated artifact | v0.12 | **Completed; accounting semantics変更なし** |
+| #179 dependency/action supply-chain maintenance | v0.12 | **Completed** |
+| #180 known-bad release / hotfix runbook | v0.12 | **Completed** |
+| #181 current operator-doc baseline cleanup | v0.12 | **Completed** |
+| #182 maintained competitive capability decision | v0.12 | **Completed; positioning guardrail** |
+| #183 safe quota-window/reset UX projection | v0.12 | **Completed; additive non-authoritative helper** |
+| #184 provider benchmark / cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
+| #6 first npm publication | separate v0.12/v1 distribution gate | **Open; explicit authorization必須** |
 
 ## Release policy
 
@@ -181,4 +192,4 @@ v1.0前に:
 - GitHub/source release成功はregistry publicationを意味しない
 - aggregate required release-safety gateはrelease policyで約束するevidenceと常に一致させる
 
-[Release policy](releasing.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、各provider docsをproduction deployment前に確認してください。
+[Release policy](releasing.ja.md)、[Provider benchmark harness](provider-benchmarks.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、各provider docsをproduction deployment前に確認してください。

@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v0.11.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.11.0` and require Node.js 22 or later.
+**v0.12.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.12.0` and require Node.js 22 or later.
 
 The packages remain **unpublished to npm**. First registry publication is separately tracked by #6 and requires explicit authorization independent from source releases.
 
@@ -125,11 +125,13 @@ A genuine Workers Free-plan exhaustion/platform-overload event did not occur nat
 
 ## v1 promotion status
 
-The v0.11 source-release gate is the final pre-v1 evidence checkpoint: supported Node/package checks, Redis, aggregate `test (22)`, Cloudflare workerd, Firestore Emulator, package tarballs/clean consumer, bilingual docs, and the final public contract must be green before the v0.11 tag is cut. Once the tagged v0.11 source release exists, no unresolved source-contract blocker remains for a feature-free v1 stable promotion.
+v0.11 established the accounting/runtime/storage/API freeze, and v0.12 completes the bounded #177-#184 hardening checkpoint: exact-SHA release provenance, validated release artifacts, supply-chain maintenance, incident response, current operator docs, competitive adopt/defer decisions, additive non-authoritative quota-window UX projection, and reproducible provider performance/cost evidence. The frozen accounting lifecycle and persisted Store contract remain unchanged.
+
+v1.0 remains a feature-free stable promotion over that hardened surface.
 
 ## npm distribution boundary
 
-The source-release baseline is `v0.11.0`. npm publication is a separate operation and has not occurred.
+The source-release baseline is `v0.12.0`. npm publication is a separate operation and has not occurred.
 
 Issue #6 remains open until first publication is actually desired, **separately explicitly authorized**, completed, and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
 
@@ -137,6 +139,6 @@ A source release never implicitly authorizes registry publication.
 
 ## v1 promotion rule
 
-v1.0 should contain **no new feature or accounting model**. Promotion is a stable-label/source milestone over the frozen v0.11 surface and remains contingent on the tagged v0.11 release evidence being green. npm publication remains independently authorized under #6.
+v1.0 should contain **no new feature or accounting model**. Promotion is a stable-label/source milestone over the hardened v0.12 surface and remains contingent on the tagged v0.12 release evidence being green. npm publication remains independently authorized under #6.
 
 See [Roadmap](roadmap.md), [Release policy](releasing.md), [Cost-bearing operations](cost-bearing-operations.md), [Persisted-state compatibility](persisted-state-compatibility.md), [v1 public API freeze](v1-public-api-freeze.md), and provider-specific documentation for the current support boundaries.

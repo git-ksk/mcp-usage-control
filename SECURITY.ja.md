@@ -4,7 +4,13 @@
 
 ## Supported versions
 
-security fixのsupport対象はlatest GitHub/source minor lineです。このpolicyでは **v0.11.xをcurrent released pre-v1 source baseline** とし、older v0.x source-release lineをsupersedeします。npm registry publishは別工程で、GitHub/source releaseをsupportしていてもnpm公開はdeferしたままです。v1のsupported runtime floorは **Node.js 22+** です。Node.js 20はEOL済みで、一時的にNode 20 CIが残っていてもcompatibility-only evidenceでありsupported-runtime claimではありません。
+security fixのsupport対象はlatest GitHub/source minor lineです。このpolicyでは **v0.12.xをcurrent released pre-v1 source baseline** とし、older v0.x source-release lineをsupersedeします。npm registry publishは別工程で、GitHub/source releaseをsupportしていてもnpm公開はdeferしたままです。v1のsupported runtime floorは **Node.js 22+** です。Node.js 20はEOL済みで、一時的にNode 20 CIが残っていてもcompatibility-only evidenceでありsupported-runtime claimではありません。
+
+## Dependency / workflow supply-chain maintenance
+
+Dependabot update PRでnpm/pnpmとGitHub Actionsをcoverします。PRではnewly introduced high/critical vulnerable dependencyをcheckし、scheduled repository auditでexisting lockfileも確認します。third-party GitHub Actionsはimmutable commit SHAへpinし、update automationが新しいpinを提案しても通常のrelease-safety evidenceを通してreviewします。
+
+current supported source lineへ影響するCritical/High advisoryはsecurity issueとしてtriageします。Criticalはimmediate containment / release assessment対象、Highは次のaffected release前にfixするかnon-applicable / non-exploitable根拠を明示します。これはmaintainer priorityでありcommercial SLAではありません。
 
 ## 脆弱性の報告
 
@@ -104,6 +110,10 @@ operatorはrisk toleranceに合ったRedis HA / persistenceを選定してくだ
 contributorがsecretをcommitする必要はありません。example、test、log、Issue template、documentationはplaceholder / synthetic identifierを使います。
 
 Redis keyではprincipal / operation / budget identifierをhash化しますが、hashはencryptionではありません。identifier、event metadata、settlement outcomeにsecretを入れないでください。
+
+## Incident containment
+
+known-bad releaseでは [emergency containment / hotfix runbook](docs/incident-response.ja.md) を使います。security workaroundとしてauthoritative provider stateを場当たり的にclear / downgradeしません。
 
 ## Disclosure
 

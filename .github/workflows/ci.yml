@@ -16,7 +16,7 @@ jobs:
       run_cloudflare: ${{ steps.scope.outputs.run_cloudflare }}
       run_firestore: ${{ steps.scope.outputs.run_firestore }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - name: Classify release-safety scope
@@ -100,15 +100,15 @@ jobs:
         if: needs.changes.outputs.run_full != 'true'
         run: echo "Documentation-only change; heavy Node/Redis/package checks are not required."
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: needs.changes.outputs.run_full == 'true'
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         if: needs.changes.outputs.run_full == 'true'
         with:
           version: 10.15.0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         if: needs.changes.outputs.run_full == 'true'
         with:
           node-version: ${{ matrix.node }}
@@ -274,6 +274,7 @@ jobs:
             UsageOperationalMonitor,
             createUsageRuntimeIdentity,
             projectScopedQuota,
+            projectScopedQuotaWindow,
           } from 'mcp-usage-control/operational';
           import {
             InvalidSettlementOutcomeError,
@@ -310,6 +311,7 @@ jobs:
             UsageOperationalMonitor,
             createUsageRuntimeIdentity,
             projectScopedQuota,
+            projectScopedQuotaWindow,
             InvalidSettlementOutcomeError,
             normalizeSettlementOutcome,
             didUsageQuotaThresholdCross,
@@ -338,16 +340,25 @@ jobs:
         if: always() && needs.changes.outputs.run_full == 'true'
         run: docker rm --force muc-redis >/dev/null 2>&1 || true
 
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject newly introduced high/critical vulnerable dependencies
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+
   cloudflare:
     needs: changes
     if: needs.changes.outputs.run_cloudflare == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 10.15.0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           package-manager-cache: false
@@ -393,15 +404,15 @@ jobs:
     env:
       GCLOUD_PROJECT: demo-muc-firestore
     steps:
-      - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 10.15.0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           package-manager-cache: false
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '21'
@@ -459,13 +470,15 @@ jobs:
   release-safety:
     name: test (22)
     if: always()
-    needs: [changes, node, cloudflare, firestore]
+    needs: [changes, node, dependency-review, cloudflare, firestore]
     runs-on: ubuntu-latest
     steps:
       - name: Require all applicable release-safety evidence
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
           NODE_RESULT: ${{ needs.node.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
           RUN_CLOUDFLARE: ${{ needs.changes.outputs.run_cloudflare }}
           CLOUDFLARE_RESULT: ${{ needs.cloudflare.result }}
           RUN_FIRESTORE: ${{ needs.changes.outputs.run_firestore }}
@@ -475,6 +488,12 @@ jobs:
           set -euo pipefail
           test "$CHANGES_RESULT" = "success"
           test "$NODE_RESULT" = "success"
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            test "$DEPENDENCY_REVIEW_RESULT" = "success"
+          else
+            test "$DEPENDENCY_REVIEW_RESULT" = "skipped"
+          fi
 
           if [[ "$RUN_CLOUDFLARE" == "true" ]]; then
             test "$CLOUDFLARE_RESULT" = "success"

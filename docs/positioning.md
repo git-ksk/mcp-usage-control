@@ -53,6 +53,8 @@ Those systems may provide valuable capabilities such as dashboards, pricing cata
 
 Features should be evaluated against that position. A feature belongs in core only when it strengthens admission, liability, settlement, replay, recovery, or the MCP execution boundary without turning the project into a gateway or billing platform.
 
+For a maintained evidence-based comparison with adjacent products, see [Competitive capability map](competitive-capabilities.md).
+
 ## MCP-native direction
 
 MCP-specific work should focus on protocol semantics that affect accounting correctness, including:

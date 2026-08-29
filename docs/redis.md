@@ -6,7 +6,7 @@
 
 > **Current distribution status:** the package is not published to npm yet. Build/install the local core + Redis tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `redis@6.2.0`.
 
-The v0.8 source line is tested with Redis 7 and node-redis 6.2.x. The release matrix currently exercises Node.js 20/22/24; the supported Node.js floor for the future v1 line is intentionally decided in v0.10 (#105) rather than inferred from compatibility CI.
+The current v0.11/v1-frozen source line is tested with Redis 7 and node-redis 6.2.x. The supported v1 runtime is Node.js 22+; Node.js 20 is retained only as compatibility CI evidence and is not part of the supported runtime contract.
 
 ## Atomic multi-budget model
 
@@ -25,7 +25,7 @@ One Lua script:
 
 This prevents partial reservation/release when an operation participates in daily, monthly, tenant, or other shared budgets.
 
-## v0.1 key model
+## Redis key model
 
 All transactional keys share one configurable Redis Cluster hash tag. With defaults:
 
@@ -45,7 +45,7 @@ Raw principal, tenant, operation, tool, and budget identifiers are not embedded 
 
 All keys above intentionally use one hash slot so every Lua transition is valid on Redis Cluster without `CROSSSLOT` behavior.
 
-Correctness is prioritized over horizontal write distribution in v0.1. A future sharding design may provide several independent usage domains, but all budgets participating in one atomic admission must remain in one transaction domain.
+Correctness is prioritized over horizontal write distribution in the current design. A future sharding design may provide several independent usage domains, but all budgets participating in one atomic admission must remain in one transaction domain.
 
 ## Pending vs cost-liable expiry
 
@@ -102,7 +102,7 @@ Observer delivery is best-effort and outside the Redis transaction. Missing tele
 
 `cleanupBatchSize` bounds expired lease/tombstone work per new admission. If stale state exceeds one batch, some stale reservations may survive until later admissions invoke cleanup.
 
-Because v0.1 uses a global lease index, cleanup backlog can conservatively delay capacity recovery across the usage domain. This is an availability trade-off, not a quota bypass.
+Because the current design uses a global lease index, cleanup backlog can conservatively delay capacity recovery across the usage domain. This is an availability trade-off, not a quota bypass.
 
 Operators with high crash/abandonment volume should monitor stale-state pressure and tune `cleanupBatchSize`. Dedicated reconciliation is a possible future addition.
 
@@ -116,7 +116,7 @@ month:user-42:2026-08
 month:tenant-org-7:2026-08
 ```
 
-Changing the key starts a new accounting bucket. v0.1 does not automatically TTL `used` budget fields because a generic retention policy could erase still-valid accounting state. Applications should implement retention only when their own window lifecycle makes deletion safe.
+Changing the key starts a new accounting bucket. The Store does not automatically TTL `used` budget fields because a generic retention policy could erase still-valid accounting state. Applications should implement retention only when their own window lifecycle makes deletion safe.
 
 ## Atomicity is not durability
 
@@ -136,7 +136,7 @@ For financial-grade durable accounting, use Redis as the enforcement layer and r
 
 A Redis write can commit while the client loses its acknowledgement.
 
-v0.1 behavior is conservative:
+Current acknowledgement behavior is conservative:
 
 - admission ACK loss -> retrying the same logical operation is blocked as duplicate; a different operation observes the reserved capacity;
 - `markLiable` ACK loss -> if the write committed, later expiry remains cost-liable and charges conservatively;
@@ -185,7 +185,7 @@ CI uses real Redis 7 for:
 - observability is best-effort/non-durable and not the quota ledger;
 - no built-in billing, payment, authentication, or analytics backend.
 
-## Operation reconciliation (v0.8)
+## Operation reconciliation
 
 `RedisUsageStore` implements optional scalar `OperationReconciliationStore`. The lookup runs one read-only Lua script using Redis `TIME`, `HGET`, and `ZSCORE`; it never reserves/releases capacity or changes liability, lease, settlement, or replay state. Expected reserved units and hashed budget identities must match retained state or the call fails closed.
 

@@ -186,21 +186,21 @@ coverする内容:
 - gateway authentication。
 - observer failure isolation。
 
-## Operation reconciliation (v0.8)
+## Operation reconciliation
 
-`mcp-usage-control-cloudflare/reconciliation` はv0.8の共通scalar operation-status語彙を採用します。`reconcileRemoteCloudflareOperation()` がgeneric read-only entry pointで、既存 `reconcileRemoteCloudflareReserve()` はv0.7互換aliasとして維持します。authenticated lookupは追加reservation、release、renew、settleを行いません。
+`mcp-usage-control-cloudflare/reconciliation` はcurrent frozen scalar operation-status語彙を使います。`reconcileRemoteCloudflareOperation()` がgeneric read-only entry pointで、既存 `reconcileRemoteCloudflareReserve()` はv0.7互換aliasとして維持します。authenticated lookupは追加reservation、release、renew、settleを行いません。
 
 詳しいfail-closed semanticsは [Operation reconciliation / status](operation-reconciliation.ja.md) と [Cloudflare reserve ACK reconciliation](cloudflare-reserve-reconciliation.ja.md) を参照してください。
 
 ## Current limitations
 
-- core v0.1と同様、1 reservationの全budgetは同じquoted / actual unit countを利用。
+- scalar reservationでは全参加budgetへ同じquoted / actual unit countを適用。vector accountingはseparate vector capabilityで利用可能。
 - configured transaction domain 1つを1 Durable Object instanceがserialize。
 - cleanupはlazy / bounded。
 - historical used-budget row retentionはapplication-specific。
 - remote gatewayのauthentication / credential rotationはapplication責務。
 - enforcement stateはfinancial-grade accounting ledgerではない。
-- MCP multi-round `input_required` は引き続きv0.1 `protectTool()` の対象外。
+- `protectTool()` は意図的にsingle-roundのまま。multi-round `input_required` accountingはopt-in `protectMultiRoundTool()` がsupported path。
 
 ## Atomic heterogeneous vector usage (v0.7 / schema v3)
 

@@ -4,7 +4,13 @@
 
 ## Supported versions
 
-The latest GitHub/source minor line is supported for security fixes. For this policy, **v0.11.x is the current released pre-v1 source baseline**; older v0.x source-release lines are superseded. npm registry publication is a separate operation and remains deferred even while the GitHub/source release is supported. The supported v1 runtime floor is **Node.js 22+**. Node.js 20 is EOL and any temporary Node 20 CI execution is compatibility-only evidence, not a supported-runtime claim.
+The latest GitHub/source minor line is supported for security fixes. For this policy, **v0.12.x is the current released pre-v1 source baseline**; older v0.x source-release lines are superseded. npm registry publication is a separate operation and remains deferred even while the GitHub/source release is supported. The supported v1 runtime floor is **Node.js 22+**. Node.js 20 is EOL and any temporary Node 20 CI execution is compatibility-only evidence, not a supported-runtime claim.
+
+## Dependency and workflow supply-chain maintenance
+
+Dependabot update PRs cover npm/pnpm and GitHub Actions. Pull requests are checked for newly introduced high/critical vulnerable dependencies, and a scheduled repository audit checks the existing lockfile. Third-party GitHub Actions are pinned to immutable commit SHAs; update automation may propose newer pins, but review still requires the normal release-safety evidence.
+
+Critical/high advisories affecting the supported source line are triaged as security issues. Critical issues should trigger immediate containment/release assessment; high issues should be fixed before the next affected release or explicitly documented as not exploitable/applicable. These are maintainer response priorities, not a commercial SLA.
 
 ## Reporting a vulnerability
 
@@ -104,6 +110,10 @@ Operators must choose Redis HA/persistence appropriate to their risk tolerance. 
 The project should never require contributors to commit secrets. Examples, tests, logs, issue templates, and documentation must use placeholders or synthetic identifiers.
 
 Redis keys intentionally hash principal/operation/budget identifiers, but hashing is not encryption. Do not place secrets in identifiers, event metadata, or settlement outcome values.
+
+## Incident containment
+
+For a known-bad released version, use [the emergency containment/hotfix runbook](docs/incident-response.md). Do not clear or downgrade authoritative provider state as an improvised security workaround.
 
 ## Disclosure
 

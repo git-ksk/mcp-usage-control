@@ -41,6 +41,26 @@ const key = daily.key({ scope: 'tenant', id: 'acme', now: Date.now() });
 
 日付は指定したtimezone上で判定します。DSTや月末・年末などのcalendar boundaryは、実行環境のICUが提供するtimezone情報に従います。
 
+## reset / window metadataを同じ計算から取得する
+
+client UXでknown reset boundaryを表示したい場合は、timezone計算を別実装せず `window()` を使います。
+
+```ts
+const window = daily.window({
+  scope: 'tenant',
+  id: 'acme',
+  now: Date.now(),
+});
+
+window.key;      // このcalendar windowのexact accounting key
+window.startsAt; // inclusive epoch milliseconds
+window.endsAt;   // exclusive epoch milliseconds / next reset boundary
+```
+
+`key()` と `window()` は同じICU timezone/calendar identityを使うため、DST、月末、年末でもbudget keyと表示上のreset boundaryが食い違いません。`window()` はあくまでnon-authoritative metadataで、Storeが `endsAt` を監視したりcounterをin-place resetしたり、custom budget keyからresetを推測したりはしません。
+
+安全なscalar client projectionが必要なら、明示的に選んだauthoritative remainingと `window.endsAt` を `mcp-usage-control/operational` の `projectScopedQuotaWindow(limit, remaining, window.endsAt)` へ渡します。multi-budget / vectorの無関係なbalanceを1つのquotaへ合成しないでください。HTTP gateway側でknown `endsAt` がある場合だけ `Retry-After` 等へ変換でき、HTTP header自体はcoreの責務外です。
+
 ## Clockを差し替える
 
 同じcall siteで毎回 `now` を渡さず、testやdeterministicな処理で時刻を固定したい場合はtrusted clockを指定できます。

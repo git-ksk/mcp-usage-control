@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-29T12:20:45.784Z",
+  "provider": "memory",
+  "runId": "e838ffbc3eb4475f",
+  "environment": {
+    "node": "v22.23.2",
+    "platform": "linux-arm64",
+    "iterations": 10,
+    "concurrency": 4,
+    "ttlMs": 60000,
+    "target": "process-local reference store"
+  },
+  "warning": "Local/emulator measurements are environment-specific evidence, not universal SLOs.",
+  "scenarios": [
+    {
+      "name": "scalar.reserve.allow",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.033,
+        "p95": 0.703,
+        "p99": 0.703,
+        "min": 0.024,
+        "max": 0.703
+      }
+    },
+    {
+      "name": "scalar.reserve.deny",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.006,
+        "p95": 0.077,
+        "p99": 0.077,
+        "min": 0.004,
+        "max": 0.077
+      }
+    },
+    {
+      "name": "scalar.reserve.multi_budget",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.021,
+        "p95": 15.179,
+        "p99": 15.179,
+        "min": 0.014,
+        "max": 15.179
+      }
+    },
+    {
+      "name": "scalar.mark_liable",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.003,
+        "p95": 0.047,
+        "p99": 0.047,
+        "min": 0.002,
+        "max": 0.047
+      }
+    },
+    {
+      "name": "scalar.renew",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.003,
+        "p95": 0.041,
+        "p99": 0.041,
+        "min": 0.002,
+        "max": 0.041
+      }
+    },
+    {
+      "name": "scalar.settle",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.003,
+        "p95": 0.093,
+        "p99": 0.093,
+        "min": 0.003,
+        "max": 0.093
+      }
+    },
+    {
+      "name": "progressive.grow",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.019,
+        "p95": 0.281,
+        "p99": 0.281,
+        "min": 0.011,
+        "max": 0.281
+      }
+    },
+    {
+      "name": "vector.reserve",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.053,
+        "p95": 0.505,
+        "p99": 0.505,
+        "min": 0.021,
+        "max": 0.505
+      }
+    },
+    {
+      "name": "vector.grow",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.036,
+        "p95": 0.439,
+        "p99": 0.439,
+        "min": 0.016,
+        "max": 0.439
+      }
+    },
+    {
+      "name": "vector.settle",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.013,
+        "p95": 0.203,
+        "p99": 0.203,
+        "min": 0.009,
+        "max": 0.203
+      }
+    },
+    {
+      "name": "reconciliation.active_lookup",
+      "supported": true,
+      "samples": 10,
+      "ok": 10,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.006,
+        "p95": 0.082,
+        "p99": 0.082,
+        "min": 0.005,
+        "max": 0.082
+      }
+    },
+    {
+      "name": "contention.shared_hot_budget",
+      "supported": true,
+      "samples": 40,
+      "ok": 40,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 0.013,
+        "p95": 0.041,
+        "p99": 0.052,
+        "min": 0.004,
+        "max": 0.052
+      },
+      "accepted": 20,
+      "denied": 20,
+      "batchConcurrency": 4
+    },
+    {
+      "name": "recovery.bounded",
+      "supported": false,
+      "reason": "provider surface does not expose this benchmark operation"
+    }
+  ]
+}

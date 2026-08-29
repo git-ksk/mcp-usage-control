@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-This reference describes the public API in the current source tree. All five package manifests are aligned at `0.11.0`. **v0.11.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+This reference describes the public API in the current source tree. All five package manifests are aligned at `0.12.0`. **v0.12.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
 For behavioral/failure guarantees, read [Architecture](architecture.md) and [Store implementation contract](store-contract.md). For the stable/deferred v1 boundary, read [v1.0 readiness review](v1-readiness.md).
 
@@ -122,7 +122,7 @@ For a complete Free/Plus monthly-credit composition using this helper, see [Subs
 
 ### `createWindowedBudgetKey()`
 
-For common calendar-day/month budget identities, use `createWindowedBudgetKey({ period, timeZone, namespace, clock? })`. `key({ scope, id, now? })` derives a deterministic encoded key. The configured timezone literal is part of accounting identity; changing timezone/namespace/period/scope format intentionally selects a different key rather than silently changing rollover semantics on existing state. See [Accounting-window budget keys](accounting-window-keys.md).
+For common calendar-day/month budget identities, use `createWindowedBudgetKey({ period, timeZone, namespace, clock? })`. `key({ scope, id, now? })` derives a deterministic encoded key. `window({ scope, id, now? })` derives that same key together with the inclusive `startsAt` and exclusive `endsAt` boundary from the same timezone/calendar calculation. `endsAt` may be surfaced as a known next-reset instant, but it is non-authoritative UX metadata and is never inferred for arbitrary application-defined keys. The configured timezone literal is part of accounting identity; changing timezone/namespace/period/scope format intentionally selects a different key rather than silently changing rollover semantics on existing state. See [Accounting-window budget keys](accounting-window-keys.md).
 
 ### `UsageStore`
 
