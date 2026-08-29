@@ -1,5 +1,7 @@
 # Roadmap
 
+[English](roadmap.md) | [日本語](roadmap.ja.md)
+
 このRoadmapは、projectのcore categoryである **MCP execution boundaryのfailure-safe transactional usage enforcement** を守るためのものです。
 
 ```text
@@ -10,21 +12,19 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v0.9.0がlatest GitHub/source release baselineです。** 2026-08-22に、repository-wide safety hardening #116〜#127とFirestore release blocker #143をcloseしたtested commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2` からreleaseしました。
+**v0.10.0がcurrent GitHub/source release baselineです。** 既存accounting modelを維持したまま、bounded operational usabilityとdogfood diagnosticsを追加します。
 
-publish可能な5 package manifestはすべて `0.9.0` に揃っています。**npmにはまだ公開していません。** first registry publicationは#6で追跡する別途explicit authorization必須の操作です。
+publish可能な5 package manifestはすべて `0.10.0` に揃っています。**npmにはまだ公開していません。** first registry publicationは#6で追跡する別途explicit authorization必須の操作です。
 
-現在のactive product targetは **v0.10.0 / #76 + #99 + #82 operational usability / dogfood diagnostics**、続いて **v0.11.0 / #152 + #105 + #106 + #24 + #6 accounting contract / production / distribution / API freeze**、最後に新featureを追加しない **v1.0.0 stable promotion** です。
-
-実行順序:
+active product targetは **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6**、最後に新featureを追加しない **v1.0.0 stable promotion** です。
 
 ```text
-v0.6 progressive growth
- -> v0.7 atomic heterogeneous vector
- -> v0.8 scalar operation reconciliation
+v0.6 progressive growth [RELEASED]
+ -> v0.7 atomic heterogeneous vector [RELEASED]
+ -> v0.8 scalar operation reconciliation [RELEASED]
  -> v0.9 repository-wide safety hardening [RELEASED]
- -> v0.10 operational usability [ACTIVE]
- -> v0.11 accounting/completion/distribution/API freeze
+ -> v0.10 operational usability [RELEASED]
+ -> v0.11 accounting/completion/distribution/API freeze [ACTIVE]
  -> v1.0 stable promotion
 ```
 
@@ -49,47 +49,37 @@ v0.6 progressive growth
 | **v0.6.0** | `UsageLease.grow()` / `ProgressiveUsageStore` によるoptional progressive reservation growth | Release済み / Adopted |
 | **v0.7.0** | `VectorUsageControl` / `VectorUsageStore` によるoptional atomic heterogeneous vector usage | Release済み / Adopted |
 | **v0.8.0** | `OperationReconciliationStore` によるoptional read-only scalar operation reconciliation | Release済み / Adopted |
-| **v0.9.0** | repository-wide safety hardening #116〜#127 + Firestore race blocker #143 | **Release済み / Complete** |
+| **v0.9.0** | repository-wide safety hardening #116〜#127 + Firestore race blocker #143 | Release済み / Complete |
+| **v0.10.0** | operational snapshot/runtime identity、canonical settlement diagnostics、scoped threshold/exhaustion helper | **Release済み / Adopted** |
 
-### v0.9.0 release evidence
+### v0.9 safety evidenceのcarry forward
 
-v0.9ではpublic accounting modelを変更せず、capability同士の交差部をhardeningしました。retained-budget growth integrity、安全なexpiry/timer arithmetic、mutation前validation、MCP unresolved growth保持、Firestore expired-liable reconciliation、Cloudflare remote/maintenance validation、malformed policy fail-close、vector maintenance quota integrity、Redis recovery overflow、pre-auth reconciliation handling、strict boolean authorization、cross-capability regression matrixを含みます。
+v0.9ではpublic accounting modelを変更せず、capability同士の交差部をhardeningしました。repository-audit safety set #116〜#127とFirestore blocker #143を、`vector-growth-vs-settle-race` のinvariantを弱めずcloseしています。
 
-#143は `vector-growth-vs-settle-race` のinvariantを弱めず解消しました。Firestore outer retryは definitive transaction abortである `ABORTED` / gRPC 10 と HTTP 409だけをbounded jittered backoffでretryします。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはouter retry allow-listへ追加していません。
+Firestore outer retryは definitive transaction abortである `ABORTED` / gRPC 10 と HTTP 409だけをbounded jittered backoffでretryします。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはretry allow-listへ追加していません。
 
-release validationはNode 20/22/24 package / clean-consumer CI、Redis、Cloudflare local workerd、Firestore Emulatorを通過しました。`v0.9.0` GitHub/source releaseはsuccessです。npm publicationは完了しておらず、#6でdeferredを維持します。
+## v0.10.0 — operational usability [complete]
 
-## Active target: v0.10.0 — operational usability
+Issue **#76 -> #99 -> #82** は完了です。
 
-主対象は **#76、#99、#82**。新しいdependency evidenceが出ない限り、この順序で進めます。
+v0.10ではcoreに3つの明示public subpathを追加します。
 
-1. **#76 operational usage snapshot** でbounded read-only vocabularyとruntime identity surfaceを確定
-2. **#99 settlement outcome normalization / diagnostics** でinvalid integration inputとbackend unavailabilityを区別
-3. **#82 threshold / exhaustion signals** を、確定したscoped remaining / exhaustion semanticsへcomposition
+- `mcp-usage-control/operational` — process-local bounded lifecycle counter、static runtime identity、明示scopeしたquota projection
+- `mcp-usage-control/settlement-outcomes` — canonical settlement vocabulary、bounded alias normalization、区別可能な `invalid_settlement_outcome` diagnostic
+- `mcp-usage-control/thresholds` — 明示scope済みquota snapshotに対するpure threshold evaluation / crossing helper
 
-second accounting truthを作らず、applicationが次を区別できるbounded operational visibilityを目標にします。
+second accounting truthを作らないため、次を明示します。
 
-- retained bookkeeping state
-- lifecycle telemetry
-- authoritative scoped quota state
-- threshold / exhaustion signal
-- canonical settlement-outcome vocabularyとintegration drift
-- service failureとinvalid integration inputを区別するprivacy-safe diagnostics
+- operational counterはbest-effort / process-localで、quota enforcementには使わない
+- replayable / aggregate lifecycle eventからactive reservation数を推測しない
+- authoritative `remaining` はapplicationが正しいbudget/windowを選択した後だけprojectする
+- threshold window/reset stateとnotification deliveryはapplication-owned
+- invalid outcome diagnosticはsettlement validationを弱めず、rejectしたraw valueを露出しない
+- observer / diagnostic sink failureはadmission、liability、renewal、settlementを変更できない
 
-要件:
+release packagingでは3つの新subpathをnpm tarball内容とclean-consumer importで検証します。英日guideは [Operational usability](operational-usability.ja.md) を参照してください。
 
-- helper / signalはoptionalかつnon-authoritative
-- budget windowを暗黙に推測しない
-- PII / high-cardinality identifierをdefault metric labelへ昇格しない
-- helper / observer failureがadmission / settlementを変更しない
-- vector dimensionの意味を混ぜない
-- consumer mapping bugはv0.10を待たず即fix可
-
-既存の `UsageObserver` / `projectUsageEvent()` は重要なevidenceですが、それだけで #76 / #82 / #99 はcloseしません。v0.10では、各Issueが要求する明示的operational snapshot、bounded diagnostics / normalization、threshold / exhaustion contractを完成させます。
-
-完了済み隣接work #108 / #109 / #110はnon-blockingです。MCPUsageがentitlement truth、pricing catalog、billing ledger、subscription lifecycleを所有する方向には広げません。
-
-## v0.11.0 — accounting contract / completion / distribution / compatibility freeze
+## Active target: v0.11.0 — accounting contract / completion / distribution / compatibility freeze
 
 v0.11はfeature expansionではなくfinal pre-v1 completion lineです。
 
@@ -103,14 +93,13 @@ v0.11はfeature expansionではなくfinal pre-v1 completion lineです。
 
 次をresolveまたは明示scopeします。
 
-- **#152 cost-bearing operation lifecycle:** entitlement / pricing / provider policyはapplication-ownedのまま、reservation、shared accounting scope、idempotency、liability、settlement、refund/no-effect mappingをv1前に明文化
-- **#24 Cloudflare real-operation boundary:** credential rotationと自然に得られるplatform-limit / overload evidence。proof目的でFree-plan exhaustionを人工的に作らない
-- **#6 first npm publication:** separate explicit authorizationがある場合のみ実施し、name/ownership、Trusted Publishingまたはbootstrap credential、registry metadata、provenance、package contents、clean registry installを確認
-- **#105 Node support floor:** v1のNode.js support floorを決め、`engines` / CI / docs / consumer evidenceを同期
-- **#106 persisted-state compatibility:** Redis / Firestore / Cloudflareのupgrade、migration、rollback、newer-schema fail-close contractを明文化
-- **public API/name freeze:** 5 package名、exports/subpath、error/state terminology、lifecycle semantics、compatibility claimのfinal review
-- **MCP Tasks / MRTR scope:** stable upstreamと同等safety proofがあるsurfaceだけadopt。なければv1から明示defer
-- **full release evidence:** integration、package、source release、およびexplicit authorization後のregistry dogfood
+- entitlement / pricing / subscription state / provider policyはapplication-ownedのまま維持
+- cost-bearing workのshared accounting scope、operation identity、liability、settlement、no-effect/refund mappingを明文化
+- Node support、persisted-state upgrade/migration/rollback、newer-schema fail-close guaranteeをfreeze
+- 5 package名、exports/subpath、error/status vocabulary、lifecycle semanticsをfinal public-contract review
+- MCP Tasks / MRTRはstable upstreamと同等safety proofがあるsurfaceだけadoptし、それ以外は明示defer
+- production/package/source-release evidenceをgreenにする
+- npm publicationは別途authorizationがある場合だけ実施し、registry/provenance/clean-installまで確認
 
 v0.11 close時点でv1 blocker分類の未解決Issueを残しません。
 
@@ -139,10 +128,10 @@ v1.0前に:
 | #81 operation reconciliation/status | v0.8 | Adopted / released |
 | #116〜#127 repository safety hardening | v0.9 | Completed / released |
 | #143 Firestore vector growth-vs-settle race | v0.9 | Completed release blocker |
-| #76 operational usage snapshot | v0.10 | Active / first |
-| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Active / second |
-| #82 threshold/exhaustion signals | v0.10 | Active / third |
-| #152 cost-bearing operation reservation lifecycle | v0.11 | Accounting-contract freeze |
+| #76 operational usage snapshot | v0.10 | Completed / released |
+| #99 settlement outcome normalization / dogfood diagnostics | v0.10 | Completed / released |
+| #82 threshold/exhaustion signals | v0.10 | Completed / released |
+| #152 cost-bearing operation reservation lifecycle | v0.11 | **Active / accounting-contract freeze** |
 | #105 Node.js support floor | v0.11 | Runtime support freeze |
 | #106 persisted-store compatibility | v0.11 | Storage compatibility freeze |
 | #24 Cloudflare real operational evidence | v0.11 | Final production evidence |
@@ -153,7 +142,6 @@ v1.0前に:
 - release mechanicsを楽にするためruntime/accounting semanticsを黙って変更しない
 - GitHub/source releaseとnpm publicationはindependent authorization
 - GitHub/source release成功はregistry publicationを意味しない
-- npm publicationを明示deferしている場合、failed/cancelled npm workflowによってsource release自体を未完扱いにしない
 - provider claimは実測/test evidenceを超えて強くしない
 
 [Release policy](releasing.ja.md)、[v1.0 readiness review](v1-readiness.ja.md)、各provider docsをproduction deployment前に確認してください。
