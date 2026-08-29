@@ -32,36 +32,42 @@ pnpm --dir packages/mcp pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/redis pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/cloudflare pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/firestore pack --pack-destination "$PWD/.packs"
+version="$(node -p "require('./packages/core/package.json').version")"
+printf 'packed version: %s\n' "$version"
 ```
 
-次のtarballが生成されます。
+現在checkoutしているversionの5 tarballが生成されます。例:
 
 ```text
-.packs/mcp-usage-control-0.3.0.tgz
-.packs/mcp-usage-control-mcp-0.3.0.tgz
-.packs/mcp-usage-control-redis-0.3.0.tgz
-.packs/mcp-usage-control-cloudflare-0.3.0.tgz
-.packs/mcp-usage-control-firestore-0.3.0.tgz
+.packs/mcp-usage-control-${version}.tgz
+.packs/mcp-usage-control-mcp-${version}.tgz
+.packs/mcp-usage-control-redis-${version}.tgz
+.packs/mcp-usage-control-cloudflare-${version}.tgz
+.packs/mcp-usage-control-firestore-${version}.tgz
 ```
 
 現時点では、このtarballが将来のnpm packageに最も近い利用形態です。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証します。
 
 ## 3. 別projectへinstall
 
-consumer projectからabsolute pathまたは正しく解決できるpathを指定します。adapter packageが未公開npmのcore packageを取りに行かないよう、必要なlocal tarballは同じinstall commandで指定するのが安全です。
+consumer projectからabsolute pathまたは正しく解決できるpathを指定します。先にcheckout versionを解決し、adapter packageが未公開npmのcore packageを取りに行かないよう、必要なlocal tarballは同じinstall commandで指定するのが安全です。
+
+```console
+version="$(node -p "require('/absolute/path/to/mcp-usage-control/packages/core/package.json').version")"
+```
 
 Coreのみ:
 
 ```console
-npm install /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz
+npm install "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-${version}.tgz"
 ```
 
 Core + MCP adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.3.0.tgz \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-${version}.tgz" \
   @modelcontextprotocol/server@2.0.0
 ```
 
@@ -69,8 +75,8 @@ Core + Redis adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.3.0.tgz \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-${version}.tgz" \
   redis@6.2.0
 ```
 
@@ -78,16 +84,16 @@ Core + Cloudflare adapter:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.3.0.tgz
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-${version}.tgz"
 ```
 
 Core + Firestore adapter（実利用ではserver-side Firestore clientを1つ選択）:
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.3.0.tgz \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-${version}.tgz" \
   firebase-admin
 ```
 
@@ -97,11 +103,11 @@ npm install \
 
 ```console
 npm install \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-0.3.0.tgz \
-  /absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-0.3.0.tgz \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-${version}.tgz" \
+  "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-${version}.tgz" \
   @modelcontextprotocol/server@2.0.0 \
   redis@6.2.0
 ```
@@ -111,13 +117,42 @@ npm install \
 ```console
 node --input-type=module <<'NODE'
 import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
+import {
+  UsageOperationalMonitor,
+  createUsageRuntimeIdentity,
+  projectScopedQuota,
+} from 'mcp-usage-control/operational';
+import {
+  InvalidSettlementOutcomeError,
+  normalizeSettlementOutcome,
+} from 'mcp-usage-control/settlement-outcomes';
+import {
+  didUsageQuotaThresholdCross,
+  evaluateUsageQuotaThreshold,
+} from 'mcp-usage-control/thresholds';
 import { protectTool } from 'mcp-usage-control-mcp';
 import { RedisUsageStore } from 'mcp-usage-control-redis';
 import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
 import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
 import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
 
-if (![MemoryUsageStore, UsageControl, protectTool, RedisUsageStore, RedisMcpUsageFlowStore, CloudflareUsageStore, RemoteCloudflareUsageStore, FirestoreUsageStore].every(Boolean)) {
+if (![
+  MemoryUsageStore,
+  UsageControl,
+  UsageOperationalMonitor,
+  createUsageRuntimeIdentity,
+  projectScopedQuota,
+  InvalidSettlementOutcomeError,
+  normalizeSettlementOutcome,
+  didUsageQuotaThresholdCross,
+  evaluateUsageQuotaThreshold,
+  protectTool,
+  RedisUsageStore,
+  RedisMcpUsageFlowStore,
+  CloudflareUsageStore,
+  RemoteCloudflareUsageStore,
+  FirestoreUsageStore,
+].every(Boolean)) {
   throw new Error('mcp-usage-control local package import failed');
 }
 
