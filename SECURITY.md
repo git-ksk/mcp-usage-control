@@ -4,7 +4,7 @@
 
 ## Supported versions
 
-The latest GitHub/source minor line is supported for security fixes. For this policy, **v0.11.x is the current released pre-v1 source baseline**; older v0.x source-release lines are superseded. npm registry publication is a separate operation and remains deferred even while the GitHub/source release is supported. The supported v1 runtime floor is **Node.js 22+**. Node.js 20 is EOL and any temporary Node 20 CI execution is compatibility-only evidence, not a supported-runtime claim.
+The latest GitHub/source minor line is supported for security fixes. For this policy, **v0.12.x is the current released pre-v1 source baseline**; older v0.x source-release lines are superseded. npm registry publication is a separate operation and remains deferred even while the GitHub/source release is supported. The supported v1 runtime floor is **Node.js 22+**. Node.js 20 is EOL and any temporary Node 20 CI execution is compatibility-only evidence, not a supported-runtime claim.
 
 ## Dependency and workflow supply-chain maintenance
 

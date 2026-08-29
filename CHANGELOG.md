@@ -8,6 +8,31 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.12.0] - 2026-08-29
+
+Twelfth GitHub/source release focused on product and operational hardening around the frozen v1 accounting surface. npm publication remains separately authorized under #6 and was not performed.
+
+### Release and supply-chain hardening
+
+- Bound GitHub/source releases to a protected-main commit with successful exact-SHA aggregate `test (22)` evidence, preventing an arbitrary tag from bypassing the normal release path (#177).
+- Publish the exact five package tarballs validated by the release workflow as GitHub Release assets, with `SHA256SUMS` and GitHub build-provenance attestations; reruns verify existing assets byte-for-byte rather than replacing them (#178).
+- Added Dependabot coverage for pnpm/npm and GitHub Actions, PR dependency review, weekly high/critical dependency audit, and immutable SHA pins for third-party workflow actions (#179).
+- Added a known-bad release / emergency hotfix runbook with provider-aware rollback, roll-forward, snapshot-restore, GitHub release, and future npm containment guidance (#180).
+
+### Product / operator usability
+
+- Removed stale pre-v0.11 planning language from current operator/provider documentation while preserving historical release notes (#181).
+- Added a maintained English/Japanese competitor capability matrix covering Upstash, Kong, OpenMeter, Unkey, and Envoy with explicit Covered / Adopt / Helper / Out-of-scope decisions (#182).
+- Added timezone-aware calendar-window metadata from the same accounting-key calculation plus a non-authoritative scoped quota/reset projection. DST 23/25-hour days, month/year boundaries, and explicit-clock behavior are tested; opaque custom keys still never invent reset semantics (#183).
+- Added a reproducible provider benchmark/cost-profile harness for Memory, Redis, Firestore Emulator, and Cloudflare workerd with p50/p95/p99, contention, vector/growth/reconciliation workloads, safe remote opt-in, and versioned Node.js 22 local baselines (#184).
+
+### Validation / release boundary
+
+- Reduced the always-on Firestore progressive-growth ambiguity stress from 24 to 12 iterations while retaining exact-replay evidence for observed emulator `INVALID_ARGUMENT` ambiguity; higher iteration counts remain suitable for manual release stress.
+- Full workspace checks pass with 154 core, 86 Cloudflare, 28 Firestore, 27 MCP, and 47 Redis tests; fresh workerd conformance/integration and Firestore Emulator conformance paths are green.
+- All five public package manifests are aligned at `0.12.0` and retain `engines.node >=22`.
+- npm publication is not part of this release. First registry publication remains independently gated by #6.
+
 ## [0.11.0] - 2026-08-29
 
 Eleventh GitHub/source release and final pre-v1 completion freeze. npm publication remains a separate explicitly authorized operation and was not performed.

@@ -16,7 +16,7 @@ The project focuses on the boundary between execution and usage accounting. It i
 
 **The packages are not published to npm yet.**
 
-`v0.11.0` is the current GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
+`v0.12.0` is the current GitHub/source release baseline. Use a repository checkout or locally packed tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,13 +66,13 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
-All five package manifests are aligned at `0.11.0`. **v0.11.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `0.12.0`. **v0.12.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** the v0.11 accounting/reliability/runtime/storage/API/release-safety freeze and real Cloudflare credential-rotation evidence are complete. The next source milestone is **v1.0.0 as a feature-free stable promotion**. Issue #6 remains a separate npm-publication gate that requires explicit authorization.
+**Current execution order:** the v0.12 product/operations hardening tranche is complete on top of the frozen v0.11 accounting surface. The next source milestone is **v1.0.0 as a feature-free stable promotion**. Issue #6 remains a separate npm-publication gate that requires explicit authorization.
 
 ## Frozen v1 candidate scope
 
-The v1 public accounting/runtime/storage/API surface is frozen through v0.11. v0.6 progressive growth, v0.7 atomic heterogeneous vectors, v0.8 read-only scalar operation reconciliation, and v0.10 operational usability remain in the frozen candidate surface without changing the base accounting invariants. v1.0 is intended as a feature-free stable promotion rather than another compatibility-decision release.
+The v1 accounting lifecycle/storage contract was frozen in v0.11; v0.12 adds only bounded product/operations hardening and additive non-authoritative UX helpers. v0.6 progressive growth, v0.7 atomic heterogeneous vectors, v0.8 read-only scalar operation reconciliation, and v0.10 operational usability remain in the frozen candidate surface without changing the base accounting invariants. v1.0 is intended as a feature-free stable promotion rather than another compatibility-decision release.
 
 | Area | Current status | Boundary |
 | --- | --- | --- |
@@ -330,7 +330,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.11.0` is the current released source baseline. The package manifests are `0.11.0`. The v0.11 accounting/completion/API/release-safety and real Cloudflare production-evidence tranche is complete; the next source milestone is feature-free v1.0 promotion. Issue #6 remains a separate explicitly authorized npm-publication gate.
+`v0.12.0` is the current released source baseline. The package manifests are `0.12.0`. The v0.12 product/operations hardening tranche is complete; the next source milestone is feature-free v1.0 promotion. Issue #6 remains a separate explicitly authorized npm-publication gate.
 
 **npm publication remains a separate explicitly authorized operation and has not been completed.**
 

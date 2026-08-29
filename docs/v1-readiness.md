@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v0.11.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.11.0` and require Node.js 22 or later.
+**v0.12.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.12.0` and require Node.js 22 or later.
 
 The packages remain **unpublished to npm**. First registry publication is separately tracked by #6 and requires explicit authorization independent from source releases.
 
@@ -125,13 +125,13 @@ A genuine Workers Free-plan exhaustion/platform-overload event did not occur nat
 
 ## v1 promotion status
 
-v0.11 established the accounting/runtime/storage/API freeze. The post-release product audit adds a bounded v0.12 hardening checkpoint for #177-#184: exact-SHA release provenance, validated release artifacts, supply-chain maintenance, incident response, current operator docs, competitive adopt/defer decisions, additive non-authoritative quota-window UX projection, and reproducible provider performance/cost evidence. None may redefine the frozen accounting lifecycle or persisted Store contract.
+v0.11 established the accounting/runtime/storage/API freeze, and v0.12 completes the bounded #177-#184 hardening checkpoint: exact-SHA release provenance, validated release artifacts, supply-chain maintenance, incident response, current operator docs, competitive adopt/defer decisions, additive non-authoritative quota-window UX projection, and reproducible provider performance/cost evidence. The frozen accounting lifecycle and persisted Store contract remain unchanged.
 
-Once v0.12 is tagged with the full release-safety evidence green and these blockers are closed, v1.0 remains a feature-free stable promotion over that hardened surface.
+v1.0 remains a feature-free stable promotion over that hardened surface.
 
 ## npm distribution boundary
 
-The source-release baseline is `v0.11.0`. npm publication is a separate operation and has not occurred.
+The source-release baseline is `v0.12.0`. npm publication is a separate operation and has not occurred.
 
 Issue #6 remains open until first publication is actually desired, **separately explicitly authorized**, completed, and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
 

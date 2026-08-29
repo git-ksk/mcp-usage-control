@@ -16,7 +16,7 @@
 
 **まだnpmへ公開していません。**
 
-`v0.11.0` がcurrent GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
+`v0.12.0` がcurrent GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,13 +66,13 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは `0.11.0` で揃っています。**v0.11.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+5 packageのmanifestは `0.12.0` で揃っています。**v0.12.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** v0.11のaccounting / reliability / runtime / storage / API / release-safety freezeとreal Cloudflare credential-rotation evidenceは完了しました。次のsource milestoneは **feature追加なしのv1.0.0 stable promotion** です。#6はseparate npm-publication gateのままで、explicit authorizationが必要です。
+**現在の実行順序:** freeze済みv0.11 accounting surfaceの上に置くv0.12 product/operations hardening trancheは完了しました。次のsource milestoneは **feature追加なしのv1.0.0 stable promotion** です。#6はseparate npm-publication gateのままで、explicit authorizationが必要です。
 
 ## Freeze済みv1 candidate scope
 
-**v1 public accounting / runtime / storage / API surfaceはv0.11まででfreeze済みです。** v0.6 progressive growth、v0.7 atomic heterogeneous vector、v0.8 read-only scalar operation reconciliation、v0.10 operational usabilityを、base accounting invariantを変えずfrozen candidate surfaceとして維持します。v1.0は新たなcompatibility decisionを行うreleaseではなく、feature-free stable promotionを想定します。
+**v1 accounting lifecycle / storage contractはv0.11でfreeze済みで、v0.12はboundedなproduct/operations hardeningとadditive non-authoritative UX helperだけを追加します。** v0.6 progressive growth、v0.7 atomic heterogeneous vector、v0.8 read-only scalar operation reconciliation、v0.10 operational usabilityを、base accounting invariantを変えずfrozen candidate surfaceとして維持します。v1.0は新たなcompatibility decisionを行うreleaseではなく、feature-free stable promotionを想定します。
 
 | 領域 | current status | 境界 |
 | --- | --- | --- |
@@ -314,7 +314,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.11.0` がcurrent released source baselineです。package manifestは `0.11.0` です。v0.11のaccounting / completion / API / release-safetyとreal Cloudflare production-evidence trancheは完了し、次のsource milestoneはfeature-free v1.0 promotionです。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
+`v0.12.0` がcurrent released source baselineです。package manifestは `0.12.0` です。v0.12 product/operations hardening trancheは完了し、次のsource milestoneはfeature-free v1.0 promotionです。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
 
 **npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 

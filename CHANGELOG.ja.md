@@ -8,6 +8,31 @@
 
 現在entryはありません。
 
+## [0.12.0] - 2026-08-29
+
+12回目のGitHub/source releaseです。freeze済みv1 accounting surfaceの周囲をproduct / operations面でhardeningしました。npm publicationは#6のseparate authorization対象のままで、今回は実行しません。
+
+### Release / supply-chain hardening
+
+- GitHub/source releaseをprotected `main` 配下かつexact SHAのaggregate `test (22)` success evidenceがあるcommitへbindし、任意tagからnormal release pathをbypassできないようにしました (#177)。
+- release workflowでvalidationした5 package tarballそのものをGitHub Release assetとして公開し、`SHA256SUMS` とGitHub build-provenance attestationを付与。rerun時はexisting assetをbyte-for-byte verifyし、黙って置換しません (#178)。
+- pnpm/npmとGitHub ActionsのDependabot、PR dependency review、weekly high/critical dependency audit、third-party workflow actionのimmutable SHA pinを追加しました (#179)。
+- known-bad release / emergency hotfix runbookを追加し、provider stateを考慮したrollback / roll-forward / snapshot restore、GitHub release、将来npmのcontainment判断を明文化しました (#180)。
+
+### Product / operator usability
+
+- current operator/provider docsに残っていたpre-v0.11 planning languageを整理し、historical release noteは維持しました (#181)。
+- Upstash / Kong / OpenMeter / Unkey / Envoyを対象に、Covered / Adopt / Helper / Out-of-scopeを明示する英日competitor capability matrixを追加しました (#182)。
+- accounting keyと同じtimezone/calendar計算からwindow metadataを導出し、non-authoritativeなscoped quota/reset projectionを追加。DSTの23/25時間日、月/年境界、explicit clockをtestし、opaque custom keyからresetを推測しません (#183)。
+- Memory / Redis / Firestore Emulator / Cloudflare workerd共通のprovider benchmark / cost-profile harnessを追加。p50/p95/p99、contention、vector / growth / reconciliation、safe remote opt-in、versioned Node.js 22 local baselineを記録できます (#184)。
+
+### Validation / release boundary
+
+- always-on Firestore progressive-growth ambiguity stressを24回から12回へ調整し、観測したEmulator `INVALID_ARGUMENT` ambiguityのexact replay proofは維持しました。より多い反復はmanual release stressで実行できます。
+- full workspace checkはcore 154、Cloudflare 86、Firestore 28、MCP 27、Redis 47 testがgreen。fresh workerd conformance / integrationとFirestore Emulator conformance pathもgreenです。
+- 5 public package manifestを `0.12.0` に揃え、`engines.node >=22` を維持します。
+- npm publicationはこのreleaseに含めません。first registry publicationは#6のindependent gateのままです。
+
 ## [0.11.0] - 2026-08-29
 
 11回目のGitHub/source releaseで、v1前のfinal completion freezeです。npm publicationはseparate explicit authorizationが必要な別操作のままで、今回は実行しません。

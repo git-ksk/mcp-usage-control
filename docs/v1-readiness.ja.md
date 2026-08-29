@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v0.11.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.11.0` に揃い、Node.js 22以上をrequireします。
+**v0.12.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.12.0` に揃い、Node.js 22以上をrequireします。
 
 packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
 
@@ -125,13 +125,13 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 ## v1 promotion status
 
-v0.11でaccounting / runtime / storage / API freezeを確立しました。release後のproduct auditにより、#177〜#184を閉じるboundedなv0.12 hardening checkpointを追加します。対象はexact-SHA release provenance、validated release artifact、supply-chain maintenance、incident response、current operator docs、competitive adopt/defer decision、additive non-authoritative quota-window UX projection、reproducible provider performance/cost evidenceです。frozen accounting lifecycle / persisted Store contractは再定義しません。
+v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177〜#184のbounded hardening checkpointを完了しました。exact-SHA release provenance、validated release artifact、supply-chain maintenance、incident response、current operator docs、competitive adopt/defer decision、additive non-authoritative quota-window UX projection、reproducible provider performance/cost evidenceを追加しても、frozen accounting lifecycle / persisted Store contractは再定義していません。
 
-v0.12をfull release-safety evidence greenでtagしblockerをcloseした後、v1.0はそのhardened surfaceに対するfeature-free stable promotionのままです。
+v1.0はそのhardened surfaceに対するfeature-free stable promotionのままです。
 
 ## npm distribution boundary
 
-source-release baselineは `v0.11.0` です。npm publicationは別操作で、まだ実行していません。
+source-release baselineは `v0.12.0` です。npm publicationは別操作で、まだ実行していません。
 
 #6はfirst publicationを実際に希望し、**separate explicit authorization** を行い、package ownership / availability、provenance、registry metadata、package content、clean-consumer installをverifyするまでopenのままです。
 

@@ -2,7 +2,7 @@ import type { UsageEvent, UsageObserverHandler } from './observability.js';
 import type { SettlementOutcomeDiagnosticSink } from './settlement-outcomes.js';
 
 export const MCP_USAGE_CONTROL_PACKAGE_NAME = 'mcp-usage-control';
-export const MCP_USAGE_CONTROL_VERSION = '0.11.0';
+export const MCP_USAGE_CONTROL_VERSION = '0.12.0';
 
 export type UsageRuntimeProvider = 'memory' | 'redis' | 'firestore' | 'cloudflare' | 'custom';
 export type UsageRuntimeCapability =
