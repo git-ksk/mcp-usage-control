@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   UsageStateError,
+  assertUsageIdentifier,
+  validateUsageBudgetEnvelope,
+  validateUsageRequestEnvelope,
+  validateUsageVectorEnvelope,
+  validateUsageVectorGrowthEnvelope,
   type Budget,
   type BudgetRemaining,
   type GrowReservationInput,
@@ -28,6 +33,9 @@ import {
   type VectorSettleInput,
   type VectorSettlementResult,
   type VectorUsageStore,
+  type VectorOperationReconciliationStore,
+  type VectorUsageOperationReconciliation,
+  type VectorUsageOperationReconciliationInput,
   type StoreVectorGrowResult,
   type StoreVectorReserveResult,
 } from 'mcp-usage-control';
@@ -232,6 +240,18 @@ const HASH_PATTERN = /^[a-f0-9]{64}$/;
 const EXPIRED_LIABLE_OUTCOME = 'lease_expired_after_execution_started';
 const EXPIRED_LIABLE_OUTCOME_HASH = digest(EXPIRED_LIABLE_OUTCOME);
 const FIRESTORE_ABORTED_STATUS = 10;
+export interface FirestoreHistoricalBudgetRetirementInput {
+  budgetKeys: readonly string[];
+  /** Fail closed rather than inspect an unexpectedly large retained reservation set. */
+  maxReservationsToInspect?: number;
+}
+
+export interface FirestoreHistoricalBudgetRetirementResult {
+  requested: number;
+  retired: number;
+  missing: number;
+}
+
 const FIRESTORE_ABORTED_HTTP_STATUS = 409;
 const FIRESTORE_ABORTED_OUTER_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const;
 
@@ -243,7 +263,7 @@ const FIRESTORE_ABORTED_OUTER_RETRY_DELAYS_MS = [1_000, 2_000, 4_000] as const;
  * are SHA-256 hashed before becoming document IDs; hashing reduces accidental identifier
  * exposure but is not encryption.
  */
-export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageStore, OperationReconciliationStore {
+export class FirestoreUsageStore implements ProgressiveUsageStore, VectorOperationReconciliationStore, OperationReconciliationStore {
   private readonly prefix: string;
   private readonly idempotencyTtlMs: number;
   private readonly cleanupBatchSize: number;
@@ -272,6 +292,51 @@ export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageSt
     assertNonNegativeInteger(this.cleanupBatchSize, 'cleanupBatchSize');
     assertNonNegativeInteger(this.cleanupIntervalMs, 'cleanupIntervalMs');
     assertNonNegativeInteger(this.expiryGraceMs, 'expiryGraceMs');
+  }
+
+  async retireHistoricalBudgets(
+    input: FirestoreHistoricalBudgetRetirementInput,
+  ): Promise<FirestoreHistoricalBudgetRetirementResult> {
+    if (!Array.isArray(input.budgetKeys) || input.budgetKeys.length === 0) {
+      throw new RangeError('budgetKeys must contain at least one exact historical key');
+    }
+    if (input.budgetKeys.length > 64) throw new RangeError('budgetKeys exceed the 64-key maintenance batch limit');
+    const unique = [...new Set(input.budgetKeys)];
+    if (unique.length !== input.budgetKeys.length) throw new RangeError('budgetKeys must not contain duplicates');
+    for (const key of unique) assertUsageIdentifier(key, 'budgetKey');
+    const maxReservationsToInspect = input.maxReservationsToInspect ?? 500;
+    assertPositiveInteger(maxReservationsToInspect, 'maxReservationsToInspect');
+    const candidateIds = new Set(unique.map(digest));
+    const budgetRefs = unique.map(key => this.budgets().doc(digest(key)));
+    return this.runTransaction(async transaction => {
+      const query = this.reservations().limit(maxReservationsToInspect + 1);
+      const queryTransaction = transaction as FirestoreTransactionLike & {
+        get(query: FirestoreQueryLike): Promise<FirestoreQuerySnapshotLike>;
+      };
+      const snapshot = await queryTransaction.get(query);
+      if (snapshot.docs.length > maxReservationsToInspect) {
+        throw new UsageStateError('Historical budget retirement inspection bound was exceeded');
+      }
+      for (const doc of snapshot.docs) {
+        const reservation = readReservation(doc);
+        if (!reservation || (reservation.state !== 'pending' && reservation.state !== 'liable')) continue;
+        if (reservationBudgetIds(reservation).some(id => candidateIds.has(id))) {
+          throw new UsageStateError('Historical budget retirement blocked by an active reservation reference');
+        }
+      }
+      const budgetSnapshots = await transaction.getAll(...budgetRefs);
+      let retired = 0;
+      let missing = 0;
+      budgetSnapshots.forEach((snapshot, index) => {
+        if (snapshot.exists) {
+          transaction.delete(budgetRefs[index]!);
+          retired += 1;
+        } else {
+          missing += 1;
+        }
+      });
+      return { requested: unique.length, retired, missing };
+    });
   }
 
   async reconcileOperation(
@@ -357,6 +422,78 @@ export class FirestoreUsageStore implements ProgressiveUsageStore, VectorUsageSt
       reservationId,
       reservedUnits: reservation.reservedUnits,
       actualUnits: reservation.actualUnits,
+      tombstoneExpiresAt: reservation.expiresAtMs,
+    };
+  }
+
+  async reconcileVectorOperation(
+    input: VectorUsageOperationReconciliationInput,
+  ): Promise<VectorUsageOperationReconciliation> {
+    validateRequestIdentity(input.request);
+    const dimensions = canonicalizeUsageDimensions(input.dimensions);
+    const expected = dimensions.map(dimension => ({
+      dimensionHash: digest(dimension.key),
+      budgetIds: dimension.budgets.map(budget => digest(budget.key)),
+      reservedUnits: dimension.units,
+    }));
+    const reservationId = reservationIdFor(input.request);
+    const reservationRef = this.reservations().doc(reservationId);
+    const now = this.nowMs();
+    const reservation = await this.runTransaction(async transaction =>
+      readReservation(await transaction.get(reservationRef)),
+    );
+    if (!reservation) return { status: 'absent', reservationId };
+    if (!isVectorReservation(reservation)) {
+      throw new UsageStateError('Vector operation reconciliation cannot target a scalar reservation');
+    }
+    if (!sameStoredVectorReconciliationTopology(reservation.dimensions!, expected)) {
+      throw new UsageStateError('Vector reconciliation input does not match retained reservation state');
+    }
+    if (reservation.state === 'pending' || reservation.state === 'liable') {
+      if (this.isExpired(reservation, now)) {
+        return { status: 'expired', state: reservation.state, reservationId, expiredAt: reservation.expiresAtMs };
+      }
+      return {
+        status: 'active',
+        state: reservation.state,
+        reservation: {
+          id: reservationId,
+          operationId: input.request.operationId,
+          principalId: input.request.principal.id,
+          ...(input.request.principal.tenantId === undefined ? {} : { tenantId: input.request.principal.tenantId }),
+          ...(input.request.principal.plan === undefined ? {} : { plan: input.request.principal.plan }),
+          tool: input.request.tool,
+          dimensions: dimensions.map(dimension => ({
+            key: dimension.key,
+            budgetKeys: dimension.budgets.map(budget => budget.key),
+            reservedUnits: dimension.units,
+          })),
+          expiresAt: reservation.expiresAtMs,
+          ...(reservation.growthCursor === undefined ? {} : { growthCursor: reservation.growthCursor }),
+        },
+      };
+    }
+    if (this.isExpired(reservation, now)) return { status: 'absent', reservationId };
+    if (reservation.outcomeHash === EXPIRED_LIABLE_OUTCOME_HASH) {
+      if (reservation.leaseExpiresAtMs === undefined) {
+        throw new UsageStateError('Recovered liable vector reservation is missing its original lease expiry');
+      }
+      return { status: 'expired', state: 'liable', reservationId, expiredAt: reservation.leaseExpiresAtMs };
+    }
+    if (!reservation.actualByDimensions) {
+      throw new UsageStateError('Settled vector reservation is missing reconciliation state');
+    }
+    const keyByHash = new Map(dimensions.map(dimension => [digest(dimension.key), dimension.key] as const));
+    const actualByDimension = reservation.actualByDimensions.map(item => {
+      const key = keyByHash.get(item.dimensionHash);
+      if (!key) throw new UsageStateError('Settled vector reconciliation topology was invalid');
+      return { key, actualUnits: item.actualUnits };
+    }).sort((a, b) => a.key.localeCompare(b.key));
+    return {
+      status: 'settled',
+      reservationId,
+      reservedByDimension: dimensions.map(dimension => ({ key: dimension.key, reservedUnits: dimension.units })),
+      actualByDimension,
       tombstoneExpiresAt: reservation.expiresAtMs,
     };
   }
@@ -2264,6 +2401,20 @@ function readStoredVectorReservedReplay(
   });
 }
 
+function sameStoredVectorReconciliationTopology(
+  stored: readonly StoredVectorDimension[],
+  expected: readonly StoredVectorDimension[],
+): boolean {
+  if (stored.length !== expected.length) return false;
+  const byHash = new Map(expected.map(item => [item.dimensionHash, item] as const));
+  return stored.every(item => {
+    const candidate = byHash.get(item.dimensionHash);
+    return candidate !== undefined &&
+      item.reservedUnits === candidate.reservedUnits &&
+      sameStringArray(item.budgetIds, candidate.budgetIds);
+  });
+}
+
 function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
   if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
   const normalized = dimensions.map(dimension => {
@@ -2349,27 +2500,7 @@ function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
-  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
-    throw new RangeError('request must be an object');
-  }
-  if (request.principal === null || typeof request.principal !== 'object' || Array.isArray(request.principal)) {
-    throw new RangeError('principal must be an object');
-  }
-  if (typeof request.operationId !== 'string' || request.operationId.length === 0) {
-    throw new RangeError('operationId must be a non-empty string');
-  }
-  if (typeof request.principal.id !== 'string' || request.principal.id.length === 0) {
-    throw new RangeError('principal.id must be a non-empty string');
-  }
-  if (typeof request.tool !== 'string' || request.tool.length === 0) {
-    throw new RangeError('tool must be a non-empty string');
-  }
-  if (request.principal.tenantId !== undefined && typeof request.principal.tenantId !== 'string') {
-    throw new RangeError('principal.tenantId must be a string when present');
-  }
-  if (request.principal.plan !== undefined && typeof request.principal.plan !== 'string') {
-    throw new RangeError('principal.plan must be a string when present');
-  }
+  validateUsageRequestEnvelope(request);
 }
 
 function reservationIdFor(request: UsageRequest): string {

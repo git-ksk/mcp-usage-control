@@ -278,3 +278,7 @@ storage compatibilityはadditiveです。v0.6 reservation documentには`growthC
 `FirestoreUsageStore`はoptional `VectorUsageStore`を実装します。reservation documentへ`mode: "vector"`、dimension metadata、per-dimension actual、vector-growth replay metadataをoptional additive fieldとして保存します。v0.6までのmodeなしdocumentはscalarのままでrewrite不要です。
 
 vector admission / growth / settlement / expiry-recoveryはreservationと全participating budget documentを1 Firestore transactionで処理します。next vector growth cursorはtransaction callback外で生成するためautomatic retryでdouble-growしません。Emulator CIではportable vector conformanceとcommitted-growth ACK-loss replayも実行します。
+
+## v0.13 historical budget retirement
+
+`retireHistoricalBudgets({ budgetKeys, maxReservationsToInspect })` はbounded Firestore transactionでretained reservationを読み、pending / liable stateからexact candidate keyへの参照が1件でもあれば全体を拒否します。安全確認後だけ指定budget documentを削除します。window終了の判定はapplication-ownedで、adapterがkey文字列からretention ageを推測することはありません。運用上のdefaultとしてはcurrent windowと直前windowを最低限onlineで保持し、それより古いexact window-qualified keyはapplication側のlate-event / reconciliation horizon経過後だけretireします。retirementはdaily keyなら日次、monthly keyなら月次程度のlow-frequency operator jobで実行するのが目安です。これはStoreが強制するtime authorityではなく運用推奨です。

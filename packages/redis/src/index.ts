@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   UsageStateError,
+  assertUsageIdentifier,
+  validateUsageBudgetEnvelope,
+  validateUsageRequestEnvelope,
+  validateUsageVectorEnvelope,
+  validateUsageVectorGrowthEnvelope,
   emitUsageEvent,
   type Budget,
   type BudgetRemaining,
@@ -30,6 +35,9 @@ import {
   type VectorSettleInput,
   type VectorSettlementResult,
   type VectorUsageStore,
+  type VectorOperationReconciliationStore,
+  type VectorUsageOperationReconciliation,
+  type VectorUsageOperationReconciliationInput,
   type StoreVectorGrowResult,
   type StoreVectorReserveResult,
   type VectorReserveInput,
@@ -39,7 +47,9 @@ import {
   GROW_VECTOR_SCRIPT,
   MARK_LIABLE_SCRIPT,
   RENEW_SCRIPT,
+  RETIRE_HISTORICAL_BUDGETS_SCRIPT,
   RECONCILE_OPERATION_SCRIPT,
+  RECONCILE_VECTOR_OPERATION_SCRIPT,
   RESERVE_SCRIPT,
   RESERVE_VECTOR_SCRIPT,
   SETTLE_SCRIPT,
@@ -83,9 +93,21 @@ interface RedisRecoverySummary {
   vectorLiableCount: number;
 }
 
+export interface RedisHistoricalBudgetRetirementInput {
+  budgetKeys: readonly string[];
+  /** Fail closed rather than atomically scanning more retained reservations than expected. */
+  maxReservationsToInspect?: number;
+}
+
+export interface HistoricalBudgetRetirementResult {
+  requested: number;
+  retired: number;
+  missing: number;
+}
+
 const RESERVATION_ID_PATTERN = /^r2\.([a-f0-9]{64})$/;
 
-export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore, OperationReconciliationStore {
+export class RedisUsageStore implements ProgressiveUsageStore, VectorOperationReconciliationStore, OperationReconciliationStore {
   private readonly prefix: string;
   private readonly hashTag: string;
   private readonly cleanupBatchSize: number;
@@ -110,6 +132,40 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
     }
     assertPositiveInteger(this.cleanupBatchSize, 'cleanupBatchSize');
     assertPositiveInteger(this.idempotencyTtlMs, 'idempotencyTtlMs');
+  }
+
+  async retireHistoricalBudgets(
+    input: RedisHistoricalBudgetRetirementInput,
+  ): Promise<HistoricalBudgetRetirementResult> {
+    if (!Array.isArray(input.budgetKeys) || input.budgetKeys.length === 0) {
+      throw new RangeError('budgetKeys must contain at least one exact historical key');
+    }
+    if (input.budgetKeys.length > 64) throw new RangeError('budgetKeys exceed the 64-key maintenance batch limit');
+    const unique = [...new Set(input.budgetKeys)];
+    if (unique.length !== input.budgetKeys.length) throw new RangeError('budgetKeys must not contain duplicates');
+    for (const key of unique) assertUsageIdentifier(key, 'budgetKey');
+    const maxReservationsToInspect = input.maxReservationsToInspect ?? 10_000;
+    assertPositiveInteger(maxReservationsToInspect, 'maxReservationsToInspect');
+    const keys = this.keys();
+    const reply = parseReply(await this.client.eval(RETIRE_HISTORICAL_BUDGETS_SCRIPT, {
+      keys: [keys.used, keys.reservations],
+      arguments: [JSON.stringify(unique.map(digest)), String(maxReservationsToInspect)],
+    }));
+    if (reply[0] === 'active_reference') {
+      throw new UsageStateError('Historical budget retirement blocked by an active reservation reference');
+    }
+    if (reply[0] === 'scan_limit') {
+      throw new UsageStateError('Historical budget retirement inspection bound was exceeded');
+    }
+    if (reply[0] === 'unsupported_schema_version') {
+      throw new UsageStateError('Historical budget retirement encountered unsupported retained state');
+    }
+    if (reply[0] !== 'ok') throw new UsageStateError('Redis historical budget retirement reply was invalid');
+    return {
+      requested: unique.length,
+      retired: parseInteger(reply[1], 'retired budget count'),
+      missing: parseInteger(reply[2], 'missing budget count'),
+    };
   }
 
   async reconcileOperation(
@@ -200,6 +256,75 @@ export class RedisUsageStore implements ProgressiveUsageStore, VectorUsageStore,
     }
 
     throw new UsageStateError('Redis reconciliation reply was invalid');
+  }
+
+  async reconcileVectorOperation(
+    input: VectorUsageOperationReconciliationInput,
+  ): Promise<VectorUsageOperationReconciliation> {
+    validateRequestIdentity(input.request);
+    const dimensions = canonicalizeUsageDimensions(input.dimensions);
+    const operationKey = digest(JSON.stringify([
+      input.request.principal.tenantId ?? null,
+      input.request.principal.id,
+      input.request.tool,
+      input.request.operationId,
+    ]));
+    const reservationId = `r2.${operationKey}`;
+    const maps = vectorMaps(dimensions);
+    const reply = parseReply(await this.client.eval(RECONCILE_VECTOR_OPERATION_SCRIPT, {
+      keys: [this.keys().reservations, this.keys().tombstones],
+      arguments: [reservationId],
+    }));
+    if (reply[0] === 'absent') return { status: 'absent', reservationId };
+    if (reply[0] === 'mode_mismatch') {
+      throw new UsageStateError('Vector operation reconciliation cannot target a scalar reservation');
+    }
+    if (reply[0] === 'unsupported_schema_version') {
+      throw new UsageStateError('Redis reservation schema version is not supported');
+    }
+    if (reply[0] === 'invalid_state') {
+      throw new UsageStateError('Redis vector reservation had invalid reconciliation state');
+    }
+    if (reply[0] === 'active' || reply[0] === 'expired') {
+      const state = reply[1];
+      const expiresAt = parseInteger(reply[2], 'expiresAt');
+      const stored = parseVectorReconciliationDimensions(reply[3], dimensions, maps);
+      const growthCursor = reply[4] ?? '';
+      if (state !== 'pending' && state !== 'liable') {
+        throw new UsageStateError('Redis vector reconciliation state was invalid');
+      }
+      if (reply[0] === 'expired') {
+        return { status: 'expired', state, reservationId, expiredAt: expiresAt };
+      }
+      return {
+        status: 'active',
+        state,
+        reservation: {
+          id: reservationId,
+          operationId: input.request.operationId,
+          principalId: input.request.principal.id,
+          ...(input.request.principal.tenantId === undefined ? {} : { tenantId: input.request.principal.tenantId }),
+          ...(input.request.principal.plan === undefined ? {} : { plan: input.request.principal.plan }),
+          tool: input.request.tool,
+          dimensions: stored,
+          expiresAt,
+          ...(growthCursor.length === 0 ? {} : { growthCursor }),
+        },
+      };
+    }
+    if (reply[0] === 'settled') {
+      const tombstoneExpiresAt = parseInteger(reply[1], 'tombstoneExpiresAt');
+      const stored = parseVectorReconciliationDimensions(reply[2], dimensions, maps);
+      const actualByDimension = parseVectorReconciliationActuals(reply[3], maps.dimensionByHash);
+      return {
+        status: 'settled',
+        reservationId,
+        reservedByDimension: stored.map(dimension => ({ key: dimension.key, reservedUnits: dimension.reservedUnits })),
+        actualByDimension,
+        tombstoneExpiresAt,
+      };
+    }
+    throw new UsageStateError('Redis vector reconciliation reply was invalid');
   }
 
   async reserve(input: {
@@ -979,6 +1104,53 @@ function parseJsonArray(raw: string | undefined, context: string): unknown[] {
   return value;
 }
 
+function parseVectorReconciliationDimensions(
+  raw: string | undefined,
+  expected: readonly UsageDimension[],
+  maps: VectorMaps,
+): VectorReservationDimension[] {
+  const entries = parseJsonArray(raw, 'Redis vector reconciliation dimensions');
+  if (entries.length !== expected.length) {
+    throw new UsageStateError('Vector reconciliation input does not match retained reservation state');
+  }
+  const expectedByHash = new Map(expected.map(dimension => [digest(dimension.key), dimension] as const));
+  const result = entries.map(entry => {
+    if (!entry || typeof entry !== 'object') throw new UsageStateError('Redis vector reconciliation dimension was invalid');
+    const value = entry as { hash?: unknown; budgetHashes?: unknown; reservedUnits?: unknown };
+    const candidate = typeof value.hash === 'string' ? expectedByHash.get(value.hash) : undefined;
+    if (!candidate || !Array.isArray(value.budgetHashes) || typeof value.reservedUnits !== 'number' || !Number.isSafeInteger(value.reservedUnits)) {
+      throw new UsageStateError('Vector reconciliation input does not match retained reservation state');
+    }
+    const expectedHashes = candidate.budgets.map(budget => digest(budget.key));
+    if (value.reservedUnits !== candidate.units || !sameStringArray(value.budgetHashes as string[], expectedHashes)) {
+      throw new UsageStateError('Vector reconciliation input does not match retained reservation state');
+    }
+    return { key: candidate.key, budgetKeys: candidate.budgets.map(budget => budget.key), reservedUnits: value.reservedUnits };
+  });
+  result.sort((a, b) => a.key.localeCompare(b.key));
+  if (result.length !== maps.dimensionByHash.size) throw new UsageStateError('Redis vector reconciliation topology was incomplete');
+  return result;
+}
+
+function parseVectorReconciliationActuals(
+  raw: string | undefined,
+  dimensionByHash: ReadonlyMap<string, { key: string }>,
+): UsageDimensionActual[] {
+  const entries = parseJsonArray(raw, 'Redis vector reconciliation actuals');
+  if (entries.length !== dimensionByHash.size) throw new UsageStateError('Redis vector reconciliation actuals were incomplete');
+  const result = entries.map(entry => {
+    if (!entry || typeof entry !== 'object') throw new UsageStateError('Redis vector reconciliation actual was invalid');
+    const value = entry as { hash?: unknown; actualUnits?: unknown };
+    const dimension = typeof value.hash === 'string' ? dimensionByHash.get(value.hash) : undefined;
+    if (!dimension || typeof value.actualUnits !== 'number' || !Number.isSafeInteger(value.actualUnits) || value.actualUnits < 0) {
+      throw new UsageStateError('Redis vector reconciliation actual referenced an unknown dimension');
+    }
+    return { key: dimension.key, actualUnits: value.actualUnits };
+  });
+  result.sort((a, b) => a.key.localeCompare(b.key));
+  return result;
+}
+
 function parseVectorBalances(raw: string | undefined, maps: VectorMaps): VectorBudgetRemaining[] {
   const entries = parseJsonArray(raw, 'Redis vector balance reply');
   if (entries.length !== maps.budgetCount) {
@@ -1056,27 +1228,7 @@ function parseVectorSettlement(
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
-  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
-    throw new RangeError('request must be an object');
-  }
-  if (request.principal === null || typeof request.principal !== 'object' || Array.isArray(request.principal)) {
-    throw new RangeError('principal must be an object');
-  }
-  if (typeof request.operationId !== 'string' || request.operationId.length === 0) {
-    throw new RangeError('operationId must be a non-empty string');
-  }
-  if (typeof request.principal.id !== 'string' || request.principal.id.length === 0) {
-    throw new RangeError('principal.id must be a non-empty string');
-  }
-  if (typeof request.tool !== 'string' || request.tool.length === 0) {
-    throw new RangeError('tool must be a non-empty string');
-  }
-  if (request.principal.tenantId !== undefined && typeof request.principal.tenantId !== 'string') {
-    throw new RangeError('principal.tenantId must be a string when present');
-  }
-  if (request.principal.plan !== undefined && typeof request.principal.plan !== 'string') {
-    throw new RangeError('principal.plan must be a string when present');
-  }
+  validateUsageRequestEnvelope(request);
 }
 
 function newGrowthCursor(): string {

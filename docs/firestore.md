@@ -63,6 +63,8 @@ The Firestore adapter does not infer whether a budget is a user budget or tenant
 
 The adapter does not infer reset dates or window expiry. A daily/monthly policy must encode the window in `budget.key`, and historical non-zero budget state must not be deleted by a generic retention rule that could reset a still-valid quota.
 
+For explicit historical cleanup, v0.13 provides `retireHistoricalBudgets({ budgetKeys, maxReservationsToInspect })`. It runs a bounded Firestore transaction that reads retained reservations, refuses the whole operation if any exact candidate is referenced by pending/liable state, then deletes only the requested budget documents. The caller owns the proof that those window-qualified keys are historical; the adapter never derives retention age from key text. A practical default is to keep at least the current and immediately previous accounting window online, retire older exact window-qualified keys only after the application’s late-event/reconciliation horizon has elapsed, and run retirement from a low-frequency operator job (for example daily for daily keys and monthly for monthly keys). This is an operational recommendation, not Store-enforced time authority.
+
 ### Per-user example
 
 ```text
@@ -213,7 +215,7 @@ See [API reference](api-reference.md) for options and [Architecture](architectur
 
 ## Operation reconciliation (v0.8)
 
-`FirestoreUsageStore` implements optional scalar `OperationReconciliationStore`. `reconcileOperation()` performs a read-only Firestore transaction against the deterministic hashed reservation document and validates expected reserved units/budget hashes. It never invokes cleanup or writes recovery state.
+`FirestoreUsageStore` implements optional scalar `OperationReconciliationStore` and v0.13 `VectorOperationReconciliationStore`. `reconcileOperation()` performs a read-only Firestore transaction against the deterministic hashed reservation document and validates expected reserved units/budget hashes. It never invokes cleanup or writes recovery state.
 
 Expiry classification uses the existing `expiryGraceMs` / bounded host-clock contract. A terminal liable-expiry row that Firestore has already conservatively converted into a settled tombstone may be reported as `settled` because the schema intentionally does not retain separate historical expiry provenance; either result is terminal and never authorizes business replay. Firestore Emulator CI runs the portable reconciliation suite.
 

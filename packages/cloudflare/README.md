@@ -2,7 +2,7 @@
 
 Cloudflare Durable Objects + SQLite adapter for `mcp-usage-control`.
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-cloudflare-0.4.0.tgz`. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed `mcp-usage-control-cloudflare-<version>.tgz`. See [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md) / [日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md).
 
 ## English
 
@@ -46,14 +46,14 @@ Historical window cleanup is also explicit. The optional `mcp-usage-control-clou
 
 The adapter does not schedule alarms or intentionally keep a Durable Object active. Expiry/tombstone cleanup is lazy and bounded on subsequent operations. This minimizes background activity but means a large stale-state backlog can conservatively delay capacity recovery.
 
-- [Cloudflare adapter guide](../../docs/cloudflare.md)
-- [Deployed E2E / credential rotation](../../docs/cloudflare-deployed-e2e.md)
-- [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.md)
-- [Historical budget pruning](../../docs/cloudflare-budget-pruning.md)
-- [SQLite schema migrations](../../docs/cloudflare-schema-migrations.md)
-- [Observability](../../docs/observability.md)
-- [Architecture](../../docs/architecture.md)
-- [Security](../../SECURITY.md)
+- [Cloudflare adapter guide](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare.md)
+- [Deployed E2E / credential rotation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-deployed-e2e.md)
+- [Reserve ACK reconciliation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-reserve-reconciliation.md)
+- [Historical budget pruning](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-budget-pruning.md)
+- [SQLite schema migrations](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-schema-migrations.md)
+- [Observability](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/observability.md)
+- [Architecture](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/architecture.md)
+- [Security](https://github.com/git-ksk/mcp-usage-control/blob/main/SECURITY.md)
 
 ## 日本語
 
@@ -97,14 +97,14 @@ historical window cleanupも明示操作です。optionalな `mcp-usage-control-
 
 adapterはalarmをscheduleせず、Durable Objectを意図的に常駐させません。expiry / tombstone cleanupは後続operation時のlazy / bounded cleanupです。background activityを抑える代わりに、大量のstale stateがある場合はcapacity recoveryが保守的に遅れる可能性があります。
 
-- [Cloudflare adapter guide](../../docs/cloudflare.ja.md)
-- [実環境E2E / credential rotation](../../docs/cloudflare-deployed-e2e.ja.md)
-- [Reserve ACK reconciliation](../../docs/cloudflare-reserve-reconciliation.ja.md)
-- [Historical budget pruning](../../docs/cloudflare-budget-pruning.ja.md)
-- [SQLite schema migration](../../docs/cloudflare-schema-migrations.ja.md)
-- [Observability](../../docs/observability.ja.md)
-- [Architecture](../../docs/architecture.ja.md)
-- [Security](../../SECURITY.ja.md)
+- [Cloudflare adapter guide](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare.ja.md)
+- [実環境E2E / credential rotation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-deployed-e2e.ja.md)
+- [Reserve ACK reconciliation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-reserve-reconciliation.ja.md)
+- [Historical budget pruning](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-budget-pruning.ja.md)
+- [SQLite schema migration](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-schema-migrations.ja.md)
+- [Observability](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/observability.ja.md)
+- [Architecture](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/architecture.ja.md)
+- [Security](https://github.com/git-ksk/mcp-usage-control/blob/main/SECURITY.ja.md)
 
 ## Operation reconciliation (v0.8)
 

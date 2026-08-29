@@ -4,8 +4,8 @@ This matrix is intentionally small. It protects invariants that span two or more
 
 | Safety invariant | Executable evidence | CI/backend |
 | --- | --- | --- |
-| Bounded Memory retention remains fail-closed when a zero-unit scalar/vector reservation later grows | `packages/core/src/cross-capability-safety.test.ts` | Node 20/22/24 |
-| Windowed accounting identity remains pinned across progressive growth, mutable limits, and replay | `packages/core/src/cross-capability-safety.test.ts` and `windowed-budget-keys.test.ts` | Node 20/22/24 |
+| Bounded Memory retention remains fail-closed when a zero-unit scalar/vector reservation later grows | `packages/core/src/cross-capability-safety.test.ts` | Node 22/24 |
+| Windowed accounting identity remains pinned across progressive growth, mutable limits, and replay | `packages/core/src/cross-capability-safety.test.ts` and `windowed-budget-keys.test.ts` | Node 22/24 |
 | Ambiguous progressive growth keeps its exact-retry fence across MCP suspend/resume | `packages/mcp/src/cross-capability-safety.test.ts`, portable flow-store conformance, and Redis `mcp-flow.test.ts` | Node matrix + live Redis 7 |
 | Liable expiry recovery remains distinguishable during reconciliation | Firestore emulator `cross-capability: recovered liable reconciliation` | Firestore Emulator |
 | Historical maintenance cannot prune budgets referenced by active scalar/vector reservations | `packages/cloudflare/test/maintenance.mjs` | local workerd |

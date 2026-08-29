@@ -6,7 +6,7 @@
 
 > **現在の配布状況:** packageはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) に従ってlocal core + Redis tarballをinstallし、`redis@6.2.0` を組み合わせてください。
 
-current v0.11 / v1-frozen source lineはRedis 7 / node-redis 6.2.xでtestしています。supported v1 runtimeはNode.js 22+です。Node.js 20はcompatibility CI evidenceとしてのみ残しており、supported runtime contractには含みません。
+current v1-frozen source lineはRedis 7 / node-redis 6.2.xでtestしています。supported v1 runtimeはNode.js 22+です。
 
 ## Atomic multi-budget model
 
@@ -212,3 +212,7 @@ Growth metadataは既存reservation JSONへadditiveに`growthCursor`とlatest re
 `RedisUsageStore`はoptional `VectorUsageStore`も実装します。existing reservation JSONへ`mode: "vector"`、dimensionごとのreserved total、reservation-wide growth cursor、vector-growth replay metadataをadditive保存します。modeなしexisting recordはscalarのままで、Redis key / balance migrationは不要です。
 
 vector reserve / grow / settleは全participating dimension / budgetを1 Lua transactionで処理します。pending expiryは全dimensionをrelease、liable expiryは全dimensionをretainします。Real Redis CIではportable vector conformanceとcommitted vector growth ACK-loss replayも実行します。
+
+## v0.13 historical budget retirement
+
+`retireHistoricalBudgets({ budgetKeys, maxReservationsToInspect })` は、applicationが「accounting window終了済み」と証明したexact budget keyだけを削除候補にします。Redis Lua内でretained reservationをboundedに検査し、pending / liable reservationが候補keyを参照していれば全体をfail closedします。参照がない場合だけ該当`used` fieldを削除し、missing keyはidempotentに扱います。Store自身がkey文字列から保持期間を推測することはありません。運用上のdefaultとしてはcurrent windowと直前windowを最低限onlineで保持し、それより古いexact window-qualified keyはapplication側のlate-event / reconciliation horizon経過後だけretireします。retirementはdaily keyなら日次、monthly keyなら月次程度のlow-frequency operator jobで実行するのが目安です。これはStoreが強制するtime authorityではなく運用推奨です。

@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-This reference describes the public API in the current source tree. All five package manifests are aligned at `0.12.0`. **v0.12.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+This reference describes the public API in the current source tree. All five package manifests in the v0.13 preparation branch are aligned at `0.13.0`. **v0.12.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
 For behavioral/failure guarantees, read [Architecture](architecture.md) and [Store implementation contract](store-contract.md). For the stable/deferred v1 boundary, read [v1.0 readiness review](v1-readiness.md).
 
@@ -438,6 +438,11 @@ The base portable runner covers provider-neutral behavior including multi-budget
 
 v0.8 also exports `runOperationReconciliationStoreConformance()` and `assertOperationReconciliationStoreConformance()` for Stores implementing optional `OperationReconciliationStore`. That suite covers `absent -> pending -> liable -> settled`, read-only expired observation, and fail-closed expected-state mismatch.
 
+### `VectorOperationReconciliationStore` (v0.13)
+
+Optional read-only lost-ACK recovery for the initial vector reserve. The input carries trusted operation identity plus the exact expected dimension units and budget-key topology. `MemoryUsageStore`, `RedisUsageStore`, and `FirestoreUsageStore` implement it. Cloudflare remote reconciliation remains an explicit scalar-only exception in v0.13.
+
+
 Passing these establishes **behavioral compatibility**, not persistence/HA, authoritative-time, failover, or lost-ACK safety. Those require backend-specific evidence.
 
 ## `mcp-usage-control-mcp`
@@ -499,6 +504,10 @@ interface McpUsageFlowBinding {
 ```
 
 `argsHash` binds resume to canonicalized validated original arguments.
+
+### `onLeaseRenewalState` (v0.13)
+
+`protectTool()` and `protectMultiRoundTool()` accept an optional advisory callback receiving `{ status: 'uncertain', lease, error }` after the first failed automatic renewal and `{ status: 'confirmed', lease }` after a later successful renewal. Callback failure is isolated from accounting.
 
 ### `McpUsageFlowRecord` / `McpUsageFlowStore`
 
@@ -723,9 +732,17 @@ The safe accounting state machine is defined in [MCP Tasks accounting](mcp-tasks
 - TTL / retention values: positive safe integers;
 - settlement/classifier units: non-negative safe integers and `<= reservedUnits`.
 
+## Input envelope bounds (v0.13)
+
+`USAGE_INPUT_LIMITS` defines the provider-neutral pre-mutation envelope: identifiers are at most 1024 UTF-8 bytes, scalar reservations contain at most 64 budgets, vector reservations contain at most 32 dimensions / 32 budgets per dimension / 128 total budget edges. `validateUsageRequestEnvelope()`, `validateUsageBudgetEnvelope()`, `validateUsageVectorEnvelope()`, and `validateUsageVectorGrowthEnvelope()` expose the same checks used by built-in Stores. Oversized input fails before Redis/Firestore/Cloudflare mutation and errors do not echo the raw rejected identifier.
+
+These portable limits are deliberately below the backend-specific request/transaction surfaces used by the adapters: Redis receives one bounded Lua argument topology, Firestore maps bounded budgets/reservations into one transaction, and Cloudflare HTTP gateways additionally cap request bodies at 65,536 bytes. The portable envelope is the public contract; backend limits may be stricter in a particular deployment and remain operator-owned capacity constraints.
+
+Redis and Firestore additionally expose bounded `retireHistoricalBudgets()` maintenance for exact application-selected historical budget keys. See the provider guides for the active-reference fence.
+
 ## Compatibility
 
-- Node.js 20+
+- Node.js 22+
 - ESM
 - MCP TypeScript SDK v2; current conformance uses the `2026-07-28` protocol line and SDK 2.0.0 path
 - Redis 7 integration behavior; node-redis 6.2.x in CI

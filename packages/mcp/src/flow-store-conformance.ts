@@ -50,7 +50,10 @@ export class McpUsageFlowStoreConformanceError extends Error {
  * Verify the portable compare-and-consume contract required by
  * protectMultiRoundTool().
  *
- * Passing proves behavioral one-time claim semantics. Production-safe flow stores
+ * Passing proves behavioral one-time claim semantics, including the requirement
+ * that `consume()` reject expiry before returning a record using the store's own
+ * authoritative time domain. Callers treat a returned record as expiry-valid and
+ * do not re-check it against an unrelated host clock. Production-safe flow stores
  * must additionally document durability/HA and prove that a lost consume ACK does
  * not trigger caller-side blind retry/re-entry.
  */

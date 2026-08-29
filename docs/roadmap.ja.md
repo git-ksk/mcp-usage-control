@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v0.12.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.12.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
+**v0.12.0がcurrent GitHub/source release baselineです。** v0.13 preparation branchではpublish可能な5 package manifestを `0.13.0` に揃え、Node.js 22+をrequireし、npmにはまだ公開していません。
 
 first npm publicationは#6で追跡するseparate explicit authorization必須の操作です。source-release progressがregistry publicationを意味することはありません。
 
@@ -24,6 +24,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
+ -> v0.13 v1-blocker closure [IN PROGRESS]
  -> v1.0 feature-free stable promotion
 ```
 
@@ -53,6 +54,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.10.0** | operational snapshot/runtime identity、canonical settlement diagnostics、scoped threshold/exhaustion helper | Release済み / Adopted |
 | **v0.11.0** | pre-v1 accounting/runtime/storage/API freeze、aggregate release-safety gate、real Cloudflare rotation evidence | Release済み / Complete |
 | **v0.12.0** | product/operations hardening: release provenance/artifact、supply-chain maintenance、incident runbook、競合判断、quota-window projection、provider benchmark | Release済み / Complete |
+| **v0.13.0** | final v1-blocker closure: authoritative clock、renew uncertainty、安全なhistorical cleanup、vector reconciliation、bounded input、shipped docs、Node/peer CI | 進行中 |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -64,7 +66,7 @@ renewal failureに見えた現象はtest harness raceでした。parallel Vitest
 
 ### #105 Node.js support floor — complete
 
-v1 supported runtime floorは **Node.js 22+** です。Node 22 / 24をsupported evidence matrixとします。Node 20はEOLで、compatibility-only protected contextとしてだけ残します。
+v1 supported runtime floorは **Node.js 22+** です。Node 22 / 24をsupported evidence matrixとします。Node 20はEOLでprotected contextには含めません。
 
 ### #157 Firestore growth-concurrency reliability — complete
 
@@ -119,7 +121,7 @@ v1前のdurable provider互換境界をfreezeしました。
 
 既存protected context名を維持したまま意味を強化しました。
 
-- `test (20)` はlegacy compatibility required contextで、v1 support evidenceではありません。
+- Node 20はrequired CIから退役済みです。`test (22)` がprotected aggregate gateで、Node 22 / 24がsupported runtime evidenceです。
 - `test (22)` はaggregate release-safety required contextです。
 - applicableなNode / Redis / package / tarball / clean-consumer、Cloudflare workerd、Firestore Emulator failureは `test (22)` へ伝播します。
 - provider workはpath classifierが非該当と判定した場合だけskipを許可します。
@@ -137,7 +139,7 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 boundedな **v0.12 product/operations hardening** tranche (#177〜#184) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。#183はadditive-helper allowance内に留め、release provenance / artifact、incident response、dependency maintenance、current docs、competitive decision、provider benchmark evidenceをfrozen surfaceの周囲でhardeningしました。
 
-**v1.0はv0.12 surfaceに対するfeature-free stable promotion** のままです。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
+**v1.0はboundedなv0.13 blocker-closure checkpoint完了後のstable promotion** とします。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
@@ -182,7 +184,8 @@ v1.0前に:
 | #182 maintained competitive capability decision | v0.12 | **Completed; positioning guardrail** |
 | #183 safe quota-window/reset UX projection | v0.12 | **Completed; additive non-authoritative helper** |
 | #184 provider benchmark / cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
-| #6 first npm publication | separate v0.12/v1 distribution gate | **Open; explicit authorization必須** |
+| #191〜#198 final v1 blocker closure | v0.13 | **進行中; 新billing modelなし** |
+| #6 first npm publication | separate v0.13/v1 distribution gate | **Open; explicit authorization必須** |
 
 ## Release policy
 

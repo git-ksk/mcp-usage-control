@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v0.12.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.12.0` に揃い、Node.js 22以上をrequireします。
+**v0.12.0がcurrent GitHub/source release baselineです。** v0.13 preparation branchではpublish可能な5 package manifestを `0.13.0` に揃え、Node.js 22以上をrequireします。
 
 packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
 
@@ -27,7 +27,7 @@ v0.11 completion trancheはclose済みです。#6はseparate publication gateで
 
 ## 判定
 
-**public accounting / runtime / storage / API / governance surfaceと、v1前に必要なproduction-evidence boundaryはfeature-free v1 stable promotionに十分な形でfreezeできました。**
+**accounting modelはfreeze維持ですが、最終v1 auditでboundedなv0.13 blocker-closure trancheが見つかり、stable promotion前にgreenが必要です。**
 
 ## Stable accounting invariant
 
@@ -115,7 +115,7 @@ Store-facing / direct lease settlement outcomeは意図的にextensible string�
 
 ### Aggregate release-safety enforcement (#160) — complete
 
-`test (22)` はprotected aggregate release-safety gateです。Node / Redis / package / tarball / clean-consumer matrix全体と、applicableなCloudflare workerd / Firestore Emulator evidenceを必須にします。`test (20)` はcompatibility-only protected contextです。provider skipはpath classifierが非該当と判定した場合だけ許可し、docs-only変更はlightweight pathでrequired contextをdeadlockさせずresolveします。
+`test (22)` はprotected aggregate release-safety gateです。Node 22 / 24、Redis、package / tarball / clean-consumer、peer compatibility、applicableなCloudflare workerd / Firestore Emulator evidenceを必須にします。Node 20はrequired contextから退役済みです。provider skipはpath classifierが非該当と判定した場合だけ許可し、docs-only変更はlightweight pathでrequired contextをdeadlockさせずresolveします。
 
 ### Real Cloudflare operational evidence (#24) — complete
 
@@ -139,6 +139,11 @@ source releaseがregistry publicationを暗黙authorizeすることはありま�
 
 ## v1 promotion rule
 
-v1.0では **新featureやaccounting modelを追加しません**。hardened v0.12 surfaceをstable label/source milestoneへpromotionする位置づけで、tagged v0.12 release evidenceがgreenであることを前提とします。npm publicationは#6で独立authorizationのままです。
+v1.0では **新accounting modelを追加しません**。boundedなv0.13 blocker-closure trancheをfrozen model上のfinal corrective checkpointとし、そのrelease evidenceがgreenになってからstable promotionします。npm publicationは#6で独立authorizationのままです。
 
 [Roadmap](roadmap.ja.md)、[Release policy](releasing.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、[Persisted-state compatibility](persisted-state-compatibility.ja.md)、[v1 public API freeze](v1-public-api-freeze.ja.md)、各provider docsでcurrent support boundaryを確認してください。
+
+
+## v0.13 final blocker closure
+
+最終auditの#191〜#198で、multi-round flow expiry authority、shipped docs、Redis / Firestore historical-budget retirement、renew uncertainty signal、initial vector-reserve reconciliation、provider-neutral input bound、Node 20 CI退役、minimum/current peer compatibilityを閉じます。新しいcharging modelではなく、freeze済みaccounting model周囲のrecovery / operations hardeningです。#6は独立authorizationのままです。

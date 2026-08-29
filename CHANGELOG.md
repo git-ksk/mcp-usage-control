@@ -8,6 +8,33 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [0.13.0] - 2026-08-29
+
+Thirteenth GitHub/source release candidate focused on closing the final v1 correctness, operations, distribution, and compatibility blockers discovered after v0.12. npm publication remains separately authorized under #6 and is not part of this tranche.
+
+### Correctness and recovery hardening
+
+- Made `McpUsageFlowStore.consume()` the authoritative suspended-flow expiry decision so a second application-host clock cannot reject a flow already accepted by the shared store; binding and one-time consume semantics remain fail closed (#191).
+- Added advisory `onLeaseRenewalState` fencing transitions for automatic heartbeat renewal ambiguity: first failed renewal reports `uncertain`, later successful renewal reports `confirmed`, and observer failure cannot change accounting state (#194).
+- Added read-only `VectorOperationReconciliationStore` and built-in Memory/Redis/Firestore implementations for ambiguous initial vector-reserve acknowledgements. Exact operation identity, dimension units, and budget topology must match retained state; Cloudflare remains an explicit scalar-only reconciliation exception (#195).
+
+### Bounded long-running operations
+
+- Added explicit Redis/Firestore `retireHistoricalBudgets()` maintenance APIs. Only caller-selected exact historical keys may be retired; active pending/liable references block the whole operation and bounded inspection overflow fails closed (#193).
+- Added shared UTF-8 identifier and scalar/vector topology bounds before provider mutation, including bounded nested vector fan-out and regression tests at max/max+1 boundaries (#196).
+
+### Distribution and CI contract
+
+- Made shipped package READMEs standalone-safe for npm/tarball consumers by replacing repository-relative documentation links and stale literal tarball versions; CI now inspects the README bytes from the actual packed artifacts (#192).
+- Retired Node 20 from the CI matrix and protected required contexts. `test (22)` remains the aggregate release-safety gate and Node 22/24 are the supported runtime evidence (#197).
+- Added minimum/current peer-compatibility CI for `@modelcontextprotocol/server` and `redis` without broadening declared peer ranges (#198).
+
+### Release boundary
+
+- All five public package manifests are aligned at `0.13.0` with `engines.node >=22`.
+- The base reserve -> liability -> grow -> renew -> settle accounting model remains unchanged; v0.13 is a blocker-closure checkpoint, not a new billing model.
+- npm publication remains independently gated by #6 and requires separate explicit authorization.
+
 ## [0.12.0] - 2026-08-29
 
 Twelfth GitHub/source release focused on product and operational hardening around the frozen v1 accounting surface. npm publication remains separately authorized under #6 and was not performed.

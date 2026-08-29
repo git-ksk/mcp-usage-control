@@ -8,6 +8,33 @@
 
 現在entryはありません。
 
+## [0.13.0] - 2026-08-29
+
+v0.12後の最終v1 auditで見つかったcorrectness / operations / distribution / compatibility blockerを閉じる第13回GitHub/source release candidateです。npm publicationは#6のseparate authorizationのままで、このtrancheには含めません。
+
+### Correctness / recovery hardening
+
+- `McpUsageFlowStore.consume()` をsuspended-flow expiryのauthoritative decisionにし、shared storeがaccept済みのflowを別application host clockが再rejectしないようにしました。binding / one-time consumeはfail closedのままです (#191)。
+- automatic heartbeatのrenew ACK ambiguityにoptional `onLeaseRenewalState` を追加し、最初の失敗を `uncertain`、後続成功を `confirmed` と通知します。observer failureはaccounting stateを変更しません (#194)。
+- read-only `VectorOperationReconciliationStore` とMemory / Redis / Firestore実装を追加。initial vector reserve ACK loss後はoperation identity、dimension units、budget topologyの完全一致が必要です。Cloudflareはscalar-only reconciliationの明示例外です (#195)。
+
+### Long-running state / input bounds
+
+- Redis / Firestoreへexplicit `retireHistoricalBudgets()` を追加。applicationが選択したexact historical keyだけを候補にし、pending / liable参照があれば全体をblock、inspection bound超過もfail closedします (#193)。
+- UTF-8 byte基準identifier上限とscalar/vector topology上限をprovider mutation前に共通適用し、max / max+1境界を固定しました (#196)。
+
+### Distribution / CI
+
+- shipped package READMEからrepository-relative docs linkとstale tarball literalを除き、actual packed artifact内READMEをCIで検査します (#192)。
+- Node 20をCI matrix / protected required contextから退役させ、Node 22 / 24をsupported evidence、`test (22)`をaggregate gateに統一しました (#197)。
+- `@modelcontextprotocol/server` / `redis` のminimum/current peer compatibility CIを追加し、declared peer rangeは広げません (#198)。
+
+### Release boundary
+
+- 5 public package manifestを `0.13.0` / `engines.node >=22` に揃えます。
+- reserve -> liability -> grow -> renew -> settleのbase accounting modelは変更しません。v0.13は新billing modelではなくblocker-closure checkpointです。
+- npm publicationは#6のindependent gateのままで、separate explicit authorizationが必要です。
+
 ## [0.12.0] - 2026-08-29
 
 12回目のGitHub/source releaseです。freeze済みv1 accounting surfaceの周囲をproduct / operations面でhardeningしました。npm publicationは#6のseparate authorization対象のままで、今回は実行しません。

@@ -93,8 +93,13 @@ class FakeTransaction implements FirestoreTransactionLike {
 
   constructor(private readonly database: FakeFirestore) {}
 
-  async get(reference: FirestoreDocumentReferenceLike): Promise<FirestoreDocumentSnapshotLike> {
-    const ref = reference as FakeDocumentReference;
+  async get(reference: FirestoreDocumentReferenceLike): Promise<FirestoreDocumentSnapshotLike>;
+  async get(query: FirestoreQueryLike): Promise<FirestoreQuerySnapshotLike>;
+  async get(
+    target: FirestoreDocumentReferenceLike | FirestoreQueryLike,
+  ): Promise<FirestoreDocumentSnapshotLike | FirestoreQuerySnapshotLike> {
+    if (target instanceof FakeQuery) return target.get();
+    const ref = target as FakeDocumentReference;
     return new FakeSnapshot(this.database.read(ref));
   }
 
@@ -288,7 +293,7 @@ describe('FirestoreUsageStore', () => {
         budgets: [{ key: 'b', limit: 1 }],
         ttlMs: 1_000,
       }),
-    ).rejects.toThrow(/plan must be a string/);
+    ).rejects.toThrow(/plan must be a non-empty string/);
     await expect(
       store.reserveVector({
         request: request('runtime-vector'),
@@ -353,6 +358,46 @@ describe('FirestoreUsageStore', () => {
     expect(retry.accepted).toBe(true);
   });
 
+  it('retires only exact historical Firestore budgets and blocks active references', async () => {
+    const database = new FakeFirestore();
+    const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });
+    const historical = 'day:user-a:2026-08-28';
+    const req = request('retention-active');
+    const reserved = await store.reserve({
+      request: req,
+      units: 1,
+      budgets: [{ key: historical, limit: 10 }],
+      ttlMs: 60_000,
+    });
+    expect(reserved.accepted).toBe(true);
+    await expect(store.retireHistoricalBudgets({ budgetKeys: [historical] }))
+      .rejects.toThrow(/active reservation reference/);
+    if (!reserved.accepted) return;
+    await store.markLiable({ reservationId: reserved.reservation.id });
+    await store.settle({ reservationId: reserved.reservation.id, actualUnits: 1, outcome: 'completed' });
+    await expect(store.retireHistoricalBudgets({ budgetKeys: [historical, 'missing-window'] }))
+      .resolves.toEqual({ requested: 2, retired: 1, missing: 1 });
+    await expect(store.retireHistoricalBudgets({ budgetKeys: [historical] }))
+      .resolves.toEqual({ requested: 1, retired: 0, missing: 1 });
+  });
+
+  it('fails closed when Firestore retirement inspection exceeds its explicit bound', async () => {
+    const database = new FakeFirestore();
+    const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0 });
+    for (let index = 0; index < 2; index += 1) {
+      await store.reserve({
+        request: request(`retention-bound-${index}`),
+        units: 0,
+        budgets: [{ key: `retention-bound-budget-${index}`, limit: 1 }],
+        ttlMs: 60_000,
+      });
+    }
+    await expect(store.retireHistoricalBudgets({
+      budgetKeys: ['unrelated-historical'],
+      maxReservationsToInspect: 1,
+    })).rejects.toThrow(/inspection bound/);
+  });
+
   it('reconciles scalar operation state read-only and validates the original quote shape', async () => {
     const database = new FakeFirestore();
     let now = 1_000;
@@ -400,6 +445,38 @@ describe('FirestoreUsageStore', () => {
 
     now += 86_400_001;
     expect(await store.reconcileOperation(input)).toMatchObject({ status: 'absent' });
+  });
+
+  it('reconciles vector reserve lost-ACK state against exact topology', async () => {
+    const database = new FakeFirestore();
+    let now = 5_000;
+    const store = new FirestoreUsageStore(database, { cleanupBatchSize: 0, expiryGraceMs: 0, now: () => now });
+    const req = request('vector-reconcile-op');
+    const dimensions = [
+      { key: 'requests', units: 1, budgets: [{ key: 'vector:reconcile:req', limit: 3 }] },
+      { key: 'tokens', units: 5, budgets: [{ key: 'vector:reconcile:tok', limit: 20 }] },
+    ];
+    expect(await store.reconcileVectorOperation({ request: req, dimensions })).toMatchObject({ status: 'absent' });
+    const reserved = await store.reserveVector({ request: req, dimensions, ttlMs: 100 });
+    expect(reserved.accepted).toBe(true);
+    if (!reserved.accepted) return;
+    expect(await store.reconcileVectorOperation({ request: req, dimensions })).toMatchObject({ status: 'active', state: 'pending' });
+    await expect(store.reconcileVectorOperation({
+      request: req,
+      dimensions: [{ ...dimensions[0]!, budgets: [{ key: 'wrong', limit: 3 }] }, dimensions[1]!],
+    })).rejects.toThrow(/does not match retained reservation state/);
+    await store.markLiable({ reservationId: reserved.reservation.id });
+    await store.settleVector({
+      reservationId: reserved.reservation.id,
+      actualByDimension: [{ key: 'requests', actualUnits: 1 }, { key: 'tokens', actualUnits: 2 }],
+      outcome: 'completed',
+    });
+    expect(await store.reconcileVectorOperation({ request: req, dimensions })).toMatchObject({
+      status: 'settled',
+      actualByDimension: [{ key: 'requests', actualUnits: 1 }, { key: 'tokens', actualUnits: 2 }],
+    });
+    now += 86_400_001;
+    expect(await store.reconcileVectorOperation({ request: req, dimensions })).toMatchObject({ status: 'absent' });
   });
 
   it('reports expired active state without performing recovery writes', async () => {

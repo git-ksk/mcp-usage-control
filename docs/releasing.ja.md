@@ -30,13 +30,13 @@ pre-1.0 minorでもbreaking changeはrelease notesで明示します。
 
 ## Supported Node.js runtime
 
-v1のsupported runtime matrixは **Node.js 22 / 24** で、package metadataは `engines.node >=22` を宣言します。Node.js 20はEOL済みでsupported v1 runtimeではありません。legacy required contextの `test (20)` はcompatibility-only evidenceとして残しますが、support evidenceとして扱いません。
+v1のsupported runtime matrixは **Node.js 22 / 24** で、package metadataは `engines.node >=22` を宣言します。Node.js 20はEOL済みでsupported v1 runtimeでもrequired CI contextでもありません。
 
 ## Required release-safety gate
 
 `main`では既存のprotected check名を維持したまま、その意味を次のように固定します。
 
-- `test (20)` はlegacy compatibility required contextです。Node / Redis / package matrix全体がsuccessした場合だけsuccessします。
+- `test (22)` がprotected aggregate release-safety contextです。supported runtime matrixはNode 22 / 24で、Node 20はrequired contextから退役済みです。
 - `test (22)` はv1向けaggregate release-safety required contextです。Node / Redis / package / tarball / clean-consumer matrix全体に加え、関連path変更時はCloudflare workerdとFirestore Emulator evidenceも必須です。
 - provider jobの`skipped`をsuccess相当として認めるのは、path classifierがそのproviderを明示的に非該当と判定した場合だけです。
 - docs-only変更ではlightweight Node pathを使い、provider integrationをskipしてもrequired contextがpendingのまま残らないようにします。
@@ -68,7 +68,7 @@ pre-1.0 GitHub/source releaseは、対象surfaceについて次を満たした�
 ## GitHub/source release procedure
 
 1. package version、changelog、英日docsを更新。
-2. release PRでaggregate `test (22)` を必須とし、Node.js 22 / 24、実Redis、package / tarball / clean-consumer、該当provider integrationのevidenceを確認する。legacy `test (20)` がprotectedな間はcompatibility-only contextとしてresolveさせる。
+2. release PRでaggregate `test (22)` を必須とし、Node.js 22 / 24、実Redis、package / tarball / clean-consumer、peer compatibility、該当provider integrationのevidenceを確認する。
 3. public CI外にあるadapter固有のdeployed dogfood要件を確認する。
 4. release PRをprotected `main` へmerge。
 5. test済みexact commitへ `vX.Y.Z` tag。

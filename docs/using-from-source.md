@@ -21,7 +21,7 @@ pnpm check
 
 Requirements:
 
-- Node.js 20+
+- Node.js 22+
 - pnpm 10.15.x for repository development
 - Redis 7 for Redis adapter tests/usage
 - Wrangler/workerd only when running the dedicated Cloudflare integration path

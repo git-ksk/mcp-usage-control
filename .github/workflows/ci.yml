@@ -91,7 +91,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22, 24]
+        node: [22, 24]
     runs-on: ubuntu-latest
     env:
       REDIS_URL: redis://127.0.0.1:6379
@@ -116,13 +116,7 @@ jobs:
 
       - name: Classify Node runtime evidence
         if: needs.changes.outputs.run_full == 'true'
-        shell: bash
-        run: |
-          if [[ "${{ matrix.node }}" == "20" ]]; then
-            echo "::warning::Node 20 is EOL and compatibility-only evidence. v1 supported runtime starts at Node 22."
-          else
-            echo "Node ${{ matrix.node }} is supported v1 runtime evidence."
-          fi
+        run: echo "Node ${{ matrix.node }} is supported v1 runtime evidence."
 
       - run: pnpm install --frozen-lockfile
         if: needs.changes.outputs.run_full == 'true'
@@ -178,6 +172,23 @@ jobs:
           (cd packages/redis && npm pack --pack-destination /tmp/muc-packs)
           (cd packages/cloudflare && npm pack --pack-destination /tmp/muc-packs)
           (cd packages/firestore && npm pack --pack-destination /tmp/muc-packs)
+
+      - name: Inspect shipped README hygiene
+        if: needs.changes.outputs.run_full == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/muc-readmes
+          mkdir -p /tmp/muc-readmes
+          for tgz in /tmp/muc-packs/*.tgz; do
+            name="$(basename "$tgz" .tgz)"
+            mkdir -p "/tmp/muc-readmes/$name"
+            tar -xzf "$tgz" -C "/tmp/muc-readmes/$name" package/README.md
+          done
+          if rg -n 'Node\.js 20\+|mcp-usage-control-(0\.9\.0|cloudflare-0\.4\.0)\.tgz|\.\./\.\./docs/' /tmp/muc-readmes; then
+            echo 'Shipped README contains stale runtime, tarball, or repository-relative documentation references.' >&2
+            exit 1
+          fi
           git diff --exit-code -- \
             packages/core/package.json \
             packages/mcp/package.json \
@@ -450,27 +461,102 @@ jobs:
           --project demo-muc-firestore
           "pnpm --filter mcp-usage-control-firestore test:emulator"
 
-  legacy-required-context:
-    name: test (20)
-    if: always()
-    needs: [changes, node]
+  peer-compat:
+    name: peer compat (${{ matrix.peer }} / ${{ matrix.mode }})
+    needs: changes
+    if: needs.changes.outputs.run_full == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        peer: [mcp, redis]
+        mode: [minimum, current]
     runs-on: ubuntu-latest
     steps:
-      - name: Preserve the existing required compatibility context
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          NODE_RESULT: ${{ needs.node.result }}
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve declared peer evidence version
+        id: peer-version
         shell: bash
         run: |
           set -euo pipefail
-          test "$CHANGES_RESULT" = "success"
-          test "$NODE_RESULT" = "success"
-          echo "Legacy required context retained; supported v1 runtime evidence is Node 22/24."
+          if [[ "${{ matrix.peer }}" == "mcp" ]]; then
+            package='@modelcontextprotocol/server'
+            minimum='2.0.0'
+            range='^2.0.0'
+          else
+            package='redis'
+            minimum='6.2.0'
+            range='^6.2.0'
+          fi
+          if [[ "${{ matrix.mode }}" == "minimum" ]]; then
+            version="$minimum"
+          else
+            version="$(npm view "$package@$range" version --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const v=JSON.parse(s);console.log(Array.isArray(v)?v.at(-1):v)})")"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Testing $package@$version (${{ matrix.mode }} evidence)."
+      - name: Install selected peer without changing the declared contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp packages/mcp/package.json /tmp/muc-mcp-package.json
+          cp packages/redis/package.json /tmp/muc-redis-package.json
+          cp pnpm-lock.yaml /tmp/muc-pnpm-lock.yaml
+          version='${{ steps.peer-version.outputs.version }}'
+          if [[ "${{ matrix.peer }}" == "mcp" ]]; then
+            pnpm --filter mcp-usage-control-mcp add --save-dev --ignore-workspace-root-check --lockfile=false \
+              "@modelcontextprotocol/server@$version" "@modelcontextprotocol/client@$version"
+          else
+            pnpm --filter mcp-usage-control-redis add --save-dev --ignore-workspace-root-check --lockfile=false \
+              "redis@$version"
+          fi
+      - name: Start Redis peer fixture
+        if: matrix.peer == 'redis'
+        run: docker run --detach --name muc-peer-redis -p 6379:6379 redis:7-alpine
+      - name: Run peer integration evidence
+        env:
+          REDIS_URL: redis://127.0.0.1:6379
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Fresh CI checkouts do not contain generated dist/. Build against the
+          # selected peer first so the matrix proves both type compatibility and
+          # runtime behavior instead of depending on a developer workstation's dist.
+          pnpm build
+          if [[ "${{ matrix.peer }}" == "mcp" ]]; then
+            pnpm --filter mcp-usage-control-mcp test
+          else
+            for attempt in {1..30}; do
+              if docker exec muc-peer-redis redis-cli ping 2>/dev/null | grep -qx PONG; then break; fi
+              sleep 1
+            done
+            pnpm --filter mcp-usage-control-redis test
+          fi
+      - name: Restore and verify declared peer contract
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/muc-mcp-package.json packages/mcp/package.json
+          cp /tmp/muc-redis-package.json packages/redis/package.json
+          cp /tmp/muc-pnpm-lock.yaml pnpm-lock.yaml
+          test "$(node -p "require('./packages/mcp/package.json').peerDependencies['@modelcontextprotocol/server']")" = '^2.0.0'
+          test "$(node -p "require('./packages/redis/package.json').peerDependencies.redis")" = '^6.2.0'
+          cmp -s /tmp/muc-mcp-package.json packages/mcp/package.json
+          cmp -s /tmp/muc-redis-package.json packages/redis/package.json
+          cmp -s /tmp/muc-pnpm-lock.yaml pnpm-lock.yaml
 
   release-safety:
     name: test (22)
     if: always()
-    needs: [changes, node, dependency-review, cloudflare, firestore]
+    needs: [changes, node, dependency-review, peer-compat, cloudflare, firestore]
     runs-on: ubuntu-latest
     steps:
       - name: Require all applicable release-safety evidence
@@ -479,6 +565,8 @@ jobs:
           NODE_RESULT: ${{ needs.node.result }}
           EVENT_NAME: ${{ github.event_name }}
           DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
+          PEER_COMPAT_RESULT: ${{ needs.peer-compat.result }}
+          RUN_FULL: ${{ needs.changes.outputs.run_full }}
           RUN_CLOUDFLARE: ${{ needs.changes.outputs.run_cloudflare }}
           CLOUDFLARE_RESULT: ${{ needs.cloudflare.result }}
           RUN_FIRESTORE: ${{ needs.changes.outputs.run_firestore }}
@@ -493,6 +581,12 @@ jobs:
             test "$DEPENDENCY_REVIEW_RESULT" = "success"
           else
             test "$DEPENDENCY_REVIEW_RESULT" = "skipped"
+          fi
+
+          if [[ "$RUN_FULL" == "true" ]]; then
+            test "$PEER_COMPAT_RESULT" = "success"
+          else
+            test "$PEER_COMPAT_RESULT" = "skipped"
           fi
 
           if [[ "$RUN_CLOUDFLARE" == "true" ]]; then

@@ -6,7 +6,7 @@
 
 > **Current distribution status:** the package is not published to npm yet. Build/install the local core + Redis tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `redis@6.2.0`.
 
-The current v0.11/v1-frozen source line is tested with Redis 7 and node-redis 6.2.x. The supported v1 runtime is Node.js 22+; Node.js 20 is retained only as compatibility CI evidence and is not part of the supported runtime contract.
+The current v1-frozen source line is tested with Redis 7 and node-redis 6.2.x. The supported v1 runtime is Node.js 22+.
 
 ## Atomic multi-budget model
 
@@ -116,7 +116,7 @@ month:user-42:2026-08
 month:tenant-org-7:2026-08
 ```
 
-Changing the key starts a new accounting bucket. The Store does not automatically TTL `used` budget fields because a generic retention policy could erase still-valid accounting state. Applications should implement retention only when their own window lifecycle makes deletion safe.
+Changing the key starts a new accounting bucket. The Store does not automatically TTL `used` budget fields because a generic retention policy could erase still-valid accounting state. Applications should retire only keys whose accounting windows are authoritatively over. v0.13 provides `retireHistoricalBudgets({ budgetKeys, maxReservationsToInspect })`: it accepts exact candidate keys, atomically scans retained reservations under a bounded limit, blocks the entire retirement if any candidate is referenced by a pending/liable reservation, and only then deletes matching `used` fields. Missing keys are idempotent. It never infers age/window semantics for the caller. A practical default is to keep at least the current and immediately previous accounting window online, retire older exact window-qualified keys only after the application’s late-event/reconciliation horizon has elapsed, and run retirement from a low-frequency operator job (for example daily for daily keys and monthly for monthly keys). This is an operational recommendation, not Store-enforced time authority.
 
 ## Atomicity is not durability
 
@@ -187,7 +187,7 @@ CI uses real Redis 7 for:
 
 ## Operation reconciliation
 
-`RedisUsageStore` implements optional scalar `OperationReconciliationStore`. The lookup runs one read-only Lua script using Redis `TIME`, `HGET`, and `ZSCORE`; it never reserves/releases capacity or changes liability, lease, settlement, or replay state. Expected reserved units and hashed budget identities must match retained state or the call fails closed.
+`RedisUsageStore` implements optional scalar `OperationReconciliationStore` and v0.13 `VectorOperationReconciliationStore`. The lookup runs one read-only Lua script using Redis `TIME`, `HGET`, and `ZSCORE`; it never reserves/releases capacity or changes liability, lease, settlement, or replay state. Expected reserved units and hashed budget identities must match retained state or the call fails closed.
 
 Real-Redis CI runs the portable operation-reconciliation conformance suite. A settled reservation missing its tombstone index is treated as invalid/indeterminate state rather than being misreported as `absent`.
 

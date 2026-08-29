@@ -1,5 +1,10 @@
 import {
   UsageStateError,
+  assertUsageIdentifier,
+  validateUsageBudgetEnvelope,
+  validateUsageRequestEnvelope,
+  validateUsageVectorEnvelope,
+  validateUsageVectorGrowthEnvelope,
   emitUsageEvent,
   type Budget,
   type BudgetRemaining,
@@ -1228,9 +1233,7 @@ async function prepareGrowth(
   idempotencyTtlMs: number,
 ): Promise<PreparedGrowth> {
   assertReservationId(input.reservationId);
-  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
-    throw new RangeError('incrementId must be a non-empty string');
-  }
+  assertUsageIdentifier(input.incrementId, 'incrementId');
   if (
     typeof input.expectedGrowthCursor !== 'string' ||
     input.expectedGrowthCursor.length === 0
@@ -1553,27 +1556,7 @@ function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
-  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
-    throw new RangeError('request must be an object');
-  }
-  if (request.principal === null || typeof request.principal !== 'object' || Array.isArray(request.principal)) {
-    throw new RangeError('principal must be an object');
-  }
-  if (typeof request.operationId !== 'string' || request.operationId.length === 0) {
-    throw new RangeError('operationId must be a non-empty string');
-  }
-  if (typeof request.principal.id !== 'string' || request.principal.id.length === 0) {
-    throw new RangeError('principal.id must be a non-empty string');
-  }
-  if (typeof request.tool !== 'string' || request.tool.length === 0) {
-    throw new RangeError('tool must be a non-empty string');
-  }
-  if (request.principal.tenantId !== undefined && typeof request.principal.tenantId !== 'string') {
-    throw new RangeError('principal.tenantId must be a string when present');
-  }
-  if (request.principal.plan !== undefined && typeof request.principal.plan !== 'string') {
-    throw new RangeError('principal.plan must be a string when present');
-  }
+  validateUsageRequestEnvelope(request);
 }
 
 function assertReservationId(value: string): void {

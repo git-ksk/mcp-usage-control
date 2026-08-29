@@ -103,9 +103,9 @@ protectTool()
 
 ## CIについて
 
-`docs/**` とMarkdown (`*.md`) だけを変更したPull Requestでは、CIは変更範囲を判定したあと `test (20)` / `test (22)` / `test (24)` のmatrix checkを軽量pathで終了します。
+`docs/**` とMarkdown (`*.md`) だけを変更したPull Requestでは、CIは変更範囲を判定したあと `test (22)` / `test (24)` のmatrix checkを軽量pathで終了します。
 
-この場合はRedis起動、matrix jobでのcheckout、Node.js / pnpm setup、dependency install、test、package pack、clean consumer installを実行しません。source code、workflow、package manifest、lockfile、configなどMarkdown以外の変更が1つでも含まれる場合は、Node.js 20 / 22 / 24のfull CI matrixで同じbuild / test / package / clean-consumer evidenceを実行します。v1のsupported runtime evidenceはNode 22 / 24で、Node 20はcurrent required check contextを維持するためのcompatibility-onlyです。
+この場合はRedis起動、matrix jobでのcheckout、Node.js / pnpm setup、dependency install、test、package pack、clean consumer installを実行しません。source code、workflow、package manifest、lockfile、configなどMarkdown以外の変更が1つでも含まれる場合は、Node.js 22 / 24のfull CI matrixで同じbuild / test / package / clean-consumer evidenceを実行します。v1のsupported runtime evidenceはNode 22 / 24です。
 
 ## Project policies
 

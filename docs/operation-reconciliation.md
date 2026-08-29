@@ -2,11 +2,11 @@
 
 [English](operation-reconciliation.md) | [日本語](operation-reconciliation.ja.md)
 
-Status: **v0.8 contract; adopted for the future v1 surface as an optional scalar Store capability.**
+Status: **v0.13 contract; scalar and vector read-only reconciliation are adopted for the future v1 surface as optional Store capabilities.**
 
 `mcp-usage-control` treats an ambiguous acknowledgement from a state-changing Store call as a correctness event. A caller must not create a second unrelated reservation merely because it does not know whether the first call committed.
 
-v0.8 adds a small provider-neutral, **read-only** scalar operation-status vocabulary. The base `UsageStore` remains source-compatible; Stores opt in through `OperationReconciliationStore` or an adapter-specific equivalent such as the Cloudflare remote reconciliation helper.
+v0.8 introduced the provider-neutral, **read-only** scalar operation-status vocabulary. v0.13 adds the parallel `VectorOperationReconciliationStore` contract for ambiguous initial vector-reserve acknowledgements without changing `UsageStore` or `VectorUsageStore`.
 
 ## Core types
 
@@ -15,6 +15,9 @@ import type {
   OperationReconciliationStore,
   UsageOperationReconciliation,
   UsageOperationReconciliationInput,
+  VectorOperationReconciliationStore,
+  VectorUsageOperationReconciliation,
+  VectorUsageOperationReconciliationInput,
 } from 'mcp-usage-control';
 ```
 
@@ -62,18 +65,20 @@ Operation IDs and reservation IDs are correlation/replay identities, **not crede
 
 | Store | v0.8 scalar reconciliation | Mechanism / boundary |
 | --- | --- | --- |
-| `MemoryUsageStore` | **Supported** | `reconcileOperation()` reads retained in-process state without running expiry recovery. Process restart loses Memory state, so `absent` after restart is not historical proof. |
-| `RedisUsageStore` | **Supported** | `reconcileOperation()` uses a read-only Lua path (`TIME`, `HGET`, `ZSCORE`) and validates expected units/budget hashes. Redis integration runs the portable reconciliation contract. |
-| `FirestoreUsageStore` | **Supported** | `reconcileOperation()` uses a read-only Firestore transaction and validates expected units/budget hashes. The existing bounded/synchronized host-clock requirement still applies to expiry classification. Firestore Emulator runs the portable reconciliation contract. |
-| Cloudflare Durable Objects | **Supported through the reconciliation subpath** | `reconcileRemoteCloudflareOperation()` uses the authenticated read-only lookup gateway. `reconcileRemoteCloudflareReserve()` remains as the v0.7-compatible alias. Existing deployed/local lost-ACK reconciliation evidence remains applicable. |
+| `MemoryUsageStore` | **Scalar + vector** | `reconcileOperation()` / `reconcileVectorOperation()` read retained in-process state without running expiry recovery. Process restart loses Memory state, so `absent` after restart is not historical proof. |
+| `RedisUsageStore` | **Scalar + vector** | Read-only Lua paths use Redis `TIME`, `HGET`, and `ZSCORE`; expected scalar/vector topology is validated before status is returned. |
+| `FirestoreUsageStore` | **Scalar + vector** | Read-only Firestore transactions validate expected scalar/vector topology. The existing bounded/synchronized host-clock requirement still applies to expiry classification. |
+| Cloudflare Durable Objects | **Scalar only; explicit vector exception** | `reconcileRemoteCloudflareOperation()` uses the authenticated read-only lookup gateway. Vector initial-reserve ACK ambiguity remains fail closed in v0.13. |
 
 The base `UsageStore` does not require reconciliation, so third-party Stores remain source-compatible. A third-party Store that does not implement the optional capability must keep ambiguous acknowledgement handling fail closed and document its narrower recovery boundary.
 
-## Scalar-only v0.8 boundary
+## Vector reserve reconciliation (v0.13)
 
-The v0.8 capability is intentionally **scalar-only**. `VectorUsageStore` remains an optional v0.7 capability, but v0.8 does not claim generic vector operation reconciliation. A scalar reconciliation API must reject a retained vector reservation rather than reinterpret it.
+`VectorOperationReconciliationStore` mirrors the scalar read-only boundary for an ambiguous **initial vector reserve** acknowledgement. The caller supplies the exact trusted operation identity plus expected dimension keys, reserved units, and budget-key topology. A mismatch rejects/fails closed; limits remain current policy inputs and are not historical identity.
 
-Vector growth and settlement already have their own exact retry/replay fences. Ambiguous initial vector-reserve acknowledgement remains fail closed unless a provider exposes a separately proven vector reconciliation mechanism in a future release.
+`MemoryUsageStore`, `RedisUsageStore`, and `FirestoreUsageStore` implement the vector capability. Scalar lookup rejects vector state and vector lookup rejects scalar state rather than coercing modes. Growth and settlement keep their existing exact replay fences.
+
+Cloudflare Durable Objects remain an explicit v0.13 exception: the authenticated remote reconciliation subpath currently proves scalar initial-reserve status only. Cloudflare vector reserve ACK ambiguity therefore remains fail closed; callers must not infer vector support from scalar reconciliation or blindly replay a vector reserve. This exception must be removed or deliberately re-reviewed before any future claim of provider-wide vector reconciliation parity.
 
 ## Portable conformance
 

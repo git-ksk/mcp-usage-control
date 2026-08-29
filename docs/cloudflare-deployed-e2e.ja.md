@@ -30,7 +30,7 @@ local workerd の fault-injection route はテスト専用です。platform-styl
 
 - Workers と SQLite Durable Objects を deploy できる Cloudflare account
 - 対象 account に対する Wrangler authentication
-- Node.js 20+ と pnpm
+- Node.js 22+ と pnpm
 - この repository の checkout
 
 この手順のために Paid plan を有効化しないでください。dogfood config は Workers Free 互換で、専用 Worker 名 `mcp-usage-control-cloudflare-dogfood` を使用します。

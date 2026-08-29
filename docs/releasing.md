@@ -30,13 +30,13 @@ Breaking changes are called out prominently even when they occur in a pre-1.0 mi
 
 ## Supported Node.js runtime
 
-The supported v1 runtime matrix is **Node.js 22 and 24**, with package metadata declaring `engines.node >=22`. Node.js 20 is EOL and is not a supported v1 runtime. The legacy required context `test (20)` remains compatibility-only evidence and must not be cited as support evidence.
+The supported v1 runtime matrix is **Node.js 22 and 24**, with package metadata declaring `engines.node >=22`. Node.js 20 is EOL and is not a supported v1 runtime or required CI context.
 
 ## Required release-safety gate
 
 `main` keeps the existing protected check names while making their meaning explicit:
 
-- `test (20)` is the legacy compatibility required context. It succeeds only after the complete Node/Redis/package matrix succeeds.
+- `test (22)` is the protected aggregate release-safety context. Node 22/24 are the supported runtime matrix; Node 20 is no longer a required context.
 - `test (22)` is the aggregate v1 release-safety required context. It requires the complete Node/Redis/package/tarball/clean-consumer matrix and, when relevant paths changed, Cloudflare workerd and Firestore Emulator evidence.
 - provider jobs are accepted as `skipped` only when the path classifier explicitly marks them non-applicable.
 - docs-only changes take the lightweight Node path and skip provider integration without leaving either required context pending.
@@ -68,7 +68,7 @@ A pre-1.0 GitHub/source release is ready only when the applicable surfaces satis
 ## GitHub/source release procedure
 
 1. update package versions, changelog, and bilingual docs;
-2. require aggregate `test (22)` release-safety evidence for the release PR, including Node.js 22/24, real Redis, package/tarball/clean-consumer checks, and applicable provider integration; allow the compatibility-only `test (20)` context to resolve while it remains protected;
+2. require aggregate `test (22)` release-safety evidence for the release PR, including Node.js 22/24, real Redis, package/tarball/clean-consumer checks, peer-compatibility evidence, and applicable provider integration;
 3. verify any adapter-specific deployed dogfood requirement that is outside public CI;
 4. merge the release PR to protected `main`;
 5. tag the exact tested commit as `vX.Y.Z`;

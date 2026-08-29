@@ -10,6 +10,93 @@ export * from './observability.js';
 export * from './weighted-credits.js';
 export * from './windowed-budget-keys.js';
 
+export const USAGE_INPUT_LIMITS = Object.freeze({
+  identifierBytes: 1024,
+  scalarBudgets: 64,
+  vectorDimensions: 32,
+  vectorBudgetsPerDimension: 32,
+  vectorBudgetsTotal: 128,
+});
+
+export function assertUsageIdentifier(value: unknown, name: string): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new RangeError(`${name} must be a non-empty string`);
+  }
+  if (new TextEncoder().encode(value).byteLength > USAGE_INPUT_LIMITS.identifierBytes) {
+    throw new RangeError(`${name} exceeds the ${USAGE_INPUT_LIMITS.identifierBytes}-byte input limit`);
+  }
+}
+
+export function validateUsageRequestEnvelope(request: UsageRequest): void {
+  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
+    throw new RangeError('request must be an object');
+  }
+  if (request.principal === null || typeof request.principal !== 'object' || Array.isArray(request.principal)) {
+    throw new RangeError('principal must be an object');
+  }
+  assertUsageIdentifier(request.operationId, 'operationId');
+  assertUsageIdentifier(request.principal.id, 'principal.id');
+  assertUsageIdentifier(request.tool, 'tool');
+  if (request.principal.tenantId !== undefined) {
+    assertUsageIdentifier(request.principal.tenantId, 'principal.tenantId');
+  }
+  if (request.principal.plan !== undefined) {
+    assertUsageIdentifier(request.principal.plan, 'principal.plan');
+  }
+}
+
+export function validateUsageBudgetEnvelope(budgets: readonly Budget[]): void {
+  if (!Array.isArray(budgets)) throw new TypeError('budgets must be an array');
+  if (budgets.length === 0) throw new RangeError('budgets must contain at least one budget');
+  if (budgets.length > USAGE_INPUT_LIMITS.scalarBudgets) {
+    throw new RangeError(`budgets exceed the ${USAGE_INPUT_LIMITS.scalarBudgets}-budget input limit`);
+  }
+  for (const budget of budgets) {
+    if (budget === null || typeof budget !== 'object' || Array.isArray(budget)) {
+      throw new TypeError('budget must be an object');
+    }
+    assertUsageIdentifier(budget.key, 'budget.key');
+  }
+}
+
+export function validateUsageVectorEnvelope(dimensions: readonly UsageDimension[]): void {
+  if (!Array.isArray(dimensions)) throw new TypeError('dimensions must be an array');
+  if (dimensions.length === 0) throw new RangeError('dimensions must contain at least one dimension');
+  if (dimensions.length > USAGE_INPUT_LIMITS.vectorDimensions) {
+    throw new RangeError(`dimensions exceed the ${USAGE_INPUT_LIMITS.vectorDimensions}-dimension input limit`);
+  }
+  let totalBudgets = 0;
+  for (const dimension of dimensions) {
+    if (dimension === null || typeof dimension !== 'object' || Array.isArray(dimension)) {
+      throw new TypeError('dimension must be an object');
+    }
+    assertUsageIdentifier(dimension.key, 'dimension.key');
+    if (!Array.isArray(dimension.budgets) || dimension.budgets.length === 0) {
+      throw new RangeError('dimension.budgets must contain at least one budget');
+    }
+    if (dimension.budgets.length > USAGE_INPUT_LIMITS.vectorBudgetsPerDimension) {
+      throw new RangeError(
+        `dimension budgets exceed the ${USAGE_INPUT_LIMITS.vectorBudgetsPerDimension}-budget input limit`,
+      );
+    }
+    totalBudgets += dimension.budgets.length;
+    if (totalBudgets > USAGE_INPUT_LIMITS.vectorBudgetsTotal) {
+      throw new RangeError(
+        `vector topology exceeds the ${USAGE_INPUT_LIMITS.vectorBudgetsTotal}-budget input limit`,
+      );
+    }
+    validateUsageBudgetEnvelope(dimension.budgets);
+  }
+}
+
+export function validateUsageVectorGrowthEnvelope(dimensions: readonly UsageDimensionGrowth[]): void {
+  validateUsageVectorEnvelope(dimensions.map(dimension => ({
+    key: dimension.key,
+    units: dimension.additionalUnits,
+    budgets: dimension.budgets,
+  })));
+}
+
 export interface Principal {
   id: string;
   tenantId?: string;
@@ -210,6 +297,36 @@ export type UsageOperationReconciliation =
       tombstoneExpiresAt: number;
     };
 
+
+export interface VectorUsageOperationReconciliationInput {
+  /** Exact trusted logical operation identity of the vector reservation being reconciled. */
+  request: UsageRequest;
+  /** Expected vector topology and currently retained reserved units. */
+  dimensions: readonly UsageDimension[];
+}
+
+/** Read-only authoritative status for one retained vector logical operation. */
+export type VectorUsageOperationReconciliation =
+  | { status: 'absent'; reservationId: string }
+  | {
+      status: 'active';
+      state: 'pending' | 'liable';
+      reservation: VectorReservationRecord;
+    }
+  | {
+      status: 'expired';
+      state: 'pending' | 'liable';
+      reservationId: string;
+      expiredAt: number;
+    }
+  | {
+      status: 'settled';
+      reservationId: string;
+      reservedByDimension: UsageDimensionReserved[];
+      actualByDimension: UsageDimensionActual[];
+      tombstoneExpiresAt: number;
+    };
+
 export interface UsageStore {
   reserve(input: {
     request: UsageRequest;
@@ -347,6 +464,13 @@ export interface VectorUsageStore extends UsageStore {
   reserveVector(input: VectorReserveInput): Promise<StoreVectorReserveResult>;
   growVectorReservation(input: VectorGrowReservationInput): Promise<StoreVectorGrowResult>;
   settleVector(input: VectorSettleInput): Promise<VectorSettlementResult>;
+}
+
+/** Optional read-only vector lost-ACK reconciliation capability. */
+export interface VectorOperationReconciliationStore extends VectorUsageStore {
+  reconcileVectorOperation(
+    input: VectorUsageOperationReconciliationInput,
+  ): Promise<VectorUsageOperationReconciliation>;
 }
 
 export interface VectorReservationGrowthRequest {
@@ -1110,7 +1234,7 @@ interface InternalVectorReservation extends InternalReservationBase, VectorReser
 
 type InternalReservation = InternalScalarReservation | InternalVectorReservation;
 
-export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore, OperationReconciliationStore {
+export class MemoryUsageStore implements ProgressiveUsageStore, VectorOperationReconciliationStore, OperationReconciliationStore {
   private readonly used = new Map<string, number>();
   private readonly reservations = new Map<string, InternalReservation>();
   private readonly operations = new Map<string, string>();
@@ -1225,6 +1349,62 @@ export class MemoryUsageStore implements ProgressiveUsageStore, VectorUsageStore
       reservationId: reservation.id,
       reservedUnits: reservation.reservedUnits,
       actualUnits: reservation.actualUnits,
+      tombstoneExpiresAt: reservation.tombstoneExpiresAt,
+    };
+  }
+
+  async reconcileVectorOperation(
+    input: VectorUsageOperationReconciliationInput,
+  ): Promise<VectorUsageOperationReconciliation> {
+    validateRequestIdentity(input.request);
+    const dimensions = canonicalizeUsageDimensions(input.dimensions);
+    const now = Date.now();
+    const reservationId = operationKeyFor(input.request);
+    const reservation = this.reservations.get(reservationId);
+    if (!reservation) return { status: 'absent', reservationId };
+    if (reservation.mode !== 'vector') {
+      throw new UsageStateError('Vector operation reconciliation cannot target a scalar reservation');
+    }
+    if (!sameVectorReconciliationTopology(reservation.dimensions, dimensions)) {
+      throw new UsageStateError('Vector reconciliation input does not match retained reservation state');
+    }
+    if (reservation.state === 'pending' || reservation.state === 'liable') {
+      if (reservation.expiresAt <= now) {
+        return {
+          status: 'expired',
+          state: reservation.state,
+          reservationId: reservation.id,
+          expiredAt: reservation.expiresAt,
+        };
+      }
+      return {
+        status: 'active',
+        state: reservation.state,
+        reservation: cloneVectorReservationRecord(reservation),
+      };
+    }
+    if (reservation.tombstoneExpiresAt !== undefined && reservation.tombstoneExpiresAt <= now) {
+      return { status: 'absent', reservationId };
+    }
+    if (reservation.outcome === 'lease_expired_after_execution_started') {
+      return {
+        status: 'expired',
+        state: 'liable',
+        reservationId: reservation.id,
+        expiredAt: reservation.expiresAt,
+      };
+    }
+    if (reservation.actualByDimension === undefined || reservation.tombstoneExpiresAt === undefined) {
+      throw new UsageStateError('Settled vector reservation is missing reconciliation state');
+    }
+    return {
+      status: 'settled',
+      reservationId: reservation.id,
+      reservedByDimension: reservation.dimensions.map(dimension => ({
+        key: dimension.key,
+        reservedUnits: dimension.reservedUnits,
+      })),
+      actualByDimension: reservation.actualByDimension.map(item => ({ ...item })),
       tombstoneExpiresAt: reservation.tombstoneExpiresAt,
     };
   }
@@ -1890,15 +2070,23 @@ function internalReservationBudgetKeys(reservation: InternalReservation): string
 }
 
 function validateVectorGrowthInput(input: VectorGrowReservationInput): void {
-  if (typeof input.reservationId !== 'string' || input.reservationId.length === 0) {
-    throw new RangeError('reservationId must be a non-empty string');
-  }
-  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
-    throw new RangeError('incrementId must be a non-empty string');
-  }
-  if (typeof input.expectedGrowthCursor !== 'string' || input.expectedGrowthCursor.length === 0) {
-    throw new RangeError('expectedGrowthCursor must be a non-empty string');
-  }
+  assertUsageIdentifier(input.reservationId, 'reservationId');
+  assertUsageIdentifier(input.incrementId, 'incrementId');
+  assertUsageIdentifier(input.expectedGrowthCursor, 'expectedGrowthCursor');
+}
+
+
+function sameVectorReconciliationTopology(
+  reserved: readonly VectorReservationDimension[],
+  expected: readonly UsageDimension[],
+): boolean {
+  return reserved.length === expected.length && reserved.every((dimension, index) => {
+    const candidate = expected[index];
+    return candidate !== undefined &&
+      dimension.key === candidate.key &&
+      dimension.reservedUnits === candidate.units &&
+      sameBudgetKeys(dimension.budgetKeys, candidate.budgets);
+  });
 }
 
 function sameVectorTopology(
@@ -2427,8 +2615,7 @@ function assertPositiveStoreInteger(value: unknown, name: string): asserts value
 }
 
 function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
-  if (!Array.isArray(budgets)) throw new TypeError('budgets must be an array');
-  if (budgets.length === 0) throw new RangeError('budgets must contain at least one budget');
+  validateUsageBudgetEnvelope(budgets);
   const normalized = budgets.map(budget => {
     if (budget === null || typeof budget !== 'object' || Array.isArray(budget)) {
       throw new TypeError('budget must be an object');
@@ -2449,28 +2636,9 @@ function canonicalizeBudgets(budgets: readonly Budget[]): Budget[] {
 }
 
 function validateRequestIdentity(request: UsageRequest): void {
-  if (request === null || typeof request !== 'object' || Array.isArray(request)) {
-    throw new RangeError('request must be an object');
-  }
-  if (request.principal === null || typeof request.principal !== 'object' || Array.isArray(request.principal)) {
-    throw new RangeError('principal must be an object');
-  }
-  if (typeof request.operationId !== 'string' || request.operationId.length === 0) {
-    throw new RangeError('operationId must be a non-empty string');
-  }
-  if (typeof request.principal.id !== 'string' || request.principal.id.length === 0) {
-    throw new RangeError('principal.id must be a non-empty string');
-  }
-  if (typeof request.tool !== 'string' || request.tool.length === 0) {
-    throw new RangeError('tool must be a non-empty string');
-  }
-  if (request.principal.tenantId !== undefined && typeof request.principal.tenantId !== 'string') {
-    throw new RangeError('principal.tenantId must be a string when present');
-  }
-  if (request.principal.plan !== undefined && typeof request.principal.plan !== 'string') {
-    throw new RangeError('principal.plan must be a string when present');
-  }
+  validateUsageRequestEnvelope(request);
 }
+
 
 function cloneReservationRecord(reservation: ReservationRecord): ReservationRecord {
   if (typeof reservation.id !== 'string' || reservation.id.length === 0) {
@@ -2529,10 +2697,7 @@ function isVectorUsageStore(store: UsageStore): store is VectorUsageStore {
 }
 
 function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): UsageDimension[] {
-  if (!Array.isArray(dimensions)) throw new TypeError('dimensions must be an array');
-  if (dimensions.length === 0) {
-    throw new RangeError('dimensions must contain at least one dimension');
-  }
+  validateUsageVectorEnvelope(dimensions);
   const normalized = dimensions.map(dimension => {
     if (dimension === null || typeof dimension !== 'object' || Array.isArray(dimension)) {
       throw new TypeError('dimension must be an object');
@@ -2558,9 +2723,7 @@ function canonicalizeUsageDimensions(dimensions: readonly UsageDimension[]): Usa
 function canonicalizeVectorGrowthDimensions(
   dimensions: readonly UsageDimensionGrowth[],
 ): UsageDimensionGrowth[] {
-  if (dimensions.length === 0) {
-    throw new RangeError('dimensions must contain at least one dimension');
-  }
+  validateUsageVectorGrowthEnvelope(dimensions);
   const normalized = dimensions.map(dimension => {
     if (typeof dimension.key !== 'string' || dimension.key.length === 0) {
       throw new RangeError('dimension.key must be a non-empty string');
@@ -2774,15 +2937,9 @@ function sameGrowthRequest(
 }
 
 function validateGrowthInput(input: GrowReservationInput): void {
-  if (typeof input.reservationId !== 'string' || input.reservationId.length === 0) {
-    throw new RangeError('reservationId must be a non-empty string');
-  }
-  if (typeof input.incrementId !== 'string' || input.incrementId.length === 0) {
-    throw new RangeError('incrementId must be a non-empty string');
-  }
-  if (typeof input.expectedGrowthCursor !== 'string' || input.expectedGrowthCursor.length === 0) {
-    throw new RangeError('expectedGrowthCursor must be a non-empty string');
-  }
+  assertUsageIdentifier(input.reservationId, 'reservationId');
+  assertUsageIdentifier(input.incrementId, 'incrementId');
+  assertUsageIdentifier(input.expectedGrowthCursor, 'expectedGrowthCursor');
   assertPositiveInteger(input.additionalUnits, 'additionalUnits');
 }
 
