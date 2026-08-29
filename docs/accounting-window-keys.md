@@ -41,6 +41,26 @@ const key = daily.key({ scope: 'tenant', id: 'acme', now: Date.now() });
 
 The date is derived in the configured timezone, including DST/calendar boundaries supported by the host ICU implementation.
 
+## Matching reset/window metadata
+
+When the client UX needs a known reset boundary, use `window()` rather than reconstructing the timezone math separately:
+
+```ts
+const window = daily.window({
+  scope: 'tenant',
+  id: 'acme',
+  now: Date.now(),
+});
+
+window.key;      // exact accounting key used for this calendar window
+window.startsAt; // inclusive epoch milliseconds
+window.endsAt;   // exclusive epoch milliseconds / next reset boundary
+```
+
+`key()` and `window()` share the same ICU timezone/calendar identity. This keeps the budget key and displayed reset boundary aligned across DST, month-end, and year-end transitions. `window()` is still non-authoritative metadata: the Store does not watch `endsAt`, reset counters in place, or infer a reset for custom budget keys.
+
+For a safe client-facing scalar projection, combine an explicitly selected authoritative remaining value with `projectScopedQuotaWindow(limit, remaining, window.endsAt)` from `mcp-usage-control/operational`. Do not collapse unrelated multi-budget/vector balances into one synthetic quota. An HTTP gateway may derive `Retry-After` only when it actually has a known `endsAt`; HTTP headers themselves remain outside core.
+
 ## Injectable clock
 
 Use a trusted clock when one call site should share deterministic time without passing `now` every time:

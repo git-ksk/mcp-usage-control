@@ -5,7 +5,7 @@ export type WindowedBudgetKeyConfig = Readonly<{
   period: AccountingWindowPeriod;
   timeZone: string;
   namespace: string;
-  /** Optional trusted clock. `key({ now })` overrides it for deterministic tests/calls. */
+  /** Optional trusted clock. `key({ now })` / `window({ now })` override it. */
   clock?: () => AccountingWindowInstant;
 }>;
 
@@ -15,9 +15,22 @@ export type WindowedBudgetKeyInput = Readonly<{
   now?: AccountingWindowInstant;
 }>;
 
+export type AccountingWindowProjection = Readonly<{
+  key: string;
+  /** Inclusive epoch-millisecond start of the selected calendar window. */
+  startsAt: number;
+  /** Exclusive epoch-millisecond end; this is the next reset boundary for this window. */
+  endsAt: number;
+}>;
+
 export type WindowedBudgetKey = Readonly<{
   key(input: WindowedBudgetKeyInput): string;
+  /** Derive the exact key and matching calendar boundary from one trusted calculation. */
+  window(input: WindowedBudgetKeyInput): AccountingWindowProjection;
 }>;
+
+const DAY_SEARCH_SPAN_MS = 3 * 24 * 60 * 60 * 1000;
+const MONTH_SEARCH_SPAN_MS = 40 * 24 * 60 * 60 * 1000;
 
 /**
  * Create a pure calendar-window budget-key helper.
@@ -29,7 +42,12 @@ export type WindowedBudgetKey = Readonly<{
  */
 export function createWindowedBudgetKey(config: WindowedBudgetKeyConfig): WindowedBudgetKey {
   assertPlainRecord(config, 'config');
-  assertExactKeys(config, ['period', 'timeZone', 'namespace', 'clock'], ['period', 'timeZone', 'namespace'], 'config');
+  assertExactKeys(
+    config,
+    ['period', 'timeZone', 'namespace', 'clock'],
+    ['period', 'timeZone', 'namespace'],
+    'config',
+  );
 
   if (config.period !== 'calendar-day' && config.period !== 'calendar-month') {
     throw new TypeError('config.period must be "calendar-day" or "calendar-month"');
@@ -59,30 +77,86 @@ export function createWindowedBudgetKey(config: WindowedBudgetKeyConfig): Window
     throw new RangeError(`config.timeZone is not supported: ${JSON.stringify(timeZone)}`);
   }
 
-  return Object.freeze({
-    key(input: WindowedBudgetKeyInput): string {
-      assertPlainRecord(input, 'input');
-      assertExactKeys(input, ['scope', 'id', 'now'], ['scope', 'id'], 'input');
-      assertIdentityString(input.scope, 'input.scope');
-      assertIdentityString(input.id, 'input.id');
+  function resolve(input: WindowedBudgetKeyInput): { timestamp: number; key: string; windowId: string } {
+    assertPlainRecord(input, 'input');
+    assertExactKeys(input, ['scope', 'id', 'now'], ['scope', 'id'], 'input');
+    assertIdentityString(input.scope, 'input.scope');
+    assertIdentityString(input.id, 'input.id');
 
-      const instant = input.now ?? clock?.();
-      if (instant === undefined) {
-        throw new TypeError('input.now is required when config.clock is not configured');
-      }
-      const date = toValidDate(instant, input.now === undefined ? 'config.clock result' : 'input.now');
-      const windowId = formatWindowId(formatter, date, period);
-
-      return [
+    const instant = input.now ?? clock?.();
+    if (instant === undefined) {
+      throw new TypeError('input.now is required when config.clock is not configured');
+    }
+    const date = toValidDate(instant, input.now === undefined ? 'config.clock result' : 'input.now');
+    const windowId = formatWindowId(formatter, date, period);
+    return {
+      timestamp: date.getTime(),
+      windowId,
+      key: [
         namespace,
         periodToken,
         `tz=${timeZoneSegment}`,
         encodeIdentitySegment(input.scope, 'input.scope'),
         encodeIdentitySegment(input.id, 'input.id'),
         windowId,
-      ].join(':');
+      ].join(':'),
+    };
+  }
+
+  return Object.freeze({
+    key(input: WindowedBudgetKeyInput): string {
+      return resolve(input).key;
+    },
+    window(input: WindowedBudgetKeyInput): AccountingWindowProjection {
+      const resolved = resolve(input);
+      const searchSpanMs = period === 'calendar-day' ? DAY_SEARCH_SPAN_MS : MONTH_SEARCH_SPAN_MS;
+      return {
+        key: resolved.key,
+        startsAt: findWindowBoundary(formatter, period, resolved.windowId, resolved.timestamp, -1, searchSpanMs),
+        endsAt: findWindowBoundary(formatter, period, resolved.windowId, resolved.timestamp, 1, searchSpanMs),
+      };
     },
   });
+}
+
+function findWindowBoundary(
+  formatter: Intl.DateTimeFormat,
+  period: AccountingWindowPeriod,
+  currentWindowId: string,
+  timestamp: number,
+  direction: -1 | 1,
+  searchSpanMs: number,
+): number {
+  const outside = timestamp + direction * searchSpanMs;
+  const outsideDate = new Date(outside);
+  if (!Number.isFinite(outsideDate.getTime())) {
+    throw new RangeError('accounting window boundary is outside the supported Date range');
+  }
+  if (formatWindowId(formatter, outsideDate, period) === currentWindowId) {
+    throw new RangeError('unable to bracket accounting window boundary');
+  }
+
+  let low: number;
+  let high: number;
+  if (direction < 0) {
+    low = outside;
+    high = timestamp;
+    while (low + 1 < high) {
+      const mid = low + Math.floor((high - low) / 2);
+      if (formatWindowId(formatter, new Date(mid), period) === currentWindowId) high = mid;
+      else low = mid;
+    }
+    return high;
+  }
+
+  low = timestamp;
+  high = outside;
+  while (low + 1 < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (formatWindowId(formatter, new Date(mid), period) === currentWindowId) low = mid;
+    else high = mid;
+  }
+  return high;
 }
 
 function formatWindowId(

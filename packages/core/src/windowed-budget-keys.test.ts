@@ -51,6 +51,81 @@ describe('windowed budget keys', () => {
       .toBe('credits:month:tz=UTC:user:42:2026-09');
   });
 
+
+  it('projects matching daily boundaries across DST spring-forward and fall-back days', () => {
+    const daily = createWindowedBudgetKey({
+      period: 'calendar-day',
+      timeZone: 'America/New_York',
+      namespace: 'requests',
+    });
+
+    const spring = daily.window({
+      scope: 'user',
+      id: '42',
+      now: Date.parse('2026-03-08T12:00:00Z'),
+    });
+    expect(spring).toEqual({
+      key: 'requests:day:tz=America%2FNew_York:user:42:2026-03-08',
+      startsAt: Date.parse('2026-03-08T05:00:00.000Z'),
+      endsAt: Date.parse('2026-03-09T04:00:00.000Z'),
+    });
+    expect(spring.endsAt - spring.startsAt).toBe(23 * 60 * 60 * 1000);
+
+    const fall = daily.window({
+      scope: 'user',
+      id: '42',
+      now: Date.parse('2026-11-01T12:00:00Z'),
+    });
+    expect(fall).toEqual({
+      key: 'requests:day:tz=America%2FNew_York:user:42:2026-11-01',
+      startsAt: Date.parse('2026-11-01T04:00:00.000Z'),
+      endsAt: Date.parse('2026-11-02T05:00:00.000Z'),
+    });
+    expect(fall.endsAt - fall.startsAt).toBe(25 * 60 * 60 * 1000);
+  });
+
+  it('projects month/year rollover boundaries from the same key calculation', () => {
+    const monthly = createWindowedBudgetKey({
+      period: 'calendar-month',
+      timeZone: 'Asia/Tokyo',
+      namespace: 'credits',
+    });
+
+    expect(monthly.window({
+      scope: 'tenant',
+      id: 'acme',
+      now: Date.parse('2026-12-15T00:00:00Z'),
+    })).toEqual({
+      key: 'credits:month:tz=Asia%2FTokyo:tenant:acme:2026-12',
+      startsAt: Date.parse('2026-11-30T15:00:00.000Z'),
+      endsAt: Date.parse('2026-12-31T15:00:00.000Z'),
+    });
+  });
+
+  it('uses the same explicit-now precedence for key and window projection', () => {
+    const monthly = createWindowedBudgetKey({
+      period: 'calendar-month',
+      timeZone: 'UTC',
+      namespace: 'credits',
+      clock: () => Date.parse('2026-08-15T12:00:00Z'),
+    });
+
+    expect(monthly.window({ scope: 'user', id: '42' })).toMatchObject({
+      key: 'credits:month:tz=UTC:user:42:2026-08',
+      startsAt: Date.parse('2026-08-01T00:00:00Z'),
+      endsAt: Date.parse('2026-09-01T00:00:00Z'),
+    });
+    expect(monthly.window({
+      scope: 'user',
+      id: '42',
+      now: Date.parse('2026-09-15T12:00:00Z'),
+    })).toMatchObject({
+      key: 'credits:month:tz=UTC:user:42:2026-09',
+      startsAt: Date.parse('2026-09-01T00:00:00Z'),
+      endsAt: Date.parse('2026-10-01T00:00:00Z'),
+    });
+  });
+
   it('encodes namespace, scope, and id so delimiters cannot collide', () => {
     const monthly = createWindowedBudgetKey({
       period: 'calendar-month',

@@ -122,7 +122,7 @@ For a complete Free/Plus monthly-credit composition using this helper, see [Subs
 
 ### `createWindowedBudgetKey()`
 
-For common calendar-day/month budget identities, use `createWindowedBudgetKey({ period, timeZone, namespace, clock? })`. `key({ scope, id, now? })` derives a deterministic encoded key. The configured timezone literal is part of accounting identity; changing timezone/namespace/period/scope format intentionally selects a different key rather than silently changing rollover semantics on existing state. See [Accounting-window budget keys](accounting-window-keys.md).
+For common calendar-day/month budget identities, use `createWindowedBudgetKey({ period, timeZone, namespace, clock? })`. `key({ scope, id, now? })` derives a deterministic encoded key. `window({ scope, id, now? })` derives that same key together with the inclusive `startsAt` and exclusive `endsAt` boundary from the same timezone/calendar calculation. `endsAt` may be surfaced as a known next-reset instant, but it is non-authoritative UX metadata and is never inferred for arbitrary application-defined keys. The configured timezone literal is part of accounting identity; changing timezone/namespace/period/scope format intentionally selects a different key rather than silently changing rollover semantics on existing state. See [Accounting-window budget keys](accounting-window-keys.md).
 
 ### `UsageStore`
 

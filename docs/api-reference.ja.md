@@ -122,7 +122,7 @@ Free / Plus月次creditsの完全なcomposition例は [サブスク型MCP credit
 
 ### `createWindowedBudgetKey()`
 
-一般的な日次/月次budget identityには `createWindowedBudgetKey({ period, timeZone, namespace, clock? })` を使えます。`key({ scope, id, now? })` でdeterministicかつcomponent-safeなkeyを作ります。設定したtimezone文字列自体もaccounting identityへ含まれるため、timezone / namespace / period / scope形式を変えると既存stateのrollover semanticsを黙って変えるのではなく、意図的に別keyを選びます。詳しくは[利用枠の期間を表すbudget key](accounting-window-keys.ja.md)を参照してください。
+一般的な日次/月次budget identityには `createWindowedBudgetKey({ period, timeZone, namespace, clock? })` を使えます。`key({ scope, id, now? })` でdeterministicかつcomponent-safeなkeyを作ります。`window({ scope, id, now? })` は同じtimezone/calendar計算から、そのkeyとinclusiveな `startsAt` / exclusiveな `endsAt` を一緒に返します。`endsAt` はknown next-resetとしてclient UXへ使えますが、non-authoritative metadataであり、任意のapplication-defined keyからresetを推測することはありません。設定したtimezone文字列自体もaccounting identityへ含まれるため、timezone / namespace / period / scope形式を変えると既存stateのrollover semanticsを黙って変えるのではなく、意図的に別keyを選びます。詳しくは[利用枠の期間を表すbudget key](accounting-window-keys.ja.md)を参照してください。
 
 ### `UsageStore`
 

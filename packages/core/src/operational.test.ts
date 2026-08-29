@@ -6,6 +6,7 @@ import {
   UsageOperationalMonitor,
   createUsageRuntimeIdentity,
   projectScopedQuota,
+  projectScopedQuotaWindow,
 } from './operational.js';
 import { normalizeSettlementOutcome } from './settlement-outcomes.js';
 
@@ -43,6 +44,15 @@ describe('operational snapshot helpers', () => {
     });
     expect(projectScopedQuota(0, 0)).toMatchObject({ exhausted: true, utilization: 1 });
     expect(() => projectScopedQuota(2, 3)).toThrow(RangeError);
+    expect(projectScopedQuotaWindow(10, 0, Date.parse('2026-09-01T00:00:00Z'))).toEqual({
+      limit: 10,
+      remaining: 0,
+      used: 10,
+      exhausted: true,
+      utilization: 1,
+      resetsAt: Date.parse('2026-09-01T00:00:00Z'),
+    });
+    expect(() => projectScopedQuotaWindow(10, 1, Number.NaN)).toThrow(RangeError);
   });
 
   it('collects bounded lifecycle counters without inferring quota/accounting state', () => {
