@@ -77,6 +77,7 @@ protectTool()
 - [利用枠の期間を表すbudget key](accounting-window-keys.ja.md) — timezoneを明示した日次/月次keyの作り方と、config変更をaccounting identity migrationとして扱う理由
 - [API reference](api-reference.ja.md) — current sourceのpublic API / package entry point
 - [Observability](observability.ja.md) — lifecycle event、privacy、metric cardinality、delivery semantics
+- [Operational usability](operational-usability.ja.md) — v0.10のbounded health snapshot、canonical settlement outcome、threshold / exhaustion helper
 - [Roadmap](roadmap.ja.md) — current priorityとpost-v1 boundary
 - [v1.0 readiness review](v1-readiness.ja.md) — production-readiness監査、blocker分類、stable / deferred境界、release時の最終確認
 
