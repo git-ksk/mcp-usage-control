@@ -16,7 +16,7 @@
 
 **まだnpmへ公開していません。**
 
-`v0.12.0` がcurrent GitHub/source release baselineです。現在はrepository checkoutまたはlocal tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
+`v0.13.0` がcurrent GitHub/source release baselineです。repository checkoutまたはvalidated GitHub Release tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
 
 ```console
 git clone https://github.com/git-ksk/mcp-usage-control.git
@@ -66,7 +66,7 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-v0.13 preparation branchの5 package manifestは `0.13.0` で揃っています。**v0.12.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+5 package manifestは `0.13.0` で揃っています。**v0.13.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
 **現在の実行順序:** v0.12がreleased baselineです。最終v1 auditで見つかった時計・renew uncertainty・historical budget cleanup・vector reserve reconciliation・input bound・shipped docs・Node/peer CIのgapを閉じる、boundedな **v0.13 v1-blocker closure** trancheを先に完了します。#6はseparate npm-publication gateのままでexplicit authorizationが必要です。
 
@@ -314,7 +314,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.12.0` がcurrent released source baselineです。working package manifestはv1-blocker closure向け `0.13.0` です。このtrancheをgreenにしてからv1.0 promotionへ進みます。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
+`v0.13.0` がcurrent released source baselineです。v1-blocker closure trancheは完了し、次はfeature追加なしのv1.0 stable promotionです。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
 
 **npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 

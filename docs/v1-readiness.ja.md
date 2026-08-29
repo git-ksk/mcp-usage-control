@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v0.12.0がcurrent GitHub/source release baselineです。** v0.13 preparation branchではpublish可能な5 package manifestを `0.13.0` に揃え、Node.js 22以上をrequireします。
+**v0.13.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.13.0` に揃い、Node.js 22以上をrequireします。
 
 packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
 
@@ -131,7 +131,7 @@ v1.0はそのhardened surfaceに対するfeature-free stable promotionのまま�
 
 ## npm distribution boundary
 
-source-release baselineは `v0.12.0` です。npm publicationは別操作で、まだ実行していません。
+source-release baselineは `v0.13.0` です。npm publicationは別操作で、まだ実行していません。
 
 #6はfirst publicationを実際に希望し、**separate explicit authorization** を行い、package ownership / availability、provenance、registry metadata、package content、clean-consumer installをverifyするまでopenのままです。
 

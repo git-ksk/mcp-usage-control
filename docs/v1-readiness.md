@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v0.12.0 is the current GitHub/source release baseline.** The v0.13 preparation branch aligns all five publishable manifests at `0.13.0` and requires Node.js 22 or later.
+**v0.13.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `0.13.0` and require Node.js 22 or later.
 
 The packages remain **unpublished to npm**. First registry publication is separately tracked by #6 and requires explicit authorization independent from source releases.
 
@@ -131,7 +131,7 @@ v1.0 remains a feature-free stable promotion over that hardened surface.
 
 ## npm distribution boundary
 
-The source-release baseline is `v0.12.0`. npm publication is a separate operation and has not occurred.
+The source-release baseline is `v0.13.0`. npm publication is a separate operation and has not occurred.
 
 Issue #6 remains open until first publication is actually desired, **separately explicitly authorized**, completed, and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
 
