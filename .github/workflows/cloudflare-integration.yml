@@ -2,22 +2,58 @@ name: Cloudflare Integration
 
 on:
   pull_request:
-    paths:
-      - 'packages/cloudflare/**'
-      - 'packages/core/**'
-      - '.github/workflows/cloudflare-integration.yml'
   push:
     branches: [main]
-    paths:
-      - 'packages/cloudflare/**'
-      - 'packages/core/**'
-      - '.github/workflows/cloudflare-integration.yml'
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_integration: ${{ steps.scope.outputs.run_integration }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Detect Cloudflare-relevant changes
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$BEFORE_SHA"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo "run_integration=true" >> "$GITHUB_OUTPUT"
+            echo "No usable base SHA; running Cloudflare integration conservatively."
+            exit 0
+          fi
+
+          mapfile -t changed < <(git diff --name-only "$base" "$GITHUB_SHA")
+          run_integration=false
+          for path in "${changed[@]}"; do
+            case "$path" in
+              packages/cloudflare/*|packages/cloudflare/**|packages/core/*|packages/core/**|.github/workflows/cloudflare-integration.yml)
+                run_integration=true
+                break
+                ;;
+            esac
+          done
+          echo "run_integration=$run_integration" >> "$GITHUB_OUTPUT"
+
   workerd:
+    needs: changes
+    if: needs.changes.outputs.run_integration == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -62,3 +98,24 @@ jobs:
           node packages/cloudflare/test/reconciliation.mjs
           node packages/cloudflare/test/maintenance.mjs
           node packages/cloudflare/test/authorization.mjs
+
+  cloudflare-safety:
+    name: cloudflare-safety
+    if: always()
+    needs: [changes, workerd]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require integration when applicable
+        env:
+          RUN_INTEGRATION: ${{ needs.changes.outputs.run_integration }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          WORKERD_RESULT: ${{ needs.workerd.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CHANGES_RESULT" = "success"
+          if [[ "$RUN_INTEGRATION" == "true" ]]; then
+            test "$WORKERD_RESULT" = "success"
+          else
+            test "$WORKERD_RESULT" = "skipped"
+          fi
