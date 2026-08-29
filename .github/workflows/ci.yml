@@ -13,11 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run_full: ${{ steps.scope.outputs.run_full }}
+      run_cloudflare: ${{ steps.scope.outputs.run_cloudflare }}
+      run_firestore: ${{ steps.scope.outputs.run_firestore }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Detect docs-only changes
+      - name: Classify release-safety scope
         id: scope
         shell: bash
         env:
@@ -35,43 +37,59 @@ jobs:
 
           if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
             echo "run_full=true" >> "$GITHUB_OUTPUT"
-            echo "No usable base SHA; running full CI conservatively."
+            echo "run_cloudflare=true" >> "$GITHUB_OUTPUT"
+            echo "run_firestore=true" >> "$GITHUB_OUTPUT"
+            echo "No usable base SHA; running all release-safety evidence conservatively."
             exit 0
           fi
 
           mapfile -t changed < <(git diff --name-only "$base" "$GITHUB_SHA")
-
           if (( ${#changed[@]} == 0 )); then
             echo "run_full=true" >> "$GITHUB_OUTPUT"
-            echo "No changed paths detected; running full CI conservatively."
+            echo "run_cloudflare=true" >> "$GITHUB_OUTPUT"
+            echo "run_firestore=true" >> "$GITHUB_OUTPUT"
+            echo "No changed paths detected; running all release-safety evidence conservatively."
             exit 0
           fi
 
           run_full=false
+          run_cloudflare=false
+          run_firestore=false
+
           for path in "${changed[@]}"; do
             case "$path" in
               docs/*|*.md)
                 ;;
               *)
                 run_full=true
-                break
+                ;;
+            esac
+
+            case "$path" in
+              packages/core/*|packages/core/**|packages/cloudflare/*|packages/cloudflare/**|.github/workflows/cloudflare-integration.yml|.github/workflows/ci.yml)
+                run_cloudflare=true
+                ;;
+            esac
+
+            case "$path" in
+              packages/core/*|packages/core/**|packages/firestore/*|packages/firestore/**|.github/workflows/firestore-integration.yml|.github/workflows/ci.yml)
+                run_firestore=true
                 ;;
             esac
           done
 
           echo "run_full=$run_full" >> "$GITHUB_OUTPUT"
+          echo "run_cloudflare=$run_cloudflare" >> "$GITHUB_OUTPUT"
+          echo "run_firestore=$run_firestore" >> "$GITHUB_OUTPUT"
           printf 'Changed paths:\n'
           printf '  %s\n' "${changed[@]}"
+          echo "release-safety scope: full=$run_full cloudflare=$run_cloudflare firestore=$run_firestore"
 
-          if [[ "$run_full" == "true" ]]; then
-            echo "At least one non-documentation path changed; running full CI."
-          else
-            echo "Documentation-only change; using the lightweight required-check path."
-          fi
-
-  test:
+  node:
+    name: node (${{ matrix.node }})
     needs: changes
     strategy:
+      fail-fast: false
       matrix:
         node: [20, 22, 24]
     runs-on: ubuntu-latest
@@ -101,7 +119,7 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.node }}" == "20" ]]; then
-            echo "::warning::Node 20 is EOL and is compatibility-only evidence. v1 supported runtime starts at Node 22."
+            echo "::warning::Node 20 is EOL and compatibility-only evidence. v1 supported runtime starts at Node 22."
           else
             echo "Node ${{ matrix.node }} is supported v1 runtime evidence."
           fi
@@ -319,3 +337,155 @@ jobs:
       - name: Stop Redis
         if: always() && needs.changes.outputs.run_full == 'true'
         run: docker rm --force muc-redis >/dev/null 2>&1 || true
+
+  cloudflare:
+    needs: changes
+    if: needs.changes.outputs.run_cloudflare == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Run Durable Objects integration against local workerd
+        shell: bash
+        env:
+          MCP_USAGE_CLOUDFLARE_TOKEN: local-integration-token
+          MCP_USAGE_CLOUDFLARE_OLD_TOKEN: rotated-out-local-token
+        run: |
+          set -euo pipefail
+          pnpm dlx wrangler@4.114.0 dev --local \
+            --config packages/cloudflare/wrangler.test.jsonc \
+            --port 8799 >/tmp/muc-cloudflare-wrangler.log 2>&1 &
+          WRANGLER_PID=$!
+          trap 'kill "$WRANGLER_PID" 2>/dev/null || true; cat /tmp/muc-cloudflare-wrangler.log || true' EXIT
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -sS http://127.0.0.1:8799/health >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo 'local workerd did not become ready' >&2
+            exit 1
+          fi
+
+          node packages/cloudflare/test/integration.mjs
+          node packages/cloudflare/test/conformance.mjs
+          node packages/cloudflare/test/rotation.mjs
+          node packages/cloudflare/test/reconciliation.mjs
+          node packages/cloudflare/test/maintenance.mjs
+          node packages/cloudflare/test/authorization.mjs
+
+  firestore:
+    needs: changes
+    if: needs.changes.outputs.run_firestore == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GCLOUD_PROJECT: demo-muc-firestore
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter mcp-usage-control build
+      - run: pnpm --filter mcp-usage-control-firestore build
+      - name: Type-check server Firestore client compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          compat_file='packages/firestore/client-compat.mts'
+          trap 'rm -f "$compat_file"' EXIT
+          cat > "$compat_file" <<'TS'
+          import type { Firestore } from '@google-cloud/firestore';
+          import { FirestoreUsageStore } from './dist/index.js';
+
+          declare const firestore: Firestore;
+          new FirestoreUsageStore(firestore);
+          TS
+          pnpm exec tsc \
+            --noEmit \
+            --strict \
+            --skipLibCheck \
+            --target ES2022 \
+            --module NodeNext \
+            --moduleResolution NodeNext \
+            --types node \
+            "$compat_file"
+      - name: Run Firestore adapter against Local Emulator Suite
+        shell: bash
+        run: >-
+          pnpm dlx firebase-tools@15.24.0
+          emulators:exec
+          --only firestore
+          --project demo-muc-firestore
+          "pnpm --filter mcp-usage-control-firestore test:emulator"
+
+  legacy-required-context:
+    name: test (20)
+    if: always()
+    needs: [changes, node]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Preserve the existing required compatibility context
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          NODE_RESULT: ${{ needs.node.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CHANGES_RESULT" = "success"
+          test "$NODE_RESULT" = "success"
+          echo "Legacy required context retained; supported v1 runtime evidence is Node 22/24."
+
+  release-safety:
+    name: test (22)
+    if: always()
+    needs: [changes, node, cloudflare, firestore]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all applicable release-safety evidence
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          NODE_RESULT: ${{ needs.node.result }}
+          RUN_CLOUDFLARE: ${{ needs.changes.outputs.run_cloudflare }}
+          CLOUDFLARE_RESULT: ${{ needs.cloudflare.result }}
+          RUN_FIRESTORE: ${{ needs.changes.outputs.run_firestore }}
+          FIRESTORE_RESULT: ${{ needs.firestore.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CHANGES_RESULT" = "success"
+          test "$NODE_RESULT" = "success"
+
+          if [[ "$RUN_CLOUDFLARE" == "true" ]]; then
+            test "$CLOUDFLARE_RESULT" = "success"
+          else
+            test "$CLOUDFLARE_RESULT" = "skipped"
+          fi
+
+          if [[ "$RUN_FIRESTORE" == "true" ]]; then
+            test "$FIRESTORE_RESULT" = "success"
+          else
+            test "$FIRESTORE_RESULT" = "skipped"
+          fi
+
+          echo "Aggregate release-safety evidence satisfied."
