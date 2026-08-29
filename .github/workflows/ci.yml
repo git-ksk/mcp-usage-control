@@ -85,9 +85,35 @@ jobs:
           printf '  %s\n' "${changed[@]}"
           echo "release-safety scope: full=$run_full cloudflare=$run_cloudflare firestore=$run_firestore"
 
+  docs-only:
+    name: docs-only
+    needs: changes
+    if: needs.changes.outputs.run_full != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+      - name: Verify documentation diff hygiene
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$BEFORE_SHA"
+          fi
+          git diff --check "$base" "$GITHUB_SHA"
+          echo "Documentation-only diff hygiene satisfied; runtime tests are not required."
+
   node:
     name: node (${{ matrix.node }})
     needs: changes
+    if: needs.changes.outputs.run_full == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -96,33 +122,23 @@ jobs:
     env:
       REDIS_URL: redis://127.0.0.1:6379
     steps:
-      - name: Documentation-only fast path
-        if: needs.changes.outputs.run_full != 'true'
-        run: echo "Documentation-only change; heavy Node/Redis/package checks are not required."
-
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        if: needs.changes.outputs.run_full == 'true'
 
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-        if: needs.changes.outputs.run_full == 'true'
         with:
           version: 10.15.0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
-        if: needs.changes.outputs.run_full == 'true'
         with:
           node-version: ${{ matrix.node }}
           package-manager-cache: false
 
       - name: Classify Node runtime evidence
-        if: needs.changes.outputs.run_full == 'true'
         run: echo "Node ${{ matrix.node }} is supported v1 runtime evidence."
 
       - run: pnpm install --frozen-lockfile
-        if: needs.changes.outputs.run_full == 'true'
 
       - name: Start Redis
-        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -137,10 +153,8 @@ jobs:
           exit 1
 
       - run: pnpm check
-        if: needs.changes.outputs.run_full == 'true'
 
       - name: Verify public package versions are aligned
-        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -151,7 +165,6 @@ jobs:
           done
 
       - name: Verify public package Node support floor
-        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -161,7 +174,6 @@ jobs:
           done
 
       - name: Pack public packages with npm
-        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -174,7 +186,6 @@ jobs:
           (cd packages/firestore && npm pack --pack-destination /tmp/muc-packs)
 
       - name: Inspect shipped README hygiene
-        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -197,7 +208,6 @@ jobs:
             packages/firestore/package.json
 
       - name: Verify package contents
-        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -261,7 +271,6 @@ jobs:
           grep -qx 'package/dist/mcp-flow.d.ts' <<<"$redis_listing"
 
       - name: Install tarballs in a clean consumer project
-        if: needs.changes.outputs.run_full == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -348,11 +357,12 @@ jobs:
           NODE
 
       - name: Stop Redis
-        if: always() && needs.changes.outputs.run_full == 'true'
+        if: always()
         run: docker rm --force muc-redis >/dev/null 2>&1 || true
 
   dependency-review:
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.run_full == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Reject newly introduced high/critical vulnerable dependencies
@@ -556,12 +566,13 @@ jobs:
   release-safety:
     name: test (22)
     if: always()
-    needs: [changes, node, dependency-review, peer-compat, cloudflare, firestore]
+    needs: [changes, docs-only, node, dependency-review, peer-compat, cloudflare, firestore]
     runs-on: ubuntu-latest
     steps:
       - name: Require all applicable release-safety evidence
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
+          DOCS_ONLY_RESULT: ${{ needs.docs-only.result }}
           NODE_RESULT: ${{ needs.node.result }}
           EVENT_NAME: ${{ github.event_name }}
           DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
@@ -575,17 +586,19 @@ jobs:
         run: |
           set -euo pipefail
           test "$CHANGES_RESULT" = "success"
-          test "$NODE_RESULT" = "success"
-
-          if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            test "$DEPENDENCY_REVIEW_RESULT" = "success"
-          else
-            test "$DEPENDENCY_REVIEW_RESULT" = "skipped"
-          fi
-
           if [[ "$RUN_FULL" == "true" ]]; then
+            test "$DOCS_ONLY_RESULT" = "skipped"
+            test "$NODE_RESULT" = "success"
+            if [[ "$EVENT_NAME" == "pull_request" ]]; then
+              test "$DEPENDENCY_REVIEW_RESULT" = "success"
+            else
+              test "$DEPENDENCY_REVIEW_RESULT" = "skipped"
+            fi
             test "$PEER_COMPAT_RESULT" = "success"
           else
+            test "$DOCS_ONLY_RESULT" = "success"
+            test "$NODE_RESULT" = "skipped"
+            test "$DEPENDENCY_REVIEW_RESULT" = "skipped"
             test "$PEER_COMPAT_RESULT" = "skipped"
           fi
 
