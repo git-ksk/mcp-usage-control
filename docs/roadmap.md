@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.12.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.12.0`, require Node.js 22+, and remain unpublished to npm.
+**v0.12.0 is the current GitHub/source release baseline.** The v0.13 preparation branch aligns all five publishable manifests at `0.13.0`, requires Node.js 22+, and remains unpublished to npm.
 
 First npm publication is a separately authorized operation tracked by #6. Source-release progress never implies registry publication.
 
@@ -24,6 +24,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.10 operational usability [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
+ -> v0.13 v1-blocker closure [IN PROGRESS]
  -> v1.0 feature-free stable promotion
 ```
 
@@ -53,6 +54,7 @@ Across every remaining release:
 | **v0.10.0** | Operational snapshot/runtime identity, canonical settlement diagnostics, scoped threshold/exhaustion helpers | Released / adopted |
 | **v0.11.0** | Pre-v1 accounting/runtime/storage/API freeze, aggregate release-safety gate, real Cloudflare rotation evidence | Released / complete |
 | **v0.12.0** | Product/operations hardening: release provenance/artifacts, supply-chain maintenance, incident runbook, competitor decisions, quota-window projection, provider benchmarks | Released / complete |
+| **v0.13.0** | Final v1-blocker closure: authoritative clocks, renewal uncertainty, safe historical cleanup, vector reconciliation, bounded inputs, shipped docs, Node/peer CI | In progress |
 
 Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
@@ -64,7 +66,7 @@ The apparent renewal failure was a test-harness race: parallel Vitest files shar
 
 ### #105 Node.js support floor — complete
 
-The v1 supported runtime floor is **Node.js 22+**. Node 22/24 are the supported evidence matrix. Node 20 is EOL and remains only as a compatibility-only protected context.
+The v1 supported runtime floor is **Node.js 22+**. Node 22/24 are the supported evidence matrix. Node 20 is EOL and is not a protected context.
 
 ### #157 Firestore growth-concurrency reliability — complete
 
@@ -119,7 +121,7 @@ See [v1 public API freeze](v1-public-api-freeze.md).
 
 The existing protected context names were preserved while strengthening their semantics.
 
-- `test (20)` remains the legacy compatibility required context and is not v1 support evidence.
+- Node 20 is retired from required CI. `test (22)` is the protected aggregate gate and Node 22/24 are the supported runtime evidence.
 - `test (22)` is now the aggregate release-safety required context.
 - applicable Node/Redis/package/tarball/clean-consumer, Cloudflare workerd, and Firestore Emulator failures propagate into `test (22)`.
 - provider work is skipped only when the path classifier marks it non-applicable.
@@ -137,7 +139,7 @@ No genuine Workers Free-plan exhaustion/platform-overload event occurred natural
 
 The bounded **v0.12 product/operations hardening** tranche (#177-#184) is complete without redefining the frozen accounting lifecycle or persisted Store contract. #183 stays within the additive-helper allowance, while release provenance, release artifacts, incident response, dependency maintenance, current docs, competitive decisions, and provider benchmark evidence are hardened around that frozen surface.
 
-**v1.0 remains a feature-free stable promotion over the v0.12 surface**. Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
+**v1.0 remains a stable promotion after the bounded v0.13 blocker-closure checkpoint**. Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
 
 ## v1 completion definition
 
@@ -182,7 +184,8 @@ Before v1.0:
 | #182 maintained competitive capability decisions | v0.12 | **Completed; positioning guardrail** |
 | #183 safe quota-window/reset UX projection | v0.12 | **Completed; additive non-authoritative helper** |
 | #184 provider benchmark/cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
-| #6 first npm publication | separate v0.12/v1 distribution gate | **Open; explicit authorization required** |
+| #191-#198 final v1 blocker closure | v0.13 | **In progress; no new billing model** |
+| #6 first npm publication | separate v0.13/v1 distribution gate | **Open; explicit authorization required** |
 
 ## Release policy
 

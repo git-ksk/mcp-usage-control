@@ -67,9 +67,9 @@ If you are implementing a custom store, read the **[Store implementation contrac
 
 ## CI behavior
 
-For pull requests that change only `docs/**` and Markdown (`*.md`) files, CI first classifies the change and then completes the `test (20)` / `test (22)` / `test (24)` matrix checks through a lightweight path.
+For pull requests that change only `docs/**` and Markdown (`*.md`) files, CI first classifies the change and then completes the `test (22)` / `test (24)` matrix checks through a lightweight path.
 
-That path does not start Redis, check out the repository in the matrix jobs, set up Node.js/pnpm, install dependencies, run tests, pack packages, or install the clean consumer project. If any non-documentation path such as source code, workflows, package manifests, lockfiles, or configuration changes, the full Node.js 20/22/24 CI matrix runs the same build/test/package/clean-consumer evidence. Node 22/24 are the supported v1 runtime evidence; Node 20 remains compatibility-only while its current required check context is still protected.
+That path does not start Redis, check out the repository in the matrix jobs, set up Node.js/pnpm, install dependencies, run tests, pack packages, or install the clean consumer project. If any non-documentation path such as source code, workflows, package manifests, lockfiles, or configuration changes, the full Node.js 22/24 CI matrix runs the same build/test/package/clean-consumer evidence. Node 22/24 are the supported v1 runtime evidence.
 
 ## Project policies
 

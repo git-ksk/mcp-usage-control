@@ -1,6 +1,6 @@
 # mcp-usage-control-firestore
 
-Server-side Firestore `UsageStore` adapter for [`mcp-usage-control`](../core/README.md).
+Server-side Firestore `UsageStore` adapter for [`mcp-usage-control`](https://github.com/git-ksk/mcp-usage-control/tree/main/packages/core#readme).
 
 > **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed tarball until the first registry release.
 
@@ -61,16 +61,16 @@ Important production constraints:
 
 See the public guides and reference:
 
-- [Firestore UsageStore](../../docs/firestore.md)
-- [Firestore UsageStore 日本語](../../docs/firestore.ja.md)
-- [Firestore clock-skew safety](../../docs/firestore-clock-skew.md)
-- [Firestore clock-skew safety 日本語](../../docs/firestore-clock-skew.ja.md)
-- [Firestore ambiguous acknowledgement semantics](../../docs/firestore-ack-ambiguity.md)
-- [Firestore ACK ambiguity semantics 日本語](../../docs/firestore-ack-ambiguity.ja.md)
-- [API reference](../../docs/api-reference.md)
-- [Use from source / local tarballs](../../docs/using-from-source.md)
-- [Source / local tarballから使う](../../docs/using-from-source.ja.md)
-- [Release policy](../../docs/releasing.md)
+- [Firestore UsageStore](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/firestore.md)
+- [Firestore UsageStore 日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/firestore.ja.md)
+- [Firestore clock-skew safety](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/firestore-clock-skew.md)
+- [Firestore clock-skew safety 日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/firestore-clock-skew.ja.md)
+- [Firestore ambiguous acknowledgement semantics](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/firestore-ack-ambiguity.md)
+- [Firestore ACK ambiguity semantics 日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/firestore-ack-ambiguity.ja.md)
+- [API reference](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/api-reference.md)
+- [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md)
+- [Source / local tarballから使う](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md)
+- [Release policy](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/releasing.md)
 
 ## Operation reconciliation (v0.8)
 

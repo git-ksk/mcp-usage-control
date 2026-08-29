@@ -27,6 +27,12 @@ export interface ProtectToolOptions<TArgs, TResult> {
   operationId(args: TArgs, ctx: ServerContext): MaybePromise<string>;
   /** Disable only when the application renews the lease itself. Defaults to true. */
   leaseHeartbeat?: boolean;
+  /**
+   * Best-effort notification that automatic lease renewal became acknowledgement-ambiguous,
+   * or that a later renewal confirmed the lease again. The callback is advisory only: it
+   * never changes authoritative accounting state and callback failures are ignored.
+   */
+  onLeaseRenewalState?(event: LeaseRenewalStateEvent): MaybePromise<void>;
   successUnits?(input: {
     result: TResult;
     args: TArgs;
@@ -46,6 +52,11 @@ export interface ProtectToolOptions<TArgs, TResult> {
     lease: UsageLease;
   }): MaybePromise<number>;
 }
+
+
+export type LeaseRenewalStateEvent =
+  | { status: 'uncertain'; lease: UsageLease; error: unknown }
+  | { status: 'confirmed'; lease: UsageLease };
 
 export type NoInputProtectToolOptions<TResult> = ProtectToolOptions<undefined, TResult> & {
   noInput: true;
@@ -93,9 +104,13 @@ export interface McpUsageFlowRecord {
 /**
  * Server-side suspended-flow storage.
  *
- * `consume()` MUST atomically compare `binding` and remove the flow only when it
- * matches. A mismatched caller must receive undefined without consuming the
- * legitimate flow. This one-time consume prevents concurrent retry re-entry.
+ * `consume()` MUST atomically compare `binding`, reject expired state using the
+ * store's authoritative time domain, and remove the flow only when it matches
+ * and remains valid. A mismatched or expired caller must receive undefined
+ * without consuming a legitimate live flow. A successfully returned record is
+ * authoritative proof that suspended-flow expiry passed; callers MUST NOT
+ * reinterpret that result using an unrelated application-host clock. This
+ * one-time consume prevents concurrent retry re-entry.
  */
 export interface McpUsageFlowStore {
   suspend(record: McpUsageFlowRecord): MaybePromise<void>;
@@ -278,7 +293,7 @@ export function protectTool<TArgs, TResult>(
     const { lease } = admission;
     await lease.markLiable();
 
-    const heartbeat = options.leaseHeartbeat === false ? noHeartbeat() : startLeaseHeartbeat(lease);
+    const heartbeat = options.leaseHeartbeat === false ? noHeartbeat() : startLeaseHeartbeat(lease, options.onLeaseRenewalState);
     let result: TResult;
 
     try {
@@ -408,8 +423,8 @@ export function protectMultiRoundTool<TArgs, TResult>(
       if (!suspended) {
         throw new McpUsageResumeError('MCP usage resume state was missing, expired, replayed, or mismatched');
       }
-      if (!sameBinding(suspended.binding, binding) || suspended.expiresAt <= Date.now()) {
-        throw new McpUsageResumeError('MCP usage resume state failed its server-side binding or expiry check');
+      if (!sameBinding(suspended.binding, binding)) {
+        throw new McpUsageResumeError('MCP usage resume state failed its server-side binding check');
       }
       lease = options.control.resumeLease(suspended.lease);
       operationId = lease.reservation.operationId;
@@ -426,7 +441,7 @@ export function protectMultiRoundTool<TArgs, TResult>(
       operationId,
       ...(applicationRequestState === undefined ? {} : { applicationRequestState }),
     };
-    const heartbeat = options.leaseHeartbeat === false ? noHeartbeat() : startLeaseHeartbeat(lease);
+    const heartbeat = options.leaseHeartbeat === false ? noHeartbeat() : startLeaseHeartbeat(lease, options.onLeaseRenewalState);
     let result: TResult;
 
     try {
@@ -574,12 +589,23 @@ function noHeartbeat(): LeaseHeartbeat {
   return { stop: async () => undefined };
 }
 
-function startLeaseHeartbeat(lease: UsageLease): LeaseHeartbeat {
+function startLeaseHeartbeat(
+  lease: UsageLease,
+  onState?: (event: LeaseRenewalStateEvent) => MaybePromise<void>,
+): LeaseHeartbeat {
   const intervalMs = Math.max(1, Math.floor(lease.ttlMs / 3));
   let remainingMs = intervalMs;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> | undefined;
+  let uncertain = false;
+
+  const notify = (event: LeaseRenewalStateEvent): void => {
+    if (!onState) return;
+    Promise.resolve()
+      .then(() => onState(event))
+      .catch(() => undefined);
+  };
 
   const schedule = (): void => {
     if (stopped) return;
@@ -593,8 +619,18 @@ function startLeaseHeartbeat(lease: UsageLease): LeaseHeartbeat {
       }
       inFlight = lease
         .renew()
-        .then(() => undefined)
-        .catch(() => undefined)
+        .then(() => {
+          if (uncertain) {
+            uncertain = false;
+            notify({ status: 'confirmed', lease });
+          }
+        })
+        .catch(error => {
+          if (!uncertain) {
+            uncertain = true;
+            notify({ status: 'uncertain', lease, error });
+          }
+        })
         .finally(() => {
           inFlight = undefined;
           remainingMs = intervalMs;

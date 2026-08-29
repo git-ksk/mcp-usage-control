@@ -21,7 +21,7 @@ pnpm check
 
 必要条件:
 
-- Node.js 20+
+- Node.js 22+
 - repository開発ではpnpm 10.15.x
 - Redis adapterのtest / 利用ではRedis 7
 - Cloudflare専用integration pathを実行する場合のみWrangler / workerd

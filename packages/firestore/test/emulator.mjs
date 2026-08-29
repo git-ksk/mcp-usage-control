@@ -4,6 +4,7 @@ import { Firestore } from '@google-cloud/firestore';
 import {
   assertUsageStoreConformance,
   runOperationReconciliationStoreConformance,
+  runVectorOperationReconciliationStoreConformance,
   runProgressiveUsageStoreConformance,
   runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
@@ -66,6 +67,19 @@ async function testReconciliationConformance() {
   const report = await runOperationReconciliationStoreConformance({
     createStore(scenario) {
       return storeFor(`reconcile_${scenario.replaceAll('-', '_')}`);
+    },
+    async waitForLeaseExpiry(ttlMs) {
+      await sleep(ttlMs + 120);
+    },
+    leaseTtlMs: 80,
+  });
+  assert.equal(report.passed, true, JSON.stringify(report.cases.filter(result => !result.passed)));
+}
+
+async function testVectorReconciliationConformance() {
+  const report = await runVectorOperationReconciliationStoreConformance({
+    createStore(scenario) {
+      return storeFor(`vector_reconcile_${scenario.replaceAll('-', '_')}`);
     },
     async waitForLeaseExpiry(ttlMs) {
       await sleep(ttlMs + 120);

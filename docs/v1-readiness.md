@@ -8,14 +8,14 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v0.12.0 is the current GitHub/source release baseline.** All five publishable package manifests are aligned at `0.12.0` and require Node.js 22 or later.
+**v0.12.0 is the current GitHub/source release baseline.** The v0.13 preparation branch aligns all five publishable manifests at `0.13.0` and requires Node.js 22 or later.
 
 The packages remain **unpublished to npm**. First registry publication is separately tracked by #6 and requires explicit authorization independent from source releases.
 
 The v0.11 freeze line has now resolved the accounting/reliability/runtime/storage/API/governance tranche:
 
 - #166 Redis renewed-lease reliability was traced to cross-file `FLUSHDB` interference and fixed without changing Redis runtime semantics;
-- #105 froze the supported Node.js floor at **22+**; Node 22/24 are supported evidence and Node 20 is compatibility-only;
+- #105 froze the supported Node.js floor at **22+**; #197 retires Node 20 from required CI so Node 22/24 are the only supported evidence;
 - #157 classified Firestore Emulator progressive-growth contention and added repeated diagnostic stress without adding `INVALID_ARGUMENT` to Store runtime retry;
 - #152 froze provider-backed cost-bearing work onto the existing vector reserve/liability/grow/renew/settle contract;
 - #106 froze Redis/Firestore/Cloudflare persisted-state upgrade, rollback, future-schema fail-closed, and fresh-domain reset boundaries;
@@ -27,7 +27,7 @@ The v0.11 completion tranche is closed. Issue #6 remains a separate publication 
 
 ## Verdict
 
-**The public accounting/runtime/storage/API/governance surface and the required pre-v1 production-evidence boundary are frozen strongly enough for feature-free v1 stable promotion.**
+**The accounting model remains frozen, but the final v1 audit identified a bounded v0.13 blocker-closure tranche that must be green before stable promotion.**
 
 ## Stable accounting invariants
 
@@ -115,7 +115,7 @@ Store-facing/direct lease settlement outcomes intentionally remain extensible st
 
 ### Aggregate release-safety enforcement (#160) — complete
 
-`test (22)` is the protected aggregate release-safety gate. It requires the full Node/Redis/package/tarball/clean-consumer matrix and applicable Cloudflare workerd / Firestore Emulator evidence. `test (20)` remains a compatibility-only protected context. Provider skips are accepted only when the path classifier marks them non-applicable, and docs-only changes resolve required contexts through a lightweight path without deadlock.
+`test (22)` is the protected aggregate release-safety gate. It requires Node 22/24, Redis, package/tarball/clean-consumer, peer-compatibility, and applicable Cloudflare workerd / Firestore Emulator evidence. Node 20 is no longer a required context. Provider skips are accepted only when the path classifier marks them non-applicable, and docs-only changes resolve required contexts through a lightweight path without deadlock.
 
 ### Real Cloudflare operational evidence (#24) — complete
 
@@ -139,6 +139,11 @@ A source release never implicitly authorizes registry publication.
 
 ## v1 promotion rule
 
-v1.0 should contain **no new feature or accounting model**. Promotion is a stable-label/source milestone over the hardened v0.12 surface and remains contingent on the tagged v0.12 release evidence being green. npm publication remains independently authorized under #6.
+v1.0 should introduce **no new accounting model**. The bounded v0.13 blocker-closure tranche is the final corrective checkpoint over the frozen model; stable promotion is contingent on v0.13 release evidence being green. npm publication remains independently authorized under #6.
 
 See [Roadmap](roadmap.md), [Release policy](releasing.md), [Cost-bearing operations](cost-bearing-operations.md), [Persisted-state compatibility](persisted-state-compatibility.md), [v1 public API freeze](v1-public-api-freeze.md), and provider-specific documentation for the current support boundaries.
+
+
+## v0.13 final blocker closure
+
+The final audit tracks #191-#198: authoritative multi-round flow expiry, standalone shipped docs, safe Redis/Firestore historical-budget retirement, lease-renewal uncertainty signaling, initial vector-reserve reconciliation, provider-neutral input bounds, Node 20 CI retirement, and minimum/current peer-dependency compatibility. These changes harden recovery and operations around the frozen accounting model rather than introducing a new charging model. Issue #6 remains independently authorized.

@@ -656,3 +656,76 @@ local actualUnits = tonumber(record.actualUnits)
 if not actualUnits then return { 'invalid_state' } end
 return { 'settled', tostring(reservedUnits), tostring(actualUnits), tostring(tombstoneExpiresAt), budgetHashes }
 `;
+
+export const RECONCILE_VECTOR_OPERATION_SCRIPT = String.raw`
+local reservationId = ARGV[1]
+local redisTime = redis.call('TIME')
+local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 1000)
+local raw = redis.call('HGET', KEYS[1], reservationId)
+if not raw then return { 'absent' } end
+local record = cjson.decode(raw)
+if record.schemaVersion ~= nil and record.schemaVersion ~= 1 then return { 'unsupported_schema_version' } end
+if record.mode ~= 'vector' then return { 'mode_mismatch' } end
+local state = record.state
+local expiresAt = tonumber(record.expiresAt)
+local dimensions = cjson.encode(record.dimensions or {})
+local growthCursor = record.growthCursor or ''
+if state == 'pending' or state == 'liable' then
+  if expiresAt <= now then
+    return { 'expired', state, tostring(expiresAt), dimensions, growthCursor }
+  end
+  return { 'active', state, tostring(expiresAt), dimensions, growthCursor }
+end
+if state ~= 'settled' then return { 'invalid_state' } end
+local tombstoneScore = redis.call('ZSCORE', KEYS[2], record.operationKey)
+if not tombstoneScore then return { 'invalid_state' } end
+local tombstoneExpiresAt = tonumber(tombstoneScore)
+if tombstoneExpiresAt <= now then return { 'absent' } end
+if record.outcome == 'lease_expired_after_execution_started' then
+  return { 'expired', 'liable', tostring(expiresAt), dimensions, growthCursor }
+end
+local actual = cjson.encode(record.actualByDimensions or {})
+return { 'settled', tostring(tombstoneExpiresAt), dimensions, actual }
+`;
+
+export const RETIRE_HISTORICAL_BUDGETS_SCRIPT = String.raw`
+local candidates = cjson.decode(ARGV[1])
+local maxReservations = tonumber(ARGV[2])
+local reservationCount = redis.call('HLEN', KEYS[2])
+if reservationCount > maxReservations then
+  return { 'scan_limit', tostring(reservationCount) }
+end
+local candidateSet = {}
+for _, hash in ipairs(candidates) do candidateSet[hash] = true end
+local values = redis.call('HVALS', KEYS[2])
+for _, raw in ipairs(values) do
+  local record = cjson.decode(raw)
+  if record.schemaVersion ~= nil and record.schemaVersion ~= 1 then
+    return { 'unsupported_schema_version' }
+  end
+  if record.state == 'pending' or record.state == 'liable' then
+    if record.mode == 'vector' then
+      for _, dimension in ipairs(record.dimensions or {}) do
+        for _, budgetHash in ipairs(dimension.budgetHashes or {}) do
+          if candidateSet[budgetHash] then return { 'active_reference' } end
+        end
+      end
+    else
+      for _, budgetHash in ipairs(record.budgetHashes or {}) do
+        if candidateSet[budgetHash] then return { 'active_reference' } end
+      end
+    end
+  end
+end
+local retired = 0
+local missing = 0
+for _, hash in ipairs(candidates) do
+  if redis.call('HEXISTS', KEYS[1], hash) == 1 then
+    redis.call('HDEL', KEYS[1], hash)
+    retired = retired + 1
+  else
+    missing = missing + 1
+  end
+end
+return { 'ok', tostring(retired), tostring(missing) }
+`;

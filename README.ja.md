@@ -27,7 +27,7 @@ pnpm check
 
 別projectへのinstallは [Source / local tarballから使う](docs/using-from-source.ja.md) を参照してください。
 
-要件は **Node.js 22+ / ESM**。Node.js 20はEOL済みで、supported v1 runtime contractには含めません。現在のlegacy required-check policyを移行するまでは `test (20)` をcompatibility-only evidenceとして一時的に残し、supported runtime evidenceはNode.js 22 / 24です。CIではさらにRedis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
+要件は **Node.js 22+ / ESM**。supported runtime evidenceはNode.js 22 / 24です。CIではさらにRedis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
 
 ## Core lifecycle
 
@@ -66,13 +66,13 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
-5 packageのmanifestは `0.12.0` で揃っています。**v0.12.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+v0.13 preparation branchの5 package manifestは `0.13.0` で揃っています。**v0.12.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** freeze済みv0.11 accounting surfaceの上に置くv0.12 product/operations hardening trancheは完了しました。次のsource milestoneは **feature追加なしのv1.0.0 stable promotion** です。#6はseparate npm-publication gateのままで、explicit authorizationが必要です。
+**現在の実行順序:** v0.12がreleased baselineです。最終v1 auditで見つかった時計・renew uncertainty・historical budget cleanup・vector reserve reconciliation・input bound・shipped docs・Node/peer CIのgapを閉じる、boundedな **v0.13 v1-blocker closure** trancheを先に完了します。#6はseparate npm-publication gateのままでexplicit authorizationが必要です。
 
 ## Freeze済みv1 candidate scope
 
-**v1 accounting lifecycle / storage contractはv0.11でfreeze済みで、v0.12はboundedなproduct/operations hardeningとadditive non-authoritative UX helperだけを追加します。** v0.6 progressive growth、v0.7 atomic heterogeneous vector、v0.8 read-only scalar operation reconciliation、v0.10 operational usabilityを、base accounting invariantを変えずfrozen candidate surfaceとして維持します。v1.0は新たなcompatibility decisionを行うreleaseではなく、feature-free stable promotionを想定します。
+**v1 accounting lifecycle / storage contractはv0.11でfreeze済みです。** v0.13は最終auditで見つかったcorrectness / operations / distribution gapを閉じるhardening checkpointで、新しいbilling modelやbase reserve/liability/grow/renew/settle invariantは追加・変更しません。blocker closureがgreenになった後にv1 stable promotionへ進みます。
 
 | 領域 | current status | 境界 |
 | --- | --- | --- |
@@ -314,7 +314,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.12.0` がcurrent released source baselineです。package manifestは `0.12.0` です。v0.12 product/operations hardening trancheは完了し、次のsource milestoneはfeature-free v1.0 promotionです。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
+`v0.12.0` がcurrent released source baselineです。working package manifestはv1-blocker closure向け `0.13.0` です。このtrancheをgreenにしてからv1.0 promotionへ進みます。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
 
 **npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 

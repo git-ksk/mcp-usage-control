@@ -3,6 +3,7 @@ import { createClient } from 'redis';
 import {
   assertUsageStoreConformance,
   runOperationReconciliationStoreConformance,
+  runVectorOperationReconciliationStoreConformance,
   runProgressiveUsageStoreConformance,
   runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
@@ -57,6 +58,23 @@ integration('RedisUsageStore portable conformance', () => {
       leaseTtlMs: 60,
     });
 
+    expect(report.cases.filter(result => !result.passed)).toEqual([]);
+    expect(report.passed).toBe(true);
+  });
+
+  it('passes the vector operation reconciliation contract', async () => {
+    const report = await runVectorOperationReconciliationStoreConformance({
+      createStore(scenario) {
+        return new RedisUsageStore(client, {
+          prefix: `${runId}-vector-reconcile-${scenario}`,
+          hashTag: `${runId}-vector-reconcile-${scenario}`,
+        });
+      },
+      async waitForLeaseExpiry(ttlMs) {
+        await new Promise(resolve => setTimeout(resolve, ttlMs + 80));
+      },
+      leaseTtlMs: 60,
+    });
     expect(report.cases.filter(result => !result.passed)).toEqual([]);
     expect(report.passed).toBe(true);
   });

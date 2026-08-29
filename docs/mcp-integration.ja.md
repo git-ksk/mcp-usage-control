@@ -406,3 +406,7 @@ CIでは、adapter単体だけでなく公式MCP SDK v2の `Client + createMcpHa
 - retry requestをまたいでもreserveが1回だけで、最後にsettleされること
 
 core package自体はMCP SDKへ依存しません。
+
+## v0.13 lease renewal uncertainty
+
+automatic heartbeatのrenew ACKが失われた場合、renewがcommit済みかどうかはambiguousです。optional `onLeaseRenewalState` で最初の失敗を `uncertain`、その後のrenew成功を `confirmed` と通知できます。これはfencing / telemetry用のadvisory hookであり、callback failureは隔離され、authoritative accounting stateを変更しません。外部のbillable workを制御するapplicationは `uncertain` を追加exposure停止のsignalとして利用できます。

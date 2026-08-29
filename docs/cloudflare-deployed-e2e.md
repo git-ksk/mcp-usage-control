@@ -32,7 +32,7 @@ The local workerd fault-injection routes are test-only. They prove that platform
 
 - a Cloudflare account that can deploy Workers and SQLite Durable Objects;
 - Wrangler authentication for the target account;
-- Node.js 20+ and pnpm;
+- Node.js 22+ and pnpm;
 - a checkout of this repository.
 
 Do not enable a Paid plan for this procedure. The dogfood configuration is compatible with Workers Free and uses a dedicated Worker name: `mcp-usage-control-cloudflare-dogfood`.

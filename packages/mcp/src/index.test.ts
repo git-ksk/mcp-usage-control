@@ -45,6 +45,16 @@ class FailingMarkLiableStore extends MemoryUsageStore {
   }
 }
 
+
+class FlakyRenewStore extends MemoryUsageStore {
+  renewCalls = 0;
+  override async renew(input: RenewInput): Promise<RenewResult> {
+    this.renewCalls += 1;
+    if (this.renewCalls === 1) throw new Error('simulated ambiguous renewal timeout');
+    return super.renew(input);
+  }
+}
+
 class CountingRenewStore extends MemoryUsageStore {
   renewCalls = 0;
   override async renew(input: RenewInput): Promise<RenewResult> {
@@ -275,6 +285,47 @@ describe('protectTool', () => {
     await expect(running).resolves.toBe('done');
   });
 
+  it('signals renewal uncertainty and later confirmation without changing accounting semantics', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
+    const store = new FlakyRenewStore();
+    const expiringPolicy: UsagePolicy = {
+      quote() {
+        return {
+          decision: 'allow',
+          units: 1,
+          budget: { key: 'monthly:user-1', limit: 1 },
+          reservationTtlMs: 30,
+        };
+      },
+    };
+    const control = new UsageControl(store, expiringPolicy);
+    const states: string[] = [];
+    const protectedHandler = protectTool(
+      {
+        control,
+        tool: 'streaming_tool',
+        noInput: true,
+        principal,
+        operationId,
+        successUnits: () => 0,
+        onLeaseRenewalState(event) {
+          states.push(event.status);
+          if (event.status === 'uncertain') throw new Error('observer failure must be isolated');
+        },
+      },
+      () => new Promise<string>(resolve => setTimeout(() => resolve('done'), 35)),
+    );
+
+    const running = protectedHandler(ctx);
+    await vi.advanceTimersByTimeAsync(11);
+    expect(states).toContain('uncertain');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(states).toEqual(['uncertain', 'confirmed']);
+    await vi.advanceTimersByTimeAsync(14);
+    await expect(running).resolves.toBe('done');
+  });
+
   it('renews a cost-liable reservation while a long handler runs', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-10T00:00:00Z'));
@@ -374,6 +425,62 @@ describe('protectMultiRoundTool', () => {
       { round: 1, state: 'application-phase-one' },
     ]);
     expect((await nextAdmission(control)).allowed).toBe(true);
+  });
+
+  it('treats flow-store consume as authoritative for expiry across clock domains', async () => {
+    const base = Date.parse('2026-08-29T00:00:00Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(base);
+
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    const backing = new MemoryMcpUsageFlowStore();
+    let consumed: import('./index.js').McpUsageFlowRecord | undefined;
+    const flowStore = {
+      suspend(record: import('./index.js').McpUsageFlowRecord) {
+        consumed = structuredClone(record);
+        return backing.suspend(record);
+      },
+      consume(_flowId: string, binding: import('./index.js').McpUsageFlowBinding) {
+        if (!consumed) return undefined;
+        if (consumed.binding.principalId !== binding.principalId ||
+            consumed.binding.tenantId !== binding.tenantId ||
+            consumed.binding.tool !== binding.tool ||
+            consumed.binding.argsHash !== binding.argsHash) return undefined;
+        const result = consumed;
+        consumed = undefined;
+        return structuredClone(result);
+      },
+    };
+
+    const protectedHandler = protectMultiRoundTool(
+      {
+        control,
+        tool: 'expensive_tool',
+        noInput: true,
+        principal,
+        operationId,
+        flowStore,
+        suspendTtlMs: 10_000,
+        flowId: () => 'flow-clock-domain-0001',
+        requestState: { mint: payload => JSON.stringify(payload) },
+        successUnits: () => 0,
+      },
+      async (_args, _ctx, flow) =>
+        flow.round === 0
+          ? { resultType: 'input_required', inputRequests: { x: {} } }
+          : { content: [{ type: 'text', text: 'done' }] },
+    );
+
+    const first = await protectedHandler(contextWithState());
+    const state = decodedState(first);
+
+    // Simulate application-host positive skew after an external flow store already
+    // authoritatively accepted the token. The UsageStore clock is restored before
+    // renewal so this test isolates the removed post-consume host-clock decision.
+    vi.setSystemTime(base + 20_000);
+    const resumePromise = protectedHandler(contextWithState(state));
+    vi.setSystemTime(base + 1_000);
+    await expect(resumePromise).resolves.toEqual({ content: [{ type: 'text', text: 'done' }] });
   });
 
   it('rejects raw unverified requestState before it can be used as accounting authority', async () => {

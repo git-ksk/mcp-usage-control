@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-このreferenceはcurrent source treeのpublic APIを説明します。5 packageのmanifestは `0.12.0` に揃っています。**v0.12.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredしています。
+このreferenceはcurrent source treeのpublic APIを説明します。v0.13 preparation branchの5 package manifestは `0.13.0` に揃っています。**v0.12.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredしています。
 
 behavior / failure guaranteeは [Architecture](architecture.ja.md) / [Store実装contract](store-contract.ja.md)、v1 stable / deferred境界は [v1.0 readiness review](v1-readiness.ja.md) を参照してください。
 
@@ -498,6 +498,10 @@ interface McpUsageFlowBinding {
 
 `argsHash` でcanonicalized validated original argsへresumeをbindingします。
 
+### `onLeaseRenewalState` (v0.13)
+
+automatic renewの最初の失敗を `uncertain`、後続成功を `confirmed` と通知するoptional advisory callbackです。callback failureはaccountingから隔離されます。
+
 ### `McpUsageFlowRecord` / `McpUsageFlowStore`
 
 ```ts
@@ -719,9 +723,17 @@ safe accounting state machineは [MCP Tasks の利用量 accounting](mcp-tasks-a
 - TTL / retention: positive safe integer
 - settlement / classifier units: non-negative safe integerかつ `<= reservedUnits`
 
+## Input envelope bounds (v0.13)
+
+`USAGE_INPUT_LIMITS` はprovider-neutralなpre-mutation上限です。identifierは最大1024 UTF-8 bytes、scalarは最大64 budgets、vectorは最大32 dimensions / dimensionあたり32 budgets / total 128 budget edgesです。built-in Storeはbackend mutation前に同じvalidatorを適用し、rejectしたraw identifierをerrorへechoしません。
+
+このportable limitはadapterが使うbackend固有surfaceより意図的に小さくしています。Redisはbounded topologyを1回のLua argumentとして扱い、Firestoreはbounded budget / reservationを1 transactionへ写像し、Cloudflare HTTP gatewayはさらにrequest bodyを65,536 bytesで制限します。public contractはportable envelopeであり、deployment固有backend limitがより厳しい場合はoperator-owned capacity constraintとして扱います。
+
+Redis / Firestoreはapplicationがexactに選択したhistorical budget key向けbounded `retireHistoricalBudgets()` も提供します。active reservation参照があればfail closedします。
+
 ## Compatibility
 
-- Node.js 20+
+- Node.js 22+
 - ESM
 - MCP TypeScript SDK v2。current conformanceは `2026-07-28` protocol line + SDK 2.0.0 path
 - Redis 7 integration behavior、CIのnode-redisは6.2.x
@@ -749,3 +761,8 @@ public conformance subpathはgrowth supportをclaimするStore向けに`runProgr
 `VectorUsageStore`はshared lifecycleを`UsageStore`から継承しつつ、`reserveVector()` / `growVectorReservation()` / `settleVector()`を追加します。既存third-party scalar Storeにこれらの実装は必須ではありません。
 
 public `runVectorUsageStoreConformance()`はatomic admission、replay/cursor、expiry、settlement bound、scalar/vector operation collision、growth/settlement raceを検証します。詳細は[Atomic heterogeneous usage vector](vector-usage.ja.md)を参照。
+
+
+## Vector operation reconciliation (v0.13)
+
+`VectorOperationReconciliationStore` はinitial vector reserve ACK ambiguity向けのoptional read-only recoveryです。Memory / Redis / Firestoreが対応し、trusted operation identity + exact dimension units + budget topology一致を要求します。Cloudflare remote reconciliationはv0.13ではscalar-onlyの明示例外です。

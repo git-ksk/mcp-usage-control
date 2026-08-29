@@ -43,6 +43,14 @@ describe('CloudflareUsageStore transport boundary', () => {
     const store = new CloudflareUsageStore({ getByName: () => stub });
     await expect(
       store.reserve({
+        request: { ...request, operationId: '界'.repeat(342) },
+        units: 1,
+        budgets: [{ key: 'b', limit: 1 }],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toThrow(/1024-byte input limit/);
+    await expect(
+      store.reserve({
         request: { ...request, operationId: 123 } as never,
         units: 1,
         budgets: [{ key: 'b', limit: 1 }],

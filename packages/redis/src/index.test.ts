@@ -99,6 +99,44 @@ integration('RedisUsageStore', () => {
     expect(results.filter(result => !result.allowed && result.reason === 'quota_exceeded')).toHaveLength(99);
   });
 
+  it('retires exact historical Redis budgets only after active references are gone', async () => {
+    const store = new RedisUsageStore(client);
+    const historical = 'day:user-1:2026-08-28';
+    const req = request('retention-active');
+    const reserved = await store.reserve({
+      request: req,
+      units: 1,
+      budgets: [{ key: historical, limit: 10 }],
+      ttlMs: 5_000,
+    });
+    expect(reserved.accepted).toBe(true);
+    await expect(store.retireHistoricalBudgets({ budgetKeys: [historical] }))
+      .rejects.toThrow(/active reservation reference/);
+    if (!reserved.accepted) return;
+    await store.markLiable({ reservationId: reserved.reservation.id });
+    await store.settle({ reservationId: reserved.reservation.id, actualUnits: 1, outcome: 'completed' });
+    await expect(store.retireHistoricalBudgets({ budgetKeys: [historical, 'missing-window'] }))
+      .resolves.toEqual({ requested: 2, retired: 1, missing: 1 });
+    await expect(store.retireHistoricalBudgets({ budgetKeys: [historical] }))
+      .resolves.toEqual({ requested: 1, retired: 0, missing: 1 });
+  });
+
+  it('bounds Redis historical-budget reservation inspection', async () => {
+    const store = new RedisUsageStore(client);
+    for (let index = 0; index < 2; index += 1) {
+      await store.reserve({
+        request: request(`retention-bound-${index}`),
+        units: 0,
+        budgets: [{ key: `retention-bound-budget-${index}`, limit: 1 }],
+        ttlMs: 5_000,
+      });
+    }
+    await expect(store.retireHistoricalBudgets({
+      budgetKeys: ['unrelated-historical'],
+      maxReservationsToInspect: 1,
+    })).rejects.toThrow(/inspection bound/);
+  });
+
   it('reconciles scalar operation state without mutating Redis accounting state', async () => {
     const store = new RedisUsageStore(client);
     const req = request('reconcile-op');
@@ -131,6 +169,36 @@ integration('RedisUsageStore', () => {
       status: 'settled',
       reservedUnits: 1,
       actualUnits: 1,
+    });
+  });
+
+  it('reconciles vector reserve lost-ACK state without creating a second reservation', async () => {
+    const store = new RedisUsageStore(client);
+    const req = request('vector-reconcile-op');
+    const dimensions = [
+      { key: 'requests', units: 1, budgets: [{ key: 'vector:reconcile:req', limit: 3 }] },
+      { key: 'tokens', units: 5, budgets: [{ key: 'vector:reconcile:tok', limit: 20 }] },
+    ];
+    expect(await store.reconcileVectorOperation({ request: req, dimensions })).toMatchObject({ status: 'absent' });
+    const reserved = await store.reserveVector({ request: req, dimensions, ttlMs: 5_000 });
+    expect(reserved.accepted).toBe(true);
+    if (!reserved.accepted) return;
+    expect(await store.reconcileVectorOperation({ request: req, dimensions })).toMatchObject({
+      status: 'active', state: 'pending',
+    });
+    await expect(store.reconcileVectorOperation({
+      request: req,
+      dimensions: [{ ...dimensions[0]!, units: 2 }, dimensions[1]!],
+    })).rejects.toThrow(/does not match retained reservation state/);
+    await store.markLiable({ reservationId: reserved.reservation.id });
+    await store.settleVector({
+      reservationId: reserved.reservation.id,
+      actualByDimension: [{ key: 'requests', actualUnits: 1 }, { key: 'tokens', actualUnits: 4 }],
+      outcome: 'completed',
+    });
+    expect(await store.reconcileVectorOperation({ request: req, dimensions })).toMatchObject({
+      status: 'settled',
+      actualByDimension: [{ key: 'requests', actualUnits: 1 }, { key: 'tokens', actualUnits: 4 }],
     });
   });
 

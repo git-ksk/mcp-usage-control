@@ -4,8 +4,8 @@
 
 | Safety invariant | Executable evidence | CI/backend |
 | --- | --- | --- |
-| zero-unit scalar/vector reservationを後からgrowしてもMemory retention上限を越えずfail-closedする | `packages/core/src/cross-capability-safety.test.ts` | Node 20/22/24 |
-| windowed accounting identityがprogressive growth、mutable limit、replayを跨いでも元のkeyへ固定される | `packages/core/src/cross-capability-safety.test.ts` と `windowed-budget-keys.test.ts` | Node 20/22/24 |
+| zero-unit scalar/vector reservationを後からgrowしてもMemory retention上限を越えずfail-closedする | `packages/core/src/cross-capability-safety.test.ts` | Node 22/24 |
+| windowed accounting identityがprogressive growth、mutable limit、replayを跨いでも元のkeyへ固定される | `packages/core/src/cross-capability-safety.test.ts` と `windowed-budget-keys.test.ts` | Node 22/24 |
 | ambiguous progressive growthのexact-retry fenceがMCP suspend/resumeで失われない | `packages/mcp/src/cross-capability-safety.test.ts`、portable flow-store conformance、Redis `mcp-flow.test.ts` | Node matrix + live Redis 7 |
 | liable expiry recovery後もreconciliationで通常settlementと区別できる | Firestore emulator `cross-capability: recovered liable reconciliation` | Firestore Emulator |
 | active scalar/vector reservationが参照するbudgetをhistorical maintenanceがpruneしない | `packages/cloudflare/test/maintenance.mjs` | local workerd |

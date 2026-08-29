@@ -2,7 +2,7 @@
 
 MCP TypeScript SDK v2 adapter for `mcp-usage-control`.
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or locally packed `mcp-usage-control` + `mcp-usage-control-mcp` tarballs. See [Use from source / local tarballs](../../docs/using-from-source.md) / [日本語](../../docs/using-from-source.ja.md).
+> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or locally packed `mcp-usage-control` + `mcp-usage-control-mcp` tarballs. See [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md) / [日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md).
 
 ## English
 
@@ -60,10 +60,10 @@ The wrapper owns the wire `requestState`. A handler-authored `requestState` is r
 
 Resume tokens are one-time. A concurrent or repeated resume after one caller has claimed the token fails closed instead of re-running the handler. This prevents duplicate execution/reservation, but it is not a general exactly-once side-effect or response-replay mechanism; applications that require replay of a completed business result need their own business-idempotency/result store.
 
-- [Current source/tarball usage](../../docs/using-from-source.md)
-- [MCP integration](../../docs/mcp-integration.md)
-- [API reference](../../docs/api-reference.md)
-- [Architecture](../../docs/architecture.md)
+- [Current source/tarball usage](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md)
+- [MCP integration](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-integration.md)
+- [API reference](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/api-reference.md)
+- [Architecture](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/architecture.md)
 
 The application remains responsible for trusted principal/tenant derivation, authentication/authorization, retry-stable logical operation IDs, durable flow storage when horizontally scaled, and provider-specific fencing after lease loss.
 
@@ -123,10 +123,10 @@ wire上の `requestState` はwrapperが所有します。application handlerが�
 
 resume tokenはone-timeです。同じtokenのconcurrent/repeated resumeは1 callerがclaimした後fail-closeし、handlerを再実行しません。これはduplicate execution / duplicate reservationを防ぎますが、汎用的なexactly-once side effectやcompleted response replayを保証するものではありません。business resultのreplayが必要なapplicationは既存のbusiness idempotency / result storeを併用してください。
 
-- [現在のsource / tarball利用手順](../../docs/using-from-source.ja.md)
-- [MCP integration](../../docs/mcp-integration.ja.md)
-- [API reference](../../docs/api-reference.ja.md)
-- [Architecture](../../docs/architecture.ja.md)
+- [現在のsource / tarball利用手順](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md)
+- [MCP integration](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-integration.ja.md)
+- [API reference](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/api-reference.ja.md)
+- [Architecture](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/architecture.ja.md)
 
 trustedなprincipal / tenant derivation、authentication / authorization、retry-stable logical operation ID、horizontal scale時のdurable flow storage、lease loss後のprovider-specific fencingはapplication側の責務です。
 

@@ -218,6 +218,8 @@ For single-round tools, `operationId` should be stable across retries of the sam
 
 Both wrappers renew an actively executing lease at roughly one third of its TTL by default. Before settlement or suspension they stop the heartbeat and wait for an in-flight renewal.
 
+A renewal transport failure is acknowledgement-ambiguous: the lease may have renewed even when the application did not receive the ACK. v0.13 exposes optional `onLeaseRenewalState`. The adapter emits one advisory `uncertain` transition on the first failed automatic renewal and a later `confirmed` transition after a successful renewal. These notifications are fencing/telemetry hooks only: callback failure is isolated and cannot change authoritative accounting state. Applications that control externally billable work may use `uncertain` to pause/cancel further exposure until provider-specific ownership is proven.
+
 A renewal error does not prove whether the backend applied the renewal. The adapter therefore does not cancel arbitrary upstream work automatically. If lease loss must immediately fence upstream work, implement provider-specific fencing/cancellation.
 
 ## Result and cost classification

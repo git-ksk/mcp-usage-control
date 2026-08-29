@@ -98,3 +98,9 @@ operation reconciliationは次ではありません。
 - Store固有settlement/growth idempotencyの代替
 
 usage Storeが証明するのはusage-enforcement stateだけです。business sideのidempotency / recoveryはapplication責務のままです。
+
+## v0.13 vector reserve reconciliation 追補
+
+v0.13ではread-onlyな `VectorOperationReconciliationStore` を追加します。callerはtrustedなoperation identityと、期待するdimension key / reserved units / budget-key topologyを渡し、retained stateと一致しない場合はfail closedします。`MemoryUsageStore` / `RedisUsageStore` / `FirestoreUsageStore` が対応します。scalar lookupはvector stateを、vector lookupはscalar stateをmode変換せずrejectします。
+
+Cloudflare Durable Objectsはv0.13では明示的な例外です。authenticated remote reconciliation subpathが証明するのはscalar initial reserveのみで、vector reserve ACK ambiguityは引き続きfail closedです。scalar supportからvector supportを推測したり、ambiguous vector reserveをblind replayしてはいけません。
