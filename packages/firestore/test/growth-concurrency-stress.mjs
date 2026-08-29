@@ -60,6 +60,9 @@ async function resolveSameIncrementResults(store, results, input, label) {
     return;
   }
 
+  // At least one acknowledged result establishes that this logical increment has
+  // an authoritative winner. A provider error on the identical concurrent call is
+  // therefore resolved only by one exact replay of the same increment/cursor/input.
   assert.equal(fulfilled.length, 1, `${label} provider ambiguity requires one observed winner`);
   assert.equal(rejected.length, 1, `${label} provider ambiguity requires one unresolved call`);
   const unresolved = rejected[0];
@@ -94,6 +97,10 @@ async function assertDistinctLoserResolves(store, result, input, label) {
   assert.equal(result.status, 'rejected', `${label} must reject`);
   if (isUsageStateRejection(result)) return;
 
+  // A raw Firestore provider error is ambiguous and must never be treated as the
+  // expected stale-cursor loser by itself. Re-attempt only the exact same logical
+  // increment once. The growth cursor + increment idempotency fence makes this a
+  // resolution probe, not a fresh billable/accounting operation or blanket retry.
   const replay = await Promise.allSettled([store.growReservation(input)]).then(values => values[0]);
   assert.equal(
     replay.status,
