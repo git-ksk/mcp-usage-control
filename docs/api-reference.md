@@ -2,7 +2,7 @@
 
 [English](api-reference.md) | [日本語](api-reference.ja.md)
 
-This reference describes the public API in the current source tree. All five package manifests are aligned at `0.8.0`. **v0.8.0 is the latest GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+This reference describes the public API in the current source tree. All five package manifests are aligned at `0.10.0`. **v0.10.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
 For behavioral/failure guarantees, read [Architecture](architecture.md) and [Store implementation contract](store-contract.md). For the stable/deferred v1 boundary, read [v1.0 readiness review](v1-readiness.md).
 
@@ -76,7 +76,6 @@ interface UsagePolicy {
 `budgets` is the multi-budget form. The same quoted units are reserved against every participating budget atomically. `budget` is a convenience form for one budget. Empty lists and duplicate budget keys are rejected.
 
 Policy denial reasons may reach observability; use bounded non-secret reason codes rather than unrestricted diagnostic text.
-
 
 ### Weighted credit policy helpers
 
@@ -342,15 +341,7 @@ interface UsageObserverHandler {
 type UsageObserver = UsageObserverHandler | undefined;
 ```
 
-Lifecycle event types currently include:
-
-- `reserve.accepted`
-- `reserve.denied`
-- `settlement.completed`
-- `reservation.recovered`
-- `operation.error`
-
-Observer delivery is best-effort and outside the enforcement transaction. Returned promises are not awaited; synchronous throws and asynchronous rejections do not change accounting outcomes.
+Lifecycle event types include scalar/vector reserve, settlement, recovery, and `operation.error` events. Observer delivery is best-effort and outside the enforcement transaction. Returned promises are not awaited; synchronous throws and asynchronous rejections do not change accounting outcomes.
 
 `UsageEventMetadata` is an explicit opt-in `Record<string, string | number | boolean | null>`.
 
@@ -365,6 +356,69 @@ This is observability, not the transactional ledger.
 - `UsageStateError` — invalid, expired, missing, or conflicting Store/resume state.
 - `UsageDeniedError` — programmatic denial reason with a deliberately generic thrown message.
 - `MemoryUsageStoreCapacityError` — bounded in-memory operation or budget-key retention is exhausted; accounting state is retained and the store fails closed rather than evicting it.
+
+## `mcp-usage-control/operational` (v0.10)
+
+```ts
+import {
+  MCP_USAGE_CONTROL_PACKAGE_NAME,
+  MCP_USAGE_CONTROL_VERSION,
+  UsageOperationalMonitor,
+  createUsageRuntimeIdentity,
+  projectScopedQuota,
+} from 'mcp-usage-control/operational';
+```
+
+`createUsageRuntimeIdentity()` builds bounded static diagnostic metadata: package name/version, provider (`memory` / `redis` / `firestore` / `cloudflare` / `custom`), optional capability flags, and an optional provider schema version only where that value has stable documented meaning.
+
+`UsageOperationalMonitor` is a process-local `UsageObserverHandler`. `snapshot()` returns bounded lifecycle/error counters, optional runtime identity, and the last observed event timestamp. It deliberately does not expose principal/operation/reservation/tool/budget identifiers and does not infer an authoritative active-reservation count from replayable/aggregate events.
+
+`projectScopedQuota(limit, remaining)` projects one **application-selected authoritative budget/window** into `{ limit, remaining, used, exhausted, utilization }`. It receives no budget key and never discovers/reset windows itself.
+
+These helpers are non-authoritative and cannot change enforcement.
+
+## `mcp-usage-control/settlement-outcomes` (v0.10)
+
+```ts
+import {
+  CANONICAL_SETTLEMENT_OUTCOMES,
+  DEFAULT_SETTLEMENT_OUTCOME_ALIASES,
+  InvalidSettlementOutcomeError,
+  isCanonicalSettlementOutcome,
+  normalizeSettlementOutcome,
+} from 'mcp-usage-control/settlement-outcomes';
+```
+
+Canonical values are:
+
+- `authorization_denied`
+- `invalid_arguments`
+- `pre_dispatch_rejected`
+- `pre_dispatch_no_effect`
+- `cancelled_before_dispatch`
+- `completed`
+- `proven_no_effect`
+- `dispatched_conservative`
+- `cancelled_after_dispatch`
+
+`normalizeSettlementOutcome()` accepts canonical values directly, supports a bounded compatibility alias map, and may receive an application-owned finite alias map such as `invalid_browser_request -> invalid_arguments`.
+
+Unsupported/malformed vocabulary throws `InvalidSettlementOutcomeError` with code `invalid_settlement_outcome`. The raw rejected value is not retained in the error. An optional best-effort diagnostic sink may observe the bounded code but cannot replace the normalization error or change settlement behavior.
+
+## `mcp-usage-control/thresholds` (v0.10)
+
+```ts
+import {
+  didUsageQuotaThresholdCross,
+  evaluateUsageQuotaThreshold,
+} from 'mcp-usage-control/thresholds';
+```
+
+Supported threshold forms are `{ kind: 'remaining_units', value: N }` and `{ kind: 'remaining_ratio', value: 0..1 }`.
+
+The helpers operate only on explicit `ScopedQuotaSnapshot` values. `didUsageQuotaThresholdCross(previous, current, threshold)` reports an above -> reached transition; callers own previous-state persistence and accounting-window reset. A changed configured limit is rejected rather than guessed to be the same window. Notification delivery/retry/deduplication remains outside core.
+
+See [Operational usability](operational-usability.md).
 
 ## `mcp-usage-control/conformance`
 
