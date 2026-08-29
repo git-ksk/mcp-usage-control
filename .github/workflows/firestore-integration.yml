@@ -2,22 +2,58 @@ name: Firestore Integration
 
 on:
   pull_request:
-    paths:
-      - 'packages/firestore/**'
-      - 'packages/core/**'
-      - '.github/workflows/firestore-integration.yml'
   push:
     branches: [main]
-    paths:
-      - 'packages/firestore/**'
-      - 'packages/core/**'
-      - '.github/workflows/firestore-integration.yml'
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_integration: ${{ steps.scope.outputs.run_integration }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Detect Firestore-relevant changes
+        id: scope
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            base="$PR_BASE_SHA"
+          else
+            base="$BEFORE_SHA"
+          fi
+
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo "run_integration=true" >> "$GITHUB_OUTPUT"
+            echo "No usable base SHA; running Firestore integration conservatively."
+            exit 0
+          fi
+
+          mapfile -t changed < <(git diff --name-only "$base" "$GITHUB_SHA")
+          run_integration=false
+          for path in "${changed[@]}"; do
+            case "$path" in
+              packages/firestore/*|packages/firestore/**|packages/core/*|packages/core/**|.github/workflows/firestore-integration.yml)
+                run_integration=true
+                break
+                ;;
+            esac
+          done
+          echo "run_integration=$run_integration" >> "$GITHUB_OUTPUT"
+
   emulator:
+    needs: changes
+    if: needs.changes.outputs.run_integration == 'true'
     runs-on: ubuntu-latest
     env:
       GCLOUD_PROJECT: demo-muc-firestore
@@ -67,3 +103,24 @@ jobs:
           --only firestore
           --project demo-muc-firestore
           "pnpm --filter mcp-usage-control-firestore test:emulator"
+
+  firestore-safety:
+    name: firestore-safety
+    if: always()
+    needs: [changes, emulator]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require integration when applicable
+        env:
+          RUN_INTEGRATION: ${{ needs.changes.outputs.run_integration }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          EMULATOR_RESULT: ${{ needs.emulator.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CHANGES_RESULT" = "success"
+          if [[ "$RUN_INTEGRATION" == "true" ]]; then
+            test "$EMULATOR_RESULT" = "success"
+          else
+            test "$EMULATOR_RESULT" = "skipped"
+          fi
