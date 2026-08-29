@@ -33,6 +33,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Progressive MCP growth](progressive-mcp-integration.md) — safe small-reserve/top-up/stop pattern for incrementally metered MCP work.
 - [Atomic heterogeneous usage vectors](vector-usage.md) — v0.7 contract for atomically reserving, growing, and settling unlike units in one logical operation.
 - [Cost-bearing operations](cost-bearing-operations.md) — v0.11 mapping for bounded provider cost, shared accounting scopes, billable retries, conservative ambiguity, and proven-no-effect release.
+- [Persisted-state compatibility](persisted-state-compatibility.md) — v0.11/v1 Redis, Firestore, and Cloudflare upgrade, rollback, future-schema fail-closed, and accounting-domain reset contract.
 - [Vector MCP integration](vector-mcp-integration.md) — explicit MCP lifecycle for safely consuming vector capacity.
 - [MCP Tasks accounting](mcp-tasks-accounting.md) — the long-running task accounting state machine and its separation from business task/result replay.
 - [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
@@ -49,6 +50,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 ## Operations and releases
 
 - [Memory store operations](memory-store.md) — bounded retention, fail-closed capacity, stats, and explicit retirement of completed budget windows.
+- [Persisted-state compatibility](persisted-state-compatibility.md) — provider upgrade/rollback and fresh-domain reset procedure.
 - [Release policy](releasing.md) — versioning, package release, and npm publication procedure.
 - [Changelog](../CHANGELOG.md) — released features, compatibility changes, and known limitations.
 - [Security policy](../SECURITY.md) — vulnerability reporting and security policy.
