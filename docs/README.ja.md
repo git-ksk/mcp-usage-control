@@ -69,6 +69,7 @@ protectTool()
 - [Progressive MCP growth](progressive-mcp-integration.ja.md) — incrementally metered MCP workでのsmall reserve / top-up / safe stop pattern
 - [Atomic heterogeneous usage vector](vector-usage.ja.md) — 異種unitを1 logical operationでatomicにreserve / grow / settleするv0.7 contract
 - [Cost-bearing operation](cost-bearing-operations.ja.md) — bounded provider cost、shared accounting scope、billable retry、conservative ambiguity、proven-no-effect releaseを既存contractへ安全にmappingするv0.11方針
+- [Persisted-state compatibility](persisted-state-compatibility.ja.md) — Redis / Firestore / Cloudflare のupgrade、rollback、future-schema fail-closed、accounting-domain resetを固定するv0.11/v1 contract
 - [Vector MCP integration](vector-mcp-integration.ja.md) — MCPでvector capacityを安全に使うexplicit lifecycle pattern
 - [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
@@ -85,6 +86,7 @@ protectTool()
 ## 運用・リリース
 
 - [Memory storeの長期運用](memory-store.ja.md) — bounded retention、fail-closed capacity、stats、完了済みbudget windowの明示retire
+- [Persisted-state compatibility](persisted-state-compatibility.ja.md) — provider upgrade / rollback と fresh-domain reset の運用手順
 - [Release policy](releasing.ja.md) — versioning、release、npm publish手順
 - [Changelog](../CHANGELOG.ja.md) — 変更履歴、互換性、既知の制約
 - [Security policy](../SECURITY.ja.md) — vulnerability reportとsecurity policy
