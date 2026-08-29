@@ -526,6 +526,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Fresh CI checkouts do not contain generated dist/. Build against the
+          # selected peer first so the matrix proves both type compatibility and
+          # runtime behavior instead of depending on a developer workstation's dist.
+          pnpm build
           if [[ "${{ matrix.peer }}" == "mcp" ]]; then
             pnpm --filter mcp-usage-control-mcp test
           else
