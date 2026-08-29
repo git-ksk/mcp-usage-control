@@ -37,12 +37,33 @@ function describeError(error) {
   return `${error.name}${code}: ${error.message}`;
 }
 
-function assertUsageStateRejection(result, label) {
+function isUsageStateRejection(result) {
+  return result.status === 'rejected' && result.reason?.name === 'UsageStateError';
+}
+
+async function assertDistinctLoserResolves(store, result, input, label) {
   assert.equal(result.status, 'rejected', `${label} must reject`);
+  if (isUsageStateRejection(result)) return;
+
+  // A raw Firestore provider error is ambiguous and must never be treated as the
+  // expected stale-cursor loser by itself. Re-attempt only the exact same logical
+  // increment once. The growth cursor + increment idempotency fence makes this a
+  // resolution probe, not a fresh billable/accounting operation or blanket retry.
+  const replay = await Promise.allSettled([store.growReservation(input)]).then(values => values[0]);
   assert.equal(
-    result.reason?.name,
+    replay.status,
+    'rejected',
+    `${label} exact replay unexpectedly fulfilled after ${describeError(result.reason)}; ` +
+      'the ambiguous loser may have committed alongside the observed winner',
+  );
+  assert.equal(
+    replay.reason?.name,
     'UsageStateError',
-    `${label} must reject with UsageStateError, got ${describeError(result.reason)}`,
+    `${label} exact replay did not resolve authoritatively after ${describeError(result.reason)}; ` +
+      `got ${describeError(replay.reason)}`,
+  );
+  console.log(
+    `resolved - ${label} provider ambiguity via exact replay: ${describeError(result.reason)}`,
   );
 }
 
@@ -106,28 +127,43 @@ try {
     const cursor = distinct.reservation.growthCursor;
     assert.equal(typeof cursor, 'string', `distinct admission ${index} must expose cursor`);
 
-    const distinctResults = await Promise.allSettled([
-      store.growReservation({
+    const distinctInputs = [
+      {
         reservationId: distinct.reservation.id,
         incrementId: `inc-a-${index}`,
         expectedGrowthCursor: cursor,
         additionalUnits: 1,
         budgets: [{ key: distinctBudget, limit: 3 }],
-      }),
-      store.growReservation({
+      },
+      {
         reservationId: distinct.reservation.id,
         incrementId: `inc-b-${index}`,
         expectedGrowthCursor: cursor,
         additionalUnits: 1,
         budgets: [{ key: distinctBudget, limit: 3 }],
-      }),
-    ]);
-    const winnerCount = distinctResults.filter(result => result.status === 'fulfilled').length;
-    const loserCount = distinctResults.filter(result => result.status === 'rejected').length;
-    assert.equal(winnerCount, 1, `distinct increments ${index} must have exactly one winner`);
-    assert.equal(loserCount, 1, `distinct increments ${index} must have exactly one loser`);
-    const loser = distinctResults.find(result => result.status === 'rejected');
-    assertUsageStateRejection(loser, `distinct stale cursor ${index}`);
+      },
+    ];
+    const distinctResults = await Promise.allSettled(
+      distinctInputs.map(input => store.growReservation(input)),
+    );
+    const winnerIndexes = distinctResults
+      .map((result, attempt) => ({ result, attempt }))
+      .filter(entry => entry.result.status === 'fulfilled')
+      .map(entry => entry.attempt);
+    const loserIndexes = distinctResults
+      .map((result, attempt) => ({ result, attempt }))
+      .filter(entry => entry.result.status === 'rejected')
+      .map(entry => entry.attempt);
+    assert.deepEqual(winnerIndexes.length, 1, `distinct increments ${index} must have exactly one winner`);
+    assert.deepEqual(loserIndexes.length, 1, `distinct increments ${index} must have exactly one loser`);
+
+    const loserIndex = loserIndexes[0];
+    await assertDistinctLoserResolves(
+      store,
+      distinctResults[loserIndex],
+      distinctInputs[loserIndex],
+      `distinct stale cursor ${index}/${loserIndex}`,
+    );
 
     console.log(`ok - scalar growth concurrency stress ${index + 1}/${iterations}`);
   }
