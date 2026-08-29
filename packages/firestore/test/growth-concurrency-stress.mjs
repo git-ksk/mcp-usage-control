@@ -41,6 +41,58 @@ function isUsageStateRejection(result) {
   return result.status === 'rejected' && result.reason?.name === 'UsageStateError';
 }
 
+async function resolveSameIncrementResults(store, results, input, label) {
+  const fulfilled = results.filter(result => result.status === 'fulfilled');
+  const rejected = results.filter(result => result.status === 'rejected');
+
+  if (rejected.length === 0) {
+    const values = fulfilled.map(result => result.value);
+    assert.equal(
+      values.filter(result => result.accepted && result.replayed).length,
+      1,
+      `${label} must replay exactly once when both acknowledgements arrive`,
+    );
+    assert.equal(
+      values.filter(result => result.accepted && !result.replayed).length,
+      1,
+      `${label} must commit exactly once when both acknowledgements arrive`,
+    );
+    return;
+  }
+
+  // At least one acknowledged result establishes that this logical increment has
+  // an authoritative winner. A provider error on the identical concurrent call is
+  // therefore resolved only by one exact replay of the same increment/cursor/input.
+  assert.equal(fulfilled.length, 1, `${label} provider ambiguity requires one observed winner`);
+  assert.equal(rejected.length, 1, `${label} provider ambiguity requires one unresolved call`);
+  const unresolved = rejected[0];
+  assert.notEqual(
+    unresolved.reason?.name,
+    'UsageStateError',
+    `${label} identical increment must not reject authoritatively: ${describeError(unresolved.reason)}`,
+  );
+
+  const replay = await Promise.allSettled([store.growReservation(input)]).then(values => values[0]);
+  assert.equal(
+    replay.status,
+    'fulfilled',
+    `${label} exact replay failed after ${describeError(unresolved.reason)}: ${
+      replay.status === 'rejected' ? describeError(replay.reason) : ''
+    }`,
+  );
+  assert.equal(replay.value.accepted, true, `${label} exact replay must be accepted`);
+  assert.equal(replay.value.replayed, true, `${label} exact replay must observe the committed increment`);
+  assert.equal(replay.value.reservedUnits, 2, `${label} exact replay observed an invalid reserved total`);
+  assert.equal(
+    fulfilled[0].value.reservedUnits,
+    2,
+    `${label} acknowledged winner observed an invalid reserved total`,
+  );
+  console.log(
+    `resolved - ${label} provider ambiguity via exact replay: ${describeError(unresolved.reason)}`,
+  );
+}
+
 async function assertDistinctLoserResolves(store, result, input, label) {
   assert.equal(result.status, 'rejected', `${label} must reject`);
   if (isUsageStateRejection(result)) return;
@@ -94,26 +146,7 @@ try {
       store.growReservation(sameInput),
       store.growReservation(sameInput),
     ]);
-    for (const [attempt, result] of sameResults.entries()) {
-      assert.equal(
-        result.status,
-        'fulfilled',
-        `same increment ${index}/${attempt} failed: ${
-          result.status === 'rejected' ? describeError(result.reason) : ''
-        }`,
-      );
-    }
-    const sameValues = sameResults.map(result => result.value);
-    assert.equal(
-      sameValues.filter(result => result.accepted && result.replayed).length,
-      1,
-      `same increment ${index} must replay exactly once`,
-    );
-    assert.equal(
-      sameValues.filter(result => result.accepted && !result.replayed).length,
-      1,
-      `same increment ${index} must commit exactly once`,
-    );
+    await resolveSameIncrementResults(store, sameResults, sameInput, `same increment ${index}`);
 
     const distinctBudget = `growth:stress:distinct:${index}`;
     const distinct = await store.reserve({
@@ -154,8 +187,8 @@ try {
       .map((result, attempt) => ({ result, attempt }))
       .filter(entry => entry.result.status === 'rejected')
       .map(entry => entry.attempt);
-    assert.deepEqual(winnerIndexes.length, 1, `distinct increments ${index} must have exactly one winner`);
-    assert.deepEqual(loserIndexes.length, 1, `distinct increments ${index} must have exactly one loser`);
+    assert.equal(winnerIndexes.length, 1, `distinct increments ${index} must have exactly one winner`);
+    assert.equal(loserIndexes.length, 1, `distinct increments ${index} must have exactly one loser`);
 
     const loserIndex = loserIndexes[0];
     await assertDistinctLoserResolves(
