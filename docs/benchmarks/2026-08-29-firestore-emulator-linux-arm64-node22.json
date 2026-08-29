@@ -1,0 +1,203 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-29T13:03:05.073Z",
+  "provider": "firestore",
+  "runId": "062e5ff2be6e46a1",
+  "environment": {
+    "node": "v22.23.2",
+    "platform": "linux-arm64",
+    "iterations": 3,
+    "concurrency": 3,
+    "ttlMs": 60000,
+    "target": "firestore-emulator://host.docker.internal:8080",
+    "projectId": "demo-muc-firestore"
+  },
+  "warning": "Local/emulator measurements are environment-specific evidence, not universal SLOs.",
+  "scenarios": [
+    {
+      "name": "scalar.reserve.allow",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 14.593,
+        "p95": 153.169,
+        "p99": 153.169,
+        "min": 12.207,
+        "max": 153.169
+      }
+    },
+    {
+      "name": "scalar.reserve.deny",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 9.482,
+        "p95": 10.556,
+        "p99": 10.556,
+        "min": 8.974,
+        "max": 10.556
+      }
+    },
+    {
+      "name": "scalar.reserve.multi_budget",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 11.15,
+        "p95": 19.235,
+        "p99": 19.235,
+        "min": 11.106,
+        "max": 19.235
+      }
+    },
+    {
+      "name": "scalar.mark_liable",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 8.185,
+        "p95": 8.432,
+        "p99": 8.432,
+        "min": 6.936,
+        "max": 8.432
+      }
+    },
+    {
+      "name": "scalar.renew",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.927,
+        "p95": 6.564,
+        "p99": 6.564,
+        "min": 5.763,
+        "max": 6.564
+      }
+    },
+    {
+      "name": "scalar.settle",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.994,
+        "p95": 6.686,
+        "p99": 6.686,
+        "min": 5.841,
+        "max": 6.686
+      }
+    },
+    {
+      "name": "progressive.grow",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 8.845,
+        "p95": 10.247,
+        "p99": 10.247,
+        "min": 7.247,
+        "max": 10.247
+      }
+    },
+    {
+      "name": "vector.reserve",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 9.397,
+        "p95": 9.407,
+        "p99": 9.407,
+        "min": 8.599,
+        "max": 9.407
+      }
+    },
+    {
+      "name": "vector.grow",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 10.089,
+        "p95": 11.022,
+        "p99": 11.022,
+        "min": 9.171,
+        "max": 11.022
+      }
+    },
+    {
+      "name": "vector.settle",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 6.518,
+        "p95": 6.665,
+        "p99": 6.665,
+        "min": 5.85,
+        "max": 6.665
+      }
+    },
+    {
+      "name": "reconciliation.active_lookup",
+      "supported": true,
+      "samples": 3,
+      "ok": 3,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 5.317,
+        "p95": 5.517,
+        "p99": 5.517,
+        "min": 5.199,
+        "max": 5.517
+      }
+    },
+    {
+      "name": "contention.shared_hot_budget",
+      "supported": true,
+      "samples": 9,
+      "ok": 9,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 2795.179,
+        "p95": 3647.851,
+        "p99": 3647.851,
+        "min": 2084.433,
+        "max": 3647.851
+      },
+      "accepted": 3,
+      "denied": 6,
+      "batchConcurrency": 3
+    },
+    {
+      "name": "recovery.bounded",
+      "supported": true,
+      "samples": 1,
+      "ok": 1,
+      "errors": 0,
+      "milliseconds": {
+        "p50": 43.704,
+        "p95": 43.704,
+        "p99": 43.704,
+        "min": 43.704,
+        "max": 43.704
+      }
+    }
+  ]
+}
