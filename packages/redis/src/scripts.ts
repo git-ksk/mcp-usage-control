@@ -1,5 +1,6 @@
 const COMMON = String.raw`
 local MAX_SAFE_INTEGER = 9007199254740991
+local REDIS_RESERVATION_SCHEMA_VERSION = 1
 
 local function safeTimeAdd(base, delta)
   if not base or not delta or base < 0 or delta <= 0 then return nil end
@@ -14,6 +15,10 @@ end
 
 local function safeIntegerString(value)
   return string.format('%.0f', value)
+end
+
+local function hasSupportedRecordSchema(record)
+  return record.schemaVersion == nil or record.schemaVersion == REDIS_RESERVATION_SCHEMA_VERSION
 end
 
 local function subtractUsed(budgetHashes, amount)
@@ -88,6 +93,28 @@ local function withRecovery(reply)
 end
 
 local expiredReservations = redis.call('ZRANGEBYSCORE', KEYS[2], '-inf', now, 'LIMIT', 0, cleanupLimit)
+local expiredOperations = redis.call('ZRANGEBYSCORE', KEYS[5], '-inf', now, 'LIMIT', 0, cleanupLimit)
+
+-- Redis Lua errors do not roll back writes already performed by a script. Validate
+-- every record in this cleanup batch before mutating any accounting state.
+for _, rid in ipairs(expiredReservations) do
+  local raw = redis.call('HGET', KEYS[3], rid)
+  if raw then
+    local record = cjson.decode(raw)
+    if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
+  end
+end
+for _, op in ipairs(expiredOperations) do
+  local rid = redis.call('HGET', KEYS[4], op)
+  if rid then
+    local raw = redis.call('HGET', KEYS[3], rid)
+    if raw then
+      local record = cjson.decode(raw)
+      if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
+    end
+  end
+end
+
 for _, rid in ipairs(expiredReservations) do
   local raw = redis.call('HGET', KEYS[3], rid)
   if raw then
@@ -117,7 +144,6 @@ for _, rid in ipairs(expiredReservations) do
   redis.call('ZREM', KEYS[2], rid)
 end
 
-local expiredOperations = redis.call('ZRANGEBYSCORE', KEYS[5], '-inf', now, 'LIMIT', 0, cleanupLimit)
 for _, op in ipairs(expiredOperations) do
   local rid = redis.call('HGET', KEYS[4], op)
   if rid then
@@ -167,6 +193,7 @@ for _, budget in ipairs(budgets) do
   table.insert(reply, tostring(remainingByHash[budget.hash] - units))
 end
 local record = cjson.encode({
+  schemaVersion = REDIS_RESERVATION_SCHEMA_VERSION,
   state = 'pending', operationKey = operationKey, reservedUnits = units,
   expiresAt = expiresAt, budgetHashes = budgetHashes, growthCursor = growthCursor
 })
@@ -214,6 +241,7 @@ for _, dimension in ipairs(dimensions) do
   table.insert(storedDimensions, { hash = dimension.hash, reservedUnits = tonumber(dimension.units), budgetHashes = hashes })
 end
 local record = cjson.encode({
+  schemaVersion = REDIS_RESERVATION_SCHEMA_VERSION,
   mode = 'vector', state = 'pending', operationKey = operationKey,
   dimensions = storedDimensions, expiresAt = expiresAt, growthCursor = growthCursor
 })
@@ -234,6 +262,7 @@ if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
+if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
 if record.state == 'settled' then return { 'not_pending' } end
 if tonumber(record.expiresAt) <= now then
   local expiredState = record.state
@@ -269,6 +298,7 @@ if not expiresAt or not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
+if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
 if record.state == 'settled' then return { 'not_pending' } end
 if tonumber(record.expiresAt) <= now then
   local expiredState = record.state
@@ -304,6 +334,7 @@ if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
+if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
 if isVector(record) then return { 'mode_mismatch' } end
 local reservedUnits = tonumber(record.reservedUnits)
 if record.state == 'settled' then
@@ -352,6 +383,7 @@ if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
+if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
 if not isVector(record) then return { 'mode_mismatch' } end
 local function sameActuals(left, right)
   if not left or #left ~= #right then return false end
@@ -424,6 +456,7 @@ if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
+if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
 if isVector(record) then return { 'mode_mismatch' } end
 local reservedUnits = tonumber(record.reservedUnits)
 if record.state == 'settled' or (record.state ~= 'pending' and record.state ~= 'liable') then return { 'terminal' } end
@@ -504,6 +537,7 @@ if not tombstoneExpiresAt then return { 'invalid_time' } end
 local raw = redis.call('HGET', KEYS[3], reservationId)
 if not raw then return { 'not_found' } end
 local record = cjson.decode(raw)
+if not hasSupportedRecordSchema(record) then return { 'unsupported_schema_version' } end
 if not isVector(record) then return { 'mode_mismatch' } end
 if record.state == 'settled' or (record.state ~= 'pending' and record.state ~= 'liable') then return { 'terminal' } end
 if tonumber(record.expiresAt) <= now then
@@ -597,6 +631,7 @@ local now = tonumber(redisTime[1]) * 1000 + math.floor(tonumber(redisTime[2]) / 
 local raw = redis.call('HGET', KEYS[1], reservationId)
 if not raw then return { 'absent' } end
 local record = cjson.decode(raw)
+if record.schemaVersion ~= nil and record.schemaVersion ~= 1 then return { 'unsupported_schema_version' } end
 if record.mode == 'vector' then return { 'mode_mismatch' } end
 local state = record.state
 local reservedUnits = tonumber(record.reservedUnits)
