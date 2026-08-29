@@ -8,24 +8,27 @@
 
 ## 現在のstatus
 
-**v0.9.0がlatest GitHub/source release baselineです。** 2026-08-22に、repository-audit safety set #116〜#127とFirestore release blocker #143をcloseしたtested commit `e2a8f8e5dcf725a2c085faa3170a8e38e91504d2` からreleaseしました。
+**v0.10.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.10.0` に揃っています。
 
-publish可能な5 package manifestは `0.9.0` に揃っています。packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
+packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
 
-現在のactive decision gateは **v0.10.0 / #76 -> #99 -> #82 operational usability / dogfood diagnostics**。final pre-v1 gateは **v0.11.0 / #152 + #105 + #106 + #24 + #6 accounting-contract / completion / distribution / API freeze**、その後に新featureなしのv1.0 stable promotionです。
+active decision gateは **v0.11.0 / #152 -> #105 + #106 -> #24 -> #6 accounting-contract / completion / distribution / API freeze**、その後に新featureなしのv1.0 stable promotionです。
 
 ## 判定
 
-**core accounting modelはstrong v1 candidateですが、まだv1.0 promotion段階ではありません。**
+**core accounting modelはstrong v1 candidateで、v0.10によりoperational-usability gateは完了しました。ただしv1.0 promotion段階にはまだ到達していません。**
 
-すでにproofできているもの:
+すでにproof / adoptできているもの:
 
 - scalar atomic admission/reservation + conservative liability/expiry semantics
 - optional progressive scalar growth (#83)、v0.6でadopted
 - optional atomic heterogeneous vector (#84)、v0.7でadopted
 - optional read-only scalar operation reconciliation (#81)、v0.8でadopted
-- repository-wide safety hardening interaction #116〜#127、v0.9でcomplete
-- Firestore vector growth-vs-settle release blocker #143をrace invariantを弱めず解消
+- repository-wide safety hardening #116〜#127、v0.9でcomplete
+- Firestore vector growth-vs-settle blocker #143をrace invariantを弱めず解消
+- bounded operational snapshot/runtime identity (#76)、v0.10でcomplete
+- canonical settlement outcome normalization + distinguishable bounded diagnostics (#99)、v0.10でcomplete
+- scoped threshold/exhaustion helper (#82)、v0.10でcomplete
 - Node 20/22/24 package + clean-consumer validation
 - Redis / Cloudflare local workerd / Firestore Emulator provider evidence
 - ambiguous state-changing outcomeのfail-closed扱い
@@ -34,7 +37,6 @@ publish可能な5 package manifestは `0.9.0` に揃っています。packageは
 
 v1 promotionまでに残るもの:
 
-- bounded operational usability / diagnostics (#76、#99、#82)
 - cost-bearing operation lifecycle mappingとshared accounting-scope proof (#152)
 - v1 Node.js support floorの明示 (#105)
 - persisted-store migration / rollback / newer-schema compatibility contract (#106)
@@ -46,7 +48,7 @@ v1 promotionまでに残るもの:
 
 ## Stable accounting invariant
 
-v0.10 / v0.11 / v1.0を通して次を崩しません。
+v0.11 / v1.0を通して次を崩しません。
 
 1. admission compare + reservationはauthoritative Storeの1 operation
 2. admissionに必要な全budget / dimensionはatomic commit、またはnone commit
@@ -78,41 +80,23 @@ v0.10 / v0.11 / v1.0を通して次を崩しません。
 
 optional `OperationReconciliationStore` はread-only `absent` / `active` / `expired` / `settled` statusを提供します。backend/transport failure、corrupt state、unsupported mode、trusted-input mismatchを`absent`へ変換せずindeterminate / fail closedにします。reconciliationはreserve/release、liability、renew、settle、replay state rewriteを行いません。
 
-## v0.9.0 safety-hardening evidence
+### Operational usability (#76/#99/#82) — v0.10でadopted
 
-v0.9 auditは新product surfaceではなくcapability intersectionを対象にしました。#116〜#127をcloseし、retention/growth、flow-store/growth、recovery/reconciliation、maintenance/vector、authorization、protocol validation、arithmetic bounds、runtime identity validationの明示regression coverageを追加しました。
+v0.10ではsecond accounting authorityを作らず、次のexplicit core subpathを追加します。
 
-Firestore release blocker #143は次を維持してcloseしています。
+- `mcp-usage-control/operational`: process-local lifecycle counter、bounded static runtime identity、explicit scoped quota projection
+- `mcp-usage-control/settlement-outcomes`: canonical outcome vocabulary、compatibility alias、raw invalid inputを保持しない `invalid_settlement_outcome` diagnostic
+- `mcp-usage-control/thresholds`: 明示選択済みquota scopeに対するpure evaluation / crossing helper
 
-- `vector-growth-vs-settle-race` のsettlementは必ずcomplete
-- growthが先にcommitした場合、settlementはgrown reservationをobserve
-- bounded outer retryはdefinitive transaction abortであるgRPC `ABORTED` (`10`) / HTTP `409`だけ
-- `UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはadapter outer retry allow-listへ追加しない
-- no-op vector settlementでは不要なbudget read/writeを避け、accounting semanticsを変えずcontentionを減らす
+重要なnon-claimもcontractの一部です。incomplete/replayable eventからactive reservation数を推測せず、window/reset stateとnotification deliveryはapplication-ownedとし、observer / diagnostic failureでenforcementを変更しません。
 
-normal release/package gateとprovider integration evidenceはv0.9 source release前にgreenでした。GitHub/source releaseはsuccessです。npm publicationは完了しておらず、#6でintentional deferを維持します。
+release/package gateでは新public subpathをtarball内容とclean-consumer importで検証します。
 
-## v0.10 readiness gate
+## v0.9 safety-hardening evidenceのcarry forward
 
-v0.10はsecond ledger / second authorityを作らずoperational usabilityを追加します。
+v0.9 auditは新product surfaceではなくcapability intersectionを対象にし、#116〜#127とFirestore blocker #143をcloseしました。scalar/vector accounting、replay、liability、expiry/recovery、fail-closed contractは維持しています。
 
-実行順序:
-
-1. **#76** — operational snapshot / runtime identityとbounded read-only vocabulary
-2. **#99** — canonical settlement normalizationとintegration error / backend unavailabilityを区別するdiagnostics
-3. **#82** — 確定したscoped quota semanticsへcompositionするthreshold / exhaustion signals
-
-#76 / #99 / #82のacceptance方向:
-
-- 必要なauthoritative valueはbounded / scopedに限定
-- lifecycle / threshold helperはnon-authoritative
-- PII / uncontrolled high-cardinality labelをdefault収集しない
-- invalid integration inputとservice/store unavailabilityを区別
-- settlement outcome vocabularyをnormalizeしてもsettlement validationを弱めない
-- vector dimensionの意味を保持
-- helper / observer failureがenforcementを変更しない
-
-既存の `UsageObserver` / `projectUsageEvent()` はsupporting evidenceであり、この3 Issueのcompletion evidenceそのものではありません。
+Firestore outer retryはdefinitive transaction abortであるgRPC `ABORTED` (`10`) / HTTP `409`だけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureはretry allow-listへ追加しません。
 
 ## v0.11 final completion gate
 
@@ -126,7 +110,7 @@ v1 stable promotion前にv0.11で次を優先順にcloseまたは明示scopeし�
 
 ## Distribution boundary
 
-current source-release baselineは `v0.9.0`、5 manifestは `0.9.0` です。
+current source-release baselineは `v0.10.0`、5 manifestは `0.10.0` です。
 
 **npm publicationは別操作で、まだ完了していません。** source release成功はregistry publicationを意味しません。#6はfirst publicationを実際に希望し、explicit authorizationし、完了・verifyするまでopenのままです。
 
