@@ -4,7 +4,7 @@
 
 ## Supported versions
 
-The latest GitHub/source minor line is supported for security fixes. For this policy, **v0.8.x is the current supported source-release line** and supersedes older v0.x source-release lines. npm registry publication is a separate operation and remains deferred even while the GitHub/source release is supported. The supported Node.js floor for the future v1 line is a separate v0.10 decision tracked in #105.
+The latest GitHub/source minor line is supported for security fixes. For this policy, **v0.10.x is the current released source baseline while v0.11 is the active pre-v1 completion line**; older v0.x source-release lines are superseded. npm registry publication is a separate operation and remains deferred even while the GitHub/source release is supported. The supported v1 runtime floor is **Node.js 22+**. Node.js 20 is EOL and any temporary Node 20 CI execution is compatibility-only evidence, not a supported-runtime claim.
 
 ## Reporting a vulnerability
 
