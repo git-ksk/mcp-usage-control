@@ -70,6 +70,7 @@ protectTool()
 - [Atomic heterogeneous usage vector](vector-usage.ja.md) — 異種unitを1 logical operationでatomicにreserve / grow / settleするv0.7 contract
 - [Cost-bearing operation](cost-bearing-operations.ja.md) — bounded provider cost、shared accounting scope、billable retry、conservative ambiguity、proven-no-effect releaseを既存contractへ安全にmappingするv0.11方針
 - [Persisted-state compatibility](persisted-state-compatibility.ja.md) — Redis / Firestore / Cloudflare のupgrade、rollback、future-schema fail-closed、accounting-domain resetを固定するv0.11/v1 contract
+- [v1 public API / lifecycle freeze](v1-public-api-freeze.ja.md) — package名、public subpath、settlement outcome境界、status/error vocabulary、scalar/vector parity、MCP multi-round terminologyのfinal freeze
 - [Vector MCP integration](vector-mcp-integration.ja.md) — MCPでvector capacityを安全に使うexplicit lifecycle pattern
 - [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
