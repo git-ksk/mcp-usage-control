@@ -125,9 +125,9 @@ A genuine Workers Free-plan exhaustion/platform-overload event did not occur nat
 
 ## v1 promotion status
 
-v0.11 established the accounting/runtime/storage/API freeze, and v0.12 completes the bounded #177-#184 hardening checkpoint: exact-SHA release provenance, validated release artifacts, supply-chain maintenance, incident response, current operator docs, competitive adopt/defer decisions, additive non-authoritative quota-window UX projection, and reproducible provider performance/cost evidence. The frozen accounting lifecycle and persisted Store contract remain unchanged.
+v0.11 established the accounting/runtime/storage/API freeze, v0.12 completed the bounded #177-#184 product/operations hardening checkpoint, and v0.13.0 completed the final #191-#198 blocker-closure checkpoint. The frozen accounting lifecycle and persisted Store contract remain unchanged.
 
-v1.0 remains a feature-free stable promotion over that hardened surface.
+**The source-release evidence required for stable promotion is now complete. v1.0 remains a feature-free stable promotion over that hardened surface.**
 
 ## npm distribution boundary
 
@@ -139,11 +139,11 @@ A source release never implicitly authorizes registry publication.
 
 ## v1 promotion rule
 
-v1.0 should introduce **no new accounting model**. The bounded v0.13 blocker-closure tranche is the final corrective checkpoint over the frozen model; stable promotion is contingent on v0.13 release evidence being green. npm publication remains independently authorized under #6.
+v1.0 should introduce **no new accounting model**. The bounded v0.13 blocker-closure tranche is complete and its release evidence is green; v1.0 is therefore a stable-promotion step over the frozen model. npm publication remains independently authorized under #6.
 
 See [Roadmap](roadmap.md), [Release policy](releasing.md), [Cost-bearing operations](cost-bearing-operations.md), [Persisted-state compatibility](persisted-state-compatibility.md), [v1 public API freeze](v1-public-api-freeze.md), and provider-specific documentation for the current support boundaries.
 
 
 ## v0.13 final blocker closure
 
-The final audit tracks #191-#198: authoritative multi-round flow expiry, standalone shipped docs, safe Redis/Firestore historical-budget retirement, lease-renewal uncertainty signaling, initial vector-reserve reconciliation, provider-neutral input bounds, Node 20 CI retirement, and minimum/current peer-dependency compatibility. These changes harden recovery and operations around the frozen accounting model rather than introducing a new charging model. Issue #6 remains independently authorized.
+The final audit items #191-#198 are complete: authoritative multi-round flow expiry, standalone shipped docs, safe Redis/Firestore historical-budget retirement, lease-renewal uncertainty signaling, initial vector-reserve reconciliation, provider-neutral input bounds, Node 20 CI retirement, and minimum/current peer-dependency compatibility. These changes hardened recovery and operations around the frozen accounting model without introducing a new charging model. Issue #6 remains independently authorized.

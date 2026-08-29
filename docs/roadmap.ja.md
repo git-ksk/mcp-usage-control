@@ -54,7 +54,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.10.0** | operational snapshot/runtime identity、canonical settlement diagnostics、scoped threshold/exhaustion helper | Release済み / Adopted |
 | **v0.11.0** | pre-v1 accounting/runtime/storage/API freeze、aggregate release-safety gate、real Cloudflare rotation evidence | Release済み / Complete |
 | **v0.12.0** | product/operations hardening: release provenance/artifact、supply-chain maintenance、incident runbook、競合判断、quota-window projection、provider benchmark | Release済み / Complete |
-| **v0.13.0** | final v1-blocker closure: authoritative clock、renew uncertainty、安全なhistorical cleanup、vector reconciliation、bounded input、shipped docs、Node/peer CI | 進行中 |
+| **v0.13.0** | final v1-blocker closure: authoritative clock、renew uncertainty、安全なhistorical cleanup、vector reconciliation、bounded input、shipped docs、Node/peer CI | Release済み / Complete |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -137,9 +137,9 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 ## 現在の実行順序
 
-boundedな **v0.12 product/operations hardening** tranche (#177〜#184) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。#183はadditive-helper allowance内に留め、release provenance / artifact、incident response、dependency maintenance、current docs、competitive decision、provider benchmark evidenceをfrozen surfaceの周囲でhardeningしました。
+boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0.13 final blocker-closure** tranche (#191〜#198) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。v0.13.0でstable promotionに必要なfinal correctness / operations / distribution / runtime / peer-compatibility evidenceが揃っています。
 
-**v1.0はboundedなv0.13 blocker-closure checkpoint完了後のstable promotion** とします。#6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
+**v1.0が次のfeature-free stable-promotion milestoneです。** #6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
@@ -184,7 +184,7 @@ v1.0前に:
 | #182 maintained competitive capability decision | v0.12 | **Completed; positioning guardrail** |
 | #183 safe quota-window/reset UX projection | v0.12 | **Completed; additive non-authoritative helper** |
 | #184 provider benchmark / cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
-| #191〜#198 final v1 blocker closure | v0.13 | **進行中; 新billing modelなし** |
+| #191〜#198 final v1 blocker closure | v0.13 | **Completed / Release済み; 新billing modelなし** |
 | #6 first npm publication | separate v0.13/v1 distribution gate | **Open; explicit authorization必須** |
 
 ## Release policy

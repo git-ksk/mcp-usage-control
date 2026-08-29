@@ -54,7 +54,7 @@ Across every remaining release:
 | **v0.10.0** | Operational snapshot/runtime identity, canonical settlement diagnostics, scoped threshold/exhaustion helpers | Released / adopted |
 | **v0.11.0** | Pre-v1 accounting/runtime/storage/API freeze, aggregate release-safety gate, real Cloudflare rotation evidence | Released / complete |
 | **v0.12.0** | Product/operations hardening: release provenance/artifacts, supply-chain maintenance, incident runbook, competitor decisions, quota-window projection, provider benchmarks | Released / complete |
-| **v0.13.0** | Final v1-blocker closure: authoritative clocks, renewal uncertainty, safe historical cleanup, vector reconciliation, bounded inputs, shipped docs, Node/peer CI | In progress |
+| **v0.13.0** | Final v1-blocker closure: authoritative clocks, renewal uncertainty, safe historical cleanup, vector reconciliation, bounded inputs, shipped docs, Node/peer CI | Released / complete |
 
 Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
@@ -137,9 +137,9 @@ No genuine Workers Free-plan exhaustion/platform-overload event occurred natural
 
 ## Current execution order
 
-The bounded **v0.12 product/operations hardening** tranche (#177-#184) is complete without redefining the frozen accounting lifecycle or persisted Store contract. #183 stays within the additive-helper allowance, while release provenance, release artifacts, incident response, dependency maintenance, current docs, competitive decisions, and provider benchmark evidence are hardened around that frozen surface.
+The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.13 final blocker-closure** tranche (#191-#198) are complete without redefining the frozen accounting lifecycle or persisted Store contract. v0.13.0 carries the final correctness, operations, distribution, runtime, and peer-compatibility evidence required for stable promotion.
 
-**v1.0 remains a stable promotion after the bounded v0.13 blocker-closure checkpoint**. Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
+**v1.0 is now the next feature-free stable-promotion milestone.** Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
 
 ## v1 completion definition
 
@@ -184,7 +184,7 @@ Before v1.0:
 | #182 maintained competitive capability decisions | v0.12 | **Completed; positioning guardrail** |
 | #183 safe quota-window/reset UX projection | v0.12 | **Completed; additive non-authoritative helper** |
 | #184 provider benchmark/cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
-| #191-#198 final v1 blocker closure | v0.13 | **In progress; no new billing model** |
+| #191-#198 final v1 blocker closure | v0.13 | **Completed / released; no new billing model** |
 | #6 first npm publication | separate v0.13/v1 distribution gate | **Open; explicit authorization required** |
 
 ## Release policy

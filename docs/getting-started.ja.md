@@ -116,7 +116,7 @@ pnpm check
 
 別applicationへinstallする手順は [Source / local tarballから使う](using-from-source.ja.md) を参照してください。
 
-**supported v1 runtimeではNode.js 22以上が必要です。** Node.js 20はEOL済みです。現在のrequired-check policy移行が終わるまでNode 20 CI jobが一時的に残る場合がありますが、これはcompatibility-only evidenceでありNode 20 supportを意味しません。
+**Node.js 22以上が必要です。** supported CI / release-safety evidenceはNode.js 22 / 24をcoverします。Node.js 20はEOL済みで、supported / required CI contractには含めません。
 
 ## 最小構成
 
