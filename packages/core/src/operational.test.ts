@@ -7,6 +7,7 @@ import {
   createUsageRuntimeIdentity,
   projectScopedQuota,
 } from './operational.js';
+import { normalizeSettlementOutcome } from './settlement-outcomes.js';
 
 describe('operational snapshot helpers', () => {
   it('keeps the exported package version aligned with package metadata', () => {
@@ -78,8 +79,15 @@ describe('operational snapshot helpers', () => {
         errorName: 'Error',
       },
       {
-        type: 'settlement.completed',
+        type: 'operation.error',
         timestamp: 4,
+        phase: 'settle',
+        source: 'store',
+        errorName: 'Error',
+      },
+      {
+        type: 'settlement.completed',
+        timestamp: 5,
         principalId: 'p',
         tool: 't',
         operationId: 'o3',
@@ -92,7 +100,7 @@ describe('operational snapshot helpers', () => {
       },
       {
         type: 'reservation.recovered',
-        timestamp: 5,
+        timestamp: 6,
         store: 'memory',
         recovery: 'pending_released',
         reservedUnits: 2,
@@ -100,13 +108,15 @@ describe('operational snapshot helpers', () => {
       },
       {
         type: 'vector.reservation.recovered',
-        timestamp: 6,
+        timestamp: 7,
         store: 'memory',
         recovery: 'liable_retained',
         count: 2,
       },
     ];
     for (const event of events) monitor.onEvent(event);
+
+    expect(() => normalizeSettlementOutcome('bad-domain-value', undefined, monitor)).toThrow();
 
     const snapshot = monitor.snapshot();
     expect(snapshot).toMatchObject({
@@ -115,24 +125,30 @@ describe('operational snapshot helpers', () => {
         capabilities: ['reconciliation'],
       },
       lifecycle: {
-        eventsObserved: 6,
+        eventsObserved: 7,
         reserveAccepted: 1,
         reserveDenied: 1,
         settlementsCompleted: 1,
         pendingReservationsReleased: 3,
         liableReservationsRetained: 2,
+        invalidSettlementOutcomes: 1,
+        observedAttempts: {
+          reserve: 2,
+          settle: 2,
+        },
         errors: {
           quote: 0,
           reserve: 0,
           markLiable: 1,
           renew: 0,
-          settle: 0,
+          settle: 1,
         },
       },
-      lastEventAt: 6,
+      lastEventAt: 7,
     });
     expect(JSON.stringify(snapshot)).not.toContain('private-budget-key');
     expect(JSON.stringify(snapshot)).not.toContain('reservationId');
+    expect(JSON.stringify(snapshot)).not.toContain('bad-domain-value');
   });
 
   it('returns detached snapshots', () => {
@@ -141,10 +157,14 @@ describe('operational snapshot helpers', () => {
     );
     const first = monitor.snapshot();
     first.lifecycle.errors.reserve = 99;
+    first.lifecycle.observedAttempts.reserve = 99;
     (first.identity!.capabilities as string[]).push('mutated');
     expect(monitor.snapshot()).toMatchObject({
       identity: { capabilities: ['vector'] },
-      lifecycle: { errors: { reserve: 0 } },
+      lifecycle: {
+        observedAttempts: { reserve: 0 },
+        errors: { reserve: 0 },
+      },
     });
   });
 });
