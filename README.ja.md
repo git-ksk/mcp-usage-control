@@ -4,30 +4,41 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**MCP tool実行のまわりで、利用枠をfailure-safeに予約・確定するtransactional usage enforcement libraryです。**
+**MCP toolの実行・retry・障害が重なっても、利用枠を正しく守るためのlibraryです。**
 
-同時実行、retry、長時間処理、process crash、MCP multi-round flowがあっても、単純な `check -> execute -> increment` で利用枠をoversubscribeしないことを重視します。
+`mcp-usage-control` は、paid model call、credit、export、search、job、plan quotaなど、MCP toolが実際に有限なresourceを消費する場合に使います。work開始前にusageをatomic reserveし、終了後にactual usageをsettleするため、同時実行、retry、process crash、lost ACKがあっても同じquotaを二重に使いません。
 
-このprojectが扱うのは **tool executionとusage accountingの境界**です。payment processor、financial ledger、subscription system、OAuth provider、generic gateway、workflow engine、一般的なHTTP rate limiterにはしません。
+典型例は次のようなproductです。
 
-> 初めてなら **[はじめに](docs/getting-started.ja.md)** からどうぞ。
+```text
+Free   -> 月50 credits
+Plus   -> 月500 credits
+search -> 1 credit
+report -> 10 credits
+```
+
+残り10 creditsのときに10-credit jobが2件同時に来ても、両方を開始させません。paid work開始後にworkerが落ちた場合は楽観的にrefundしません。同じlogical operationのretryでは、別reservationを新規作成しないようreplay protectionが働きます。
+
+### 向いているケース
+
+- MCP toolが有料・有限resourceを消費する
+- Free/Pro、user、tenant、daily、monthly quotaを同時実行下でも正しく守りたい
+- retry、process loss、長時間処理、multi-round MCP flowが本番で起こり得る
+- ambiguous backend failure時にfail-openするよりquota correctnessを優先したい
+
+### 向いていないケース
+
+- 単純なrequests-per-minute制限だけで十分
+- billing、invoice、checkout、subscription management、financial ledgerが欲しい
+- approximate / eventually consistentなglobal quotaで十分で、strict reservation semanticsが不要
+
+> まず試すなら **[はじめに](docs/getting-started.ja.md)**。設計境界は **[Project positioning](docs/positioning.ja.md)** を参照してください。
 
 ## 現在の配布状況
 
-**まだnpmへ公開していません。**
+**まだnpmへ公開していません。** `v0.13.0` がvalidated GitHub/source release baselineです。初回registry publishまではGitHub Release tarballまたはrepository checkoutを使います。詳しくは **[Source / local tarballから使う](docs/using-from-source.ja.md)** を参照してください。
 
-`v0.13.0` がcurrent GitHub/source release baselineです。repository checkoutまたはvalidated GitHub Release tarballを使います。npm publicationはIssue #6で追跡する別のmanual operationとして明示的にdeferredしています。
-
-```console
-git clone https://github.com/git-ksk/mcp-usage-control.git
-cd mcp-usage-control
-pnpm install --frozen-lockfile
-pnpm check
-```
-
-別projectへのinstallは [Source / local tarballから使う](docs/using-from-source.ja.md) を参照してください。
-
-要件は **Node.js 22+ / ESM**。supported runtime evidenceはNode.js 22 / 24です。CIではさらにRedis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
+要件は **Node.js 22+ / ESM**。CIではNode.js 22/24、Redis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
 
 ## Core lifecycle
 
@@ -68,29 +79,14 @@ remaining確認 -> paid work実行 -> counter加算
 
 5 package manifestは `0.13.0` で揃っています。**v0.13.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
-**現在の実行順序:** v0.13.0がreleased source baselineで、boundedなv1-blocker closureは完了済みです。次のrelease milestoneは、このhardened surfaceをfeature追加なしで安定版へ昇格する **v1.0 stable promotion** です。#6はseparate npm-publication gateのままでexplicit authorizationが必要です。
 
-## Freeze済みv1 candidate scope
+## v1 status
 
-**v1 accounting lifecycle / storage contractはv0.11でfreeze済みです。** v0.13で最終auditで見つかったcorrectness / operations / distribution gapを閉じるhardening checkpointを完了し、新しいbilling modelやbase reserve/liability/grow/renew/settle invariantは追加・変更していません。次のmilestoneはfeature-freeなv1 stable promotionです。
+v1 candidateのaccounting lifecycle / Store contractはfreeze済みです。current `v0.13.0` source releaseがhardened baselineで、次のv1は機能追加ではなくfeature-freeなstable promotionを予定しています。
 
-| 領域 | current status | 境界 |
-| --- | --- | --- |
-| Core reserve / liability / renew / settle | **strong v1候補** | failure-safe transaction contract |
-| Multi-budget / replay protection | **strong v1候補** | atomic + logical operation単位 |
-| Redis / Cloudflare / Firestore Store | **strong v1候補（provider constraint明記）** | durability / time / HA差は隠さない |
-| `protectTool()` | **strong v1候補** | single-round MCP tool |
-| `protectMultiRoundTool()` | **strong v1候補** | current `input_required` accounting |
-| shared / durable MRTR compare-and-consume | **current v1 direction** | sticky MCP sessionなしのcross-instance resume |
-| progressive reservation growth (#83) | **v0.6で採用** | optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic / lost-ACK / provider proof |
-| heterogeneous multi-dimensional usage (#84) | **v0.7で採用** | optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
-| operation reconciliation/status (#81) | **v0.8で採用** | optional scalar `OperationReconciliationStore`; read-only `absent` / `active` / `expired` / `settled`、mismatch / unknownはfail closed、Store別support matrix |
-| operational usability (#76/#99/#82) | **v0.10で採用** | non-authoritative snapshot/runtime identity、canonical settlement diagnostics、explicit scoped threshold evaluation |
-| first-class MCP Tasks adapter | **upstream stabilization次第** | accounting semanticsは定義済み、stable adapter未宣言 |
-| new stateless MRTR claim mode | **必要性が出るまでdeferred** | shared one-time claimより明確な利点なし |
-| billing / financial ledger / workflow replay | **out of scope** | enforcement外 |
+Core lifecycle、Redis / Cloudflare / Firestore Store、single-round `protectTool()`、current multi-round accountingはv1 candidate evidenceの対象です。first-class MCP Tasks runtime supportはupstream stabilization待ちです。billing、financial ledger、gateway、workflow replayは引き続きscope外です。
 
-詳しくは **[v1.0 readiness review](docs/v1-readiness.ja.md)** と **[Roadmap](docs/roadmap.ja.md)** を参照してください。
+詳細なrelease boundaryとevidenceは **[v1.0 readiness review](docs/v1-readiness.ja.md)** と **[Roadmap](docs/roadmap.ja.md)** を参照してください。
 
 ## Multi-budget admission
 

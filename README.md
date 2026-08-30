@@ -4,30 +4,41 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-**Failure-safe transactional usage enforcement around MCP tool execution.**
+**Keep MCP usage limits correct when execution, retries, and failures overlap.**
 
-`mcp-usage-control` reserves usage capacity **before** metered work starts and settles actual usage afterward. It is designed for concurrency, retry, process loss, long-running work, and MCP multi-round flows where a naive `check -> execute -> increment` model can oversubscribe a real budget.
+Use `mcp-usage-control` when an MCP tool consumes a real limited resource: paid model calls, credits, exports, searches, jobs, or plan quotas. It atomically reserves usage **before** work starts and settles the actual usage afterward, so concurrency, retries, crashes, and lost acknowledgements do not silently overspend the same quota.
 
-The project focuses on the boundary between execution and usage accounting. It is not a payment processor, financial ledger, subscription system, OAuth provider, generic gateway, workflow engine, or ordinary HTTP rate limiter.
+A typical fit is a product with rules such as:
 
-> New here? Start with **[Getting started](docs/getting-started.md)**.
+```text
+Free   -> 50 credits / month
+Plus   -> 500 credits / month
+search -> 1 credit
+report -> 10 credits
+```
+
+If two requests arrive when only 10 credits remain, the library can prevent both 10-credit jobs from starting. If a worker crashes after paid work may have begun, the reservation is not optimistically refunded. If the same logical operation is retried, replay protection prevents a second independent reservation.
+
+### Use it when
+
+- MCP tools consume paid or scarce resources;
+- Free/Pro, user, tenant, daily, or monthly limits must remain correct under concurrency;
+- retries, process loss, long-running work, or multi-round MCP flows are realistic production events;
+- quota safety matters more than failing open during ambiguous backend failures.
+
+### Do not use it when
+
+- you only need a simple requests-per-minute rate limit;
+- you need billing, invoicing, checkout, subscription management, or a financial ledger;
+- approximate / eventually consistent global quotas are acceptable and strict reservation semantics are unnecessary.
+
+> Want to evaluate it quickly? Start with **[Getting started](docs/getting-started.md)**. For the design boundary, read **[Project positioning](docs/positioning.md)**.
 
 ## Current distribution status
 
-**The packages are not published to npm yet.**
+**The packages are not published to npm yet.** `v0.13.0` is the current validated GitHub/source release baseline. Until first registry publication, use the attached GitHub Release tarballs or a repository checkout. See **[Use from source / local tarballs](docs/using-from-source.md)**.
 
-`v0.13.0` is the current GitHub/source release baseline. Use a repository checkout or the validated GitHub Release tarballs. Registry publication is a separate manual operation and remains explicitly deferred under Issue #6.
-
-```console
-git clone https://github.com/git-ksk/mcp-usage-control.git
-cd mcp-usage-control
-pnpm install --frozen-lockfile
-pnpm check
-```
-
-See **[Use from source / local tarballs](docs/using-from-source.md)** for clean-consumer installation.
-
-Requirements: **Node.js 22+**, ESM. Supported runtime evidence is Node.js 22/24. CI also exercises Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
+Requirements: **Node.js 22+**, ESM. CI covers Node.js 22/24, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
 
 ## Core lifecycle
 
@@ -68,29 +79,14 @@ This project instead makes admission and reservation one authoritative store tra
 
 All five package manifests are aligned at `0.13.0`. **v0.13.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
-**Current execution order:** v0.13.0 is the released source baseline and the bounded v1-blocker closure is complete. The next release milestone is **v1.0 as a feature-free stable promotion** of this hardened surface. Issue #6 remains a separate npm-publication gate that requires explicit authorization.
 
-## Frozen v1 candidate scope
+## v1 status
 
-The v1 accounting lifecycle/storage contract was frozen in v0.11. v0.13 completed the corrective hardening checkpoint discovered by the final v1 audit, closing correctness/operations/distribution gaps without introducing a new billing model or changing the base reserve/liability/grow/renew/settle invariants. The next milestone is feature-free v1 stable promotion.
+The accounting lifecycle and Store contract are frozen for the v1 candidate. The current `v0.13.0` source release is the hardened baseline; the planned v1 step is a feature-free stable promotion rather than another feature expansion.
 
-| Area | Current status | Boundary |
-| --- | --- | --- |
-| Core reserve / liability / renew / settle | **strong v1 candidate** | Failure-safe transaction contract |
-| Multi-budget admission / replay protection | **strong v1 candidate** | Atomic and scoped by logical operation identity |
-| Redis / Cloudflare / Firestore Stores | **strong v1 candidate with documented deployment constraints** | Provider durability/time/HA differences remain explicit |
-| `protectTool()` | **strong v1 candidate** | Single-round MCP tools |
-| `protectMultiRoundTool()` | **strong v1 candidate** | Supported `input_required` multi-round accounting |
-| Shared/durable MRTR compare-and-consume | **current v1 direction** | Cross-instance resume without sticky MCP sessions |
-| Progressive reservation growth (#83) | **adopted in v0.6** | Optional `UsageLease.grow()` / `ProgressiveUsageStore`; atomic/lost-ACK/provider proof |
-| Heterogeneous multi-dimensional usage (#84) | **adopted in v0.7** | Optional `VectorUsageControl` / `VectorUsageStore`; atomic per-dimension admission/growth/settlement + lost-ACK/provider proof |
-| Operation reconciliation/status (#81) | **adopted in v0.8** | Optional scalar `OperationReconciliationStore`; read-only `absent`/`active`/`expired`/`settled` vocabulary, mismatch/unknown fail closed, provider-specific support matrix |
-| Operational usability (#76/#99/#82) | **adopted in v0.10** | Non-authoritative snapshot/runtime identity, canonical settlement diagnostics, explicit scoped threshold evaluation |
-| First-class MCP Tasks wire/runtime adapter | **scope depends on upstream stabilization** | Accounting semantics are defined; stable adapter is not yet claimed |
-| New stateless MRTR claim mode | **deferred unless justified** | No demonstrated advantage over shared one-time claim |
-| Billing / financial ledger / workflow replay | **out of scope** | Remains outside usage enforcement |
+Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 candidate evidence. First-class MCP Tasks runtime support remains dependent on upstream stabilization. Billing, financial-ledger, gateway, and workflow-replay responsibilities remain out of scope.
 
-See **[v1.0 readiness review](docs/v1-readiness.md)** and **[Roadmap](docs/roadmap.md)** for the current scope decision process.
+For the detailed release boundary and evidence, see **[v1.0 readiness review](docs/v1-readiness.md)** and **[Roadmap](docs/roadmap.md)**.
 
 ## Multi-budget admission
 

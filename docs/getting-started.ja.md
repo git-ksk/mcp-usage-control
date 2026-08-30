@@ -2,42 +2,43 @@
 
 [English](getting-started.md) | [日本語](getting-started.ja.md)
 
-このページでは、`mcp-usage-control` が何をするものかを、できるだけ日本語で説明します。
+このguideは1つの問いに答えます。**MCP toolの前に月次credit上限を置きたいとき、quota state machineを自前で作らず安全に実装できるか？**
 
-## 何をするライブラリ？
+## 具体的なproduct ruleから始める
 
-一言でいうと、**MCPのtoolを実行する前に利用枠を確保し、実行後に実際の消費量を確定するためのライブラリ**です。
-
-たとえば、あるユーザーの残り利用回数が1回しかないとします。そこへ2件のtool callがほぼ同時に来ると、単純な実装では両方が「まだ1回残っている」と判断して処理を始めてしまうことがあります。
+例えば次のMCP productを考えます。
 
 ```text
-悪い例
-
-確認: 残り1回 ─┬─ request A → 実行開始
-               └─ request B → 実行開始
-
-結果: 1回しか残っていないのに2回実行される
+Free plan:  月50 credits
+Plus plan: 月500 credits
+search:        1 credit
+report:       10 credits
 ```
 
-`mcp-usage-control` は、実行前に利用枠を予約（`reserve`）します。
+`report` は必要creditをatomicにreserveできた場合だけ開始したいとします。単純な `remainingを読む -> tool実行 -> usage加算` は同時実行でoverspendできます。`mcp-usage-control` はこれを `reserve -> mark liable -> execute -> settle` にします。
+
+creditが実コストやproduct上の約束を表すなら向いています。単純なrequests-per-minute throttleだけなら一般的なrate limiterの方が適切です。
+
+## libraryが責任を持つ範囲
+
+責任範囲は **tool executionとusage accountingのcorrectness boundary** です。
 
 ```text
 request
-  ↓
-必要な利用量を決める
-  ↓
-利用枠を予約する（reserve）
-  ↓
-実コストが発生する直前に markLiable()
-  ↓
-toolを実行
-  ↓
-実際に使った量を確定する（settle）
+  -> policyがunits / budgetsをquote
+  -> Storeがquotaをatomic reserve
+  -> metered work直前にleaseをcost-liable化
+  -> tool実行
+  -> actual usageをsettle
 ```
 
-そのため、同じ利用枠を複数のrequestが同時に使ってしまう競合を防げます。
+authentication、subscription、checkout、invoice、financial ledgerはapplication側の責任です。
 
-このライブラリが扱うのは**利用上限の判定と実行前後の利用量管理**です。決済、請求書、サブスクリプション販売、OAuth、MCP Gatewayそのものは対象外です。
+## npm公開前の評価方法
+
+packageはまだnpm未公開です。評価にはvalidated `v0.13.0` GitHub Release tarballまたはrepository checkoutを使います。clean consumerへのexact commandは [Source / local tarballから使う](using-from-source.ja.md) にあります。
+
+**Node.js 22以降が必要です。**
 
 ## まず覚える3つ
 
