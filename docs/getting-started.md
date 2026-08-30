@@ -40,6 +40,10 @@ The packages are not on npm yet. For evaluation, use the validated `v0.13.0` Git
 
 **Node.js 22 or later is required.**
 
+## Run the concurrency proof
+
+From a repository checkout, `pnpm example:free-plus` runs a self-verifying example with no external service. It spends 40/50 Free credits, races two 10-credit reports for the final 10, and asserts that only one starts. This is the fastest way to verify the core safety property before reading the advanced APIs.
+
 ## Three concepts to remember
 
 - **Policy** — decides whether a call is allowed, how many units it costs, and which budgets apply.

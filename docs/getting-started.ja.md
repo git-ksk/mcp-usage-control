@@ -40,6 +40,10 @@ packageはまだnpm未公開です。評価にはvalidated `v0.13.0` GitHub Rele
 
 **Node.js 22以降が必要です。**
 
+## concurrency proofを実行する
+
+repository checkoutから `pnpm example:free-plus` を実行すると、external serviceなしでself-verifying exampleが動きます。Free 50 creditsのうち40を消費したあと、残り10に対して10-credit reportを2件raceさせ、1件だけが開始されることをassertします。advanced APIを読む前にcore safety propertyを確認する最短経路です。
+
 ## まず覚える3つ
 
 ### Policy — 何を許可するか決める

@@ -34,6 +34,10 @@ report -> 10 credits
 
 > まず試すなら **[はじめに](docs/getting-started.ja.md)**。設計境界は **[Project positioning](docs/positioning.ja.md)** を参照してください。
 
+## Safety propertyを実際に動かす
+
+`pnpm example:free-plus` で、Free 50 / Plus 500 monthly creditsのself-verifying exampleを実行できます。Free残り10 creditsに対して10-credit reportを2件同時実行し、exactly oneだけadmitされなければexample自体が失敗します。[実行可能なFree / Plus credits example](examples/free-plus-credits/README.md) を参照してください。
+
 ## 現在の配布状況
 
 **まだnpmへ公開していません。** `v0.13.0` がvalidated GitHub/source release baselineです。初回registry publishまではGitHub Release tarballまたはrepository checkoutを使います。詳しくは **[Source / local tarballから使う](docs/using-from-source.ja.md)** を参照してください。
@@ -285,6 +289,7 @@ observabilityはdurable billing ledgerではありません。
 ## ドキュメント
 
 - [はじめに](docs/getting-started.ja.md)
+- [Troubleshooting](docs/troubleshooting.ja.md)
 - [Source / local tarballから使う](docs/using-from-source.ja.md)
 - [MCP integration](docs/mcp-integration.ja.md)
 - [サブスク型MCP creditsの実装パターン](docs/subscription-credits.ja.md)
