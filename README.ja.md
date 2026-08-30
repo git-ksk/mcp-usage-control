@@ -81,6 +81,29 @@ remaining確認 -> paid work実行 -> counter加算
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite Store、local / authenticated remote path |
 | `mcp-usage-control-firestore` | server-side Firestore transactional Store |
 
+packageは3層で考えると分かりやすいです。
+
+```text
+mcp-usage-control
+= usage controlのエンジン本体
+
+mcp-usage-control-mcp
+= そのエンジンをMCPへ取り付けるintegration kit
+
+redis / cloudflare / firestore
+= authoritative stateの保存先
+```
+
+典型的な組み合わせ:
+
+| 作るもの | まず使うpackage |
+| --- | --- |
+| 普通のMCP TypeScript server | core + MCP adapter + production Storeを1つ |
+| lifecycleを自前で制御するcustom integration | core + production Storeを1つ |
+| local test / short-lived single-process prototype | core + `MemoryUsageStore` だけでも可 |
+
+普通のapplicationで5 package全部をinstallする必要はありません。必要なintegration layerと、deploymentに合うStore backendを1つ選びます。
+
 5 package manifestは `0.13.0` で揃っています。**v0.13.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
 

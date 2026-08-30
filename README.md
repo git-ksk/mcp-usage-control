@@ -81,6 +81,29 @@ This project instead makes admission and reservation one authoritative store tra
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
 | `mcp-usage-control-firestore` | Server-side Firestore transactional store |
 
+Think of the packages as three layers:
+
+```text
+mcp-usage-control
+= the usage-control engine
+
+mcp-usage-control-mcp
+= the MCP integration kit around that engine
+
+redis / cloudflare / firestore
+= interchangeable authoritative state backends
+```
+
+Typical combinations:
+
+| You are building | Start with |
+| --- | --- |
+| A normal MCP TypeScript server | core + MCP adapter + one production Store |
+| A custom integration that owns the lifecycle directly | core + one production Store |
+| A local test or short-lived single-process prototype | core only with `MemoryUsageStore` |
+
+You do **not** install all five packages for a normal application. Pick the integration layer you need and one Store backend that matches the deployment.
+
 All five package manifests are aligned at `0.13.0`. **v0.13.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
 
