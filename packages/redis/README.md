@@ -44,7 +44,7 @@ Lua atomicityはpersistence / failover durabilityと同一ではありません�
 
 ## Operation reconciliation (v0.8)
 
-`RedisUsageStore` implements optional scalar `OperationReconciliationStore` through a read-only Lua lookup. Expected retained units/budget identities must match or the lookup fails closed. Real-Redis CI runs the portable reconciliation conformance suite.
+`RedisUsageStore` implements optional scalar `OperationReconciliationStore` and v0.13 `VectorOperationReconciliationStore` through read-only Lua lookups. Expected retained scalar units or exact vector dimension/budget topology must match authoritative retained state or the lookup fails closed. Real-Redis CI runs the portable scalar and vector reconciliation conformance suites.
 
 ## Atomic vector usage (v0.7)
 

@@ -129,7 +129,7 @@ progressive growth中のactive reservationは例外です。growthはoriginal re
 
 新しいwindow keyをderiveしても、前windowのbucketを**mutate / reset / retireしません**。これによりhistoricalなauthoritative enforcement stateは保持されますが、長期運用ではhistorical keyが無制限に増える前にapplication側で明示的なretention policyを決める必要があります。
 
-old keyをretire / pruneするのは、そのexact accounting windowが永久に終了し、active reservationから参照されておらず、必要なreplay / reconciliation horizonも経過したとapplicationが確認した後だけです。`MemoryUsageStore.retireBudgetKey()` とoptionalなCloudflare historical budget pruning APIは、そのための明示的なlifecycle toolです。どちらもwindow ageを自動推論しません。詳しくは [Memory Store](memory-store.ja.md) と [Cloudflare historical budget pruning](cloudflare-budget-pruning.ja.md) を参照してください。
+old keyをretire / pruneするのは、そのexact accounting windowが永久に終了し、active reservationから参照されておらず、必要なreplay / reconciliation horizonも経過したとapplicationが確認した後だけです。built-in Storeはwindow ageを自動推論せず、明示的かつboundedなlifecycle toolを提供します。`MemoryUsageStore.retireBudgetKey()` はexact key 1件、Redis / Firestore の `retireHistoricalBudgets()` はapplicationが選択したexact historical key群、optionalなCloudflare historical budget pruning APIはbounded pruningを扱います。どのpathも選択したbudgetをactive reservationが参照中ならretirementを拒否します。詳しくは [Memory Store](memory-store.ja.md)、[Redis](redis.ja.md)、[Firestore](firestore.ja.md)、[Cloudflare historical budget pruning](cloudflare-budget-pruning.ja.md) を参照してください。
 
 ## Application側に残る責務
 
