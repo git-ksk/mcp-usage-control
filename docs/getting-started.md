@@ -2,26 +2,43 @@
 
 [English](getting-started.md) | [日本語](getting-started.ja.md)
 
-This is the shortest introduction to `mcp-usage-control` for first-time readers.
+This guide answers one question: **can I safely put a monthly credit limit in front of an MCP tool without building a quota state machine myself?**
 
-## What does this library do?
+## Start with a concrete product rule
 
-It reserves usage capacity **before** an MCP tool starts and settles the actual usage after the tool finishes.
+Assume your MCP product has:
 
-For example, if a user has one unit left and two requests arrive at the same time, a naive `check -> execute -> increment` flow can let both requests start.
+```text
+Free plan:  50 credits / month
+Plus plan: 500 credits / month
+search:      1 credit
+report:     10 credits
+```
 
-`mcp-usage-control` reserves first, so concurrent requests cannot safely spend the same remaining quota twice.
+You want `report` to start only when all required credits have been atomically reserved. A naive `read remaining -> run tool -> increment usage` flow can overspend under concurrency; `mcp-usage-control` turns that into `reserve -> mark liable -> execute -> settle`.
+
+This library is a good fit if those credits represent real cost or a product promise. If all you need is a coarse requests-per-minute throttle, use a normal rate limiter instead.
+
+## What the library owns
+
+It owns the correctness boundary between **tool execution and usage accounting**:
 
 ```text
 request
-  -> policy decides the required units
+  -> policy quotes units and budgets
   -> store atomically reserves quota
-  -> mark the lease cost-liable just before execution
-  -> execute the tool
-  -> settle the actual usage
+  -> lease becomes cost-liable immediately before metered work
+  -> tool executes
+  -> actual usage settles
 ```
 
-It is not a payment processor, subscription manager, or invoicing system. Its job is to make the boundary between **tool execution and usage accounting** safe.
+It deliberately does not own authentication, subscriptions, checkout, invoicing, or your financial ledger.
+
+## Evaluate it before npm publication
+
+The packages are not on npm yet. For evaluation, use the validated `v0.13.0` GitHub Release tarballs or a repository checkout. The exact clean-consumer commands are in [Use from source / local tarballs](using-from-source.md).
+
+**Node.js 22 or later is required.**
 
 ## Three concepts to remember
 
