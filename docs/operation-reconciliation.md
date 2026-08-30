@@ -63,12 +63,12 @@ Operation IDs and reservation IDs are correlation/replay identities, **not crede
 
 ## Built-in Store support
 
-| Store | v0.8 scalar reconciliation | Mechanism / boundary |
-| --- | --- | --- |
-| `MemoryUsageStore` | **Scalar + vector** | `reconcileOperation()` / `reconcileVectorOperation()` read retained in-process state without running expiry recovery. Process restart loses Memory state, so `absent` after restart is not historical proof. |
-| `RedisUsageStore` | **Scalar + vector** | Read-only Lua paths use Redis `TIME`, `HGET`, and `ZSCORE`; expected scalar/vector topology is validated before status is returned. |
-| `FirestoreUsageStore` | **Scalar + vector** | Read-only Firestore transactions validate expected scalar/vector topology. The existing bounded/synchronized host-clock requirement still applies to expiry classification. |
-| Cloudflare Durable Objects | **Scalar only; explicit vector exception** | `reconcileRemoteCloudflareOperation()` uses the authenticated read-only lookup gateway. Vector initial-reserve ACK ambiguity remains fail closed in v0.13. |
+| Store | scalar reconciliation | vector initial-reserve reconciliation | Mechanism / boundary |
+| --- | --- | --- | --- |
+| `MemoryUsageStore` | **Supported** | **Supported** | `reconcileOperation()` / `reconcileVectorOperation()` read retained in-process state without running expiry recovery. Process restart loses Memory state, so `absent` after restart is not historical proof. |
+| `RedisUsageStore` | **Supported** | **Supported** | Read-only Lua paths use Redis `TIME`, `HGET`, and `ZSCORE`; expected scalar/vector topology is validated before status is returned. |
+| `FirestoreUsageStore` | **Supported** | **Supported** | Read-only Firestore transactions validate expected scalar/vector topology. The existing bounded/synchronized host-clock requirement still applies to expiry classification. |
+| Cloudflare Durable Objects | **Supported** | **Not supported; fail closed** | `reconcileRemoteCloudflareOperation()` uses the authenticated read-only lookup gateway. Vector initial-reserve ACK ambiguity remains fail closed in v0.13. |
 
 The base `UsageStore` does not require reconciliation, so third-party Stores remain source-compatible. A third-party Store that does not implement the optional capability must keep ambiguous acknowledgement handling fail closed and document its narrower recovery boundary.
 

@@ -86,8 +86,8 @@ npm publishは後日の明示的な別工程です。Git tag / GitHub Releaseが
 2. final public contract reviewを実施。
 3. npm Trusted Publishingまたは必要に応じてone-time bootstrap credentialを設定・確認。
 4. publish対象のGitHub Release / tagを確認。
-5. `Publish npm` workflowをexplicit confirmation付きで手動実行。
-6. dependency順にpublish: core -> MCP / Redis / Cloudflare / Firestore adapter。
+5. `Publish npm` workflowをexplicit confirmation付きで手動実行。workflowは選択したGitHub Release tarballをdownloadして`SHA256SUMS`を検証し、再packしない。
+6. 検証・attest済みGitHub Release tarballのexact bytesをdependency順にpublish: core -> MCP / Redis / Cloudflare / Firestore adapter。
 7. supported Node.js floorのclean consumer projectからregistry metadata / installをverify。
 
 GitHub-hosted runnerではnpm Trusted Publishing / OIDCを優先します。long-lived npm tokenをrepository file、log、release artifactへ入れません。

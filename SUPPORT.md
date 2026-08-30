@@ -60,7 +60,7 @@ Known pre-v1 limitations include:
 - public API/name freeze is completed through the v0.11 line rather than assumed from earlier source releases;
 - npm registry publication remains deferred until the separately authorized first publish tracked in #6;
 - stable first-class MCP Tasks wire/runtime integration remains deferred while the upstream surface is experimental;
-- generic operation reconciliation is scalar-only; vector initial-reserve ambiguity remains fail closed unless separately proven;
+- scalar operation reconciliation is supported by Memory, Redis, Firestore, and Cloudflare; vector initial-reserve reconciliation is supported by Memory, Redis, and Firestore, while Cloudflare remains an explicit fail-closed vector exception;
 - strict provider-specific fencing after lease loss is outside the generic core;
 - billing, payment, authentication, and analytics backends are not built into core.
 

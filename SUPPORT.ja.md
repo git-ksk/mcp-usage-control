@@ -60,7 +60,7 @@ quota bypass、double spending、unauthorized access、cross-tenant leakage、in
 - public API / name freezeはolder source releaseから暗黙に仮定せず、v0.11 lineで完了させる
 - npm registry publicationは#6の明示authorization付きfirst publishまでdeferred
 - stableなfirst-class MCP Tasks wire/runtime integrationはupstream surfaceがexperimentalな間deferred
-- generic operation reconciliationはscalar-onlyで、vector initial-reserve ambiguityは別proofがない限りfail closed
+- scalar operation reconciliationはMemory / Redis / Firestore / Cloudflareで対応し、vector initial-reserve reconciliationはMemory / Redis / Firestoreで対応。Cloudflareは明示的なfail-closed vector例外
 - lease loss後の厳密なprovider-specific fencingはgeneric coreの責務外
 - billing、payment、authentication、analytics backendをcoreへ内蔵しない
 

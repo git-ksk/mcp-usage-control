@@ -38,7 +38,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Vector MCP integration](vector-mcp-integration.md) — explicit MCP lifecycle for safely consuming vector capacity.
 - [MCP Tasks accounting](mcp-tasks-accounting.md) — the long-running task accounting state machine and its separation from business task/result replay.
 - [Store implementation contract](store-contract.md) — normative `UsageStore` / `McpUsageFlowStore` semantics, production-safety evidence, and portable conformance kits.
-- [Operation reconciliation/status](operation-reconciliation.md) — v0.8 read-only scalar operation-state vocabulary, fail-closed ambiguity boundary, Store support matrix, and portable conformance.
+- [Operation reconciliation/status](operation-reconciliation.md) — v0.13 scalar/vector read-only operation-state contracts, fail-closed ambiguity boundary, provider capability matrix, and portable conformance.
 - [Mutable quota limits](mutable-quota-limits.md) — same-key upgrade/downgrade/override semantics and policy-rollout consistency requirements.
 - [Subscription-style MCP credits](subscription-credits.md) — canonical Free/Plus monthly weighted-credit composition, dynamic costs, and responsibility boundaries.
 - [Accounting-window budget keys](accounting-window-keys.md) — deterministic calendar-day/month key construction with explicit timezone and accounting-identity migration hazards.

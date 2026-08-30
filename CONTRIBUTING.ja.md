@@ -10,7 +10,7 @@
 
 必要環境:
 
-- Node.js 20+
+- Node.js 22+
 - pnpm 10
 - Redis integration behaviorを再現する場合はDockerまたはlocal Redis 7
 
@@ -27,7 +27,7 @@ CIは、**安全性を落とさず、ドキュメント変更では重い処理�
 
 ### Required check
 
-mainのbranch protectionでは `test (20)` と `test (22)` をRequired checkとして扱います。
+mainのbranch protectionでは `test (22)` をaggregate release-safety Required checkとして扱います。
 
 この2つのcheck名は運用上の契約です。workflow内のjob名やmatrix構成を変更してcheck名が変わる場合は、branch protection側も同じ運用変更として見直してください。check名だけを先に変更しないでください。
 
@@ -40,7 +40,7 @@ Required checkをworkflow全体の `paths-ignore` で止める構成は使いま
 - `docs/**`
 - 任意の階層にあるMarkdown (`*.md`)
 
-すべての変更pathがこの条件に入る場合、`changes` jobでdocs-onlyと判定し、`test (20)` / `test (22)` 自体は実行します。ただし各jobでは軽量pathだけを成功させ、次の重い処理は省略します。
+すべての変更pathがこの条件に入る場合、`changes` jobでdocs-onlyと判定し、`test (22)` aggregate jobはbranch protection向けに成功状態まで解決します。ただしdocs-onlyの軽量pathだけを通し、次の重い処理は省略します。
 
 - repository checkout
 - Node / pnpm setup

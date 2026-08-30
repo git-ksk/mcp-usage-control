@@ -58,20 +58,22 @@ operation ID / reservation IDはcorrelation・replay identityであり、credent
 
 ## Built-in Store support
 
-| Store | v0.8 scalar reconciliation | Mechanism / boundary |
-| --- | --- | --- |
-| `MemoryUsageStore` | **Supported** | `reconcileOperation()` がexpiry recoveryを実行せずretained in-process stateをread。process restart後の`absent`はhistorical proofではありません。 |
-| `RedisUsageStore` | **Supported** | `reconcileOperation()` はread-only Lua path（`TIME`, `HGET`, `ZSCORE`）を使用し、expected units / budget hashを検証。Redis integrationでportable reconciliation contractを実行。 |
-| `FirestoreUsageStore` | **Supported** | `reconcileOperation()` はread-only Firestore transactionを使用し、expected units / budget hashを検証。expiry判定には既存のbounded/synchronized host-clock要件が継続適用。Firestore Emulatorでportable reconciliation contractを実行。 |
-| Cloudflare Durable Objects | **reconciliation subpathでSupported** | `reconcileRemoteCloudflareOperation()` がauthenticated read-only lookup gatewayを使用。`reconcileRemoteCloudflareReserve()` はv0.7互換aliasとして維持。既存のdeployed/local lost-ACK reconciliation evidenceを継続利用。 |
+| Store | scalar reconciliation | vector initial-reserve reconciliation | Mechanism / boundary |
+| --- | --- | --- | --- |
+| `MemoryUsageStore` | **Supported** | **Supported** | retained in-process stateをread-onlyで確認します。process restart後の`absent`はhistorical proofではありません。 |
+| `RedisUsageStore` | **Supported** | **Supported** | Redis `TIME` / `HGET` / `ZSCORE`を使うread-only Lua pathで、expected scalar/vector topologyを検証します。 |
+| `FirestoreUsageStore` | **Supported** | **Supported** | read-only Firestore transactionでexpected scalar/vector topologyを検証します。expiry判定には既存のbounded/synchronized host-clock要件が継続適用されます。 |
+| Cloudflare Durable Objects | **Supported** | **Not supported; fail closed** | authenticated read-only scalar lookup gatewayを使用します。vector initial-reserve ACK ambiguityはv0.13ではfail closedです。 |
 
-base `UsageStore` にreconciliationを必須化しないため、third-party Storeはsource-compatibleです。optional capabilityを実装しないStoreは、ambiguous ACKをfail closedのまま扱い、より狭いrecovery boundaryを明記する必要があります。
+base `UsageStore` / `VectorUsageStore` にreconciliationを必須化しないため、third-party Storeはsource-compatibleです。optional capabilityを実装しないStoreはambiguous ACKをfail closedのまま扱い、より狭いrecovery boundaryを明記する必要があります。
 
-## Scalar-only v0.8 boundary
+## Vector reserve reconciliation (v0.13)
 
-v0.8 capabilityは意図的に **scalar-only** です。`VectorUsageStore` はv0.7のoptional capabilityとして維持しますが、v0.8ではgeneric vector operation reconciliationをclaimしません。scalar reconciliation APIはretained vector reservationを別物として解釈せずrejectします。
+`VectorOperationReconciliationStore` はambiguousな **initial vector reserve** acknowledgement向けのread-only contractです。callerはtrusted operation identityに加え、expected dimension key、reserved units、budget-key topologyを正確に渡します。不一致はreject / fail closedし、reconciliation自体はquotaをreserve/releaseしません。
 
-vector growth / settlementには既にexact retry/replay fenceがあります。initial vector reserve ACKのambiguityは、providerが将来別途proof済みvector reconciliationを提供しない限りfail closedです。
+`MemoryUsageStore`、`RedisUsageStore`、`FirestoreUsageStore` が対応します。scalar lookupはvector stateを、vector lookupはscalar stateを別modeとしてrejectし、coerceしません。growth / settlementは既存のexact replay fenceを維持します。
+
+Cloudflare Durable Objectsはv0.13の明示的例外です。remote reconciliation subpathはscalar initial-reserve statusのみをproofし、vector reserve ACK ambiguityはfail closedです。scalar対応からvector対応を推論したり、vector reserveをblind replayしてはいけません。provider-wide vector reconciliation parityを将来claimする場合は、この例外を解消するか明示的に再評価します。
 
 ## Portable conformance
 
