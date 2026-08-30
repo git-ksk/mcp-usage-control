@@ -60,6 +60,34 @@ From a repository checkout, `pnpm example:free-plus` runs a self-verifying examp
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objects |
 | `mcp-usage-control-firestore` | Firebase/GCP deployments using Firestore as the authoritative store |
 
+### The package split in one picture
+
+```text
+mcp-usage-control
+= engine: reserve / liability / renew / settle
+
+mcp-usage-control-mcp
+= MCP integration: wraps tool handlers with the engine
+
+mcp-usage-control-{redis,cloudflare,firestore}
+= authoritative state backend
+```
+
+Choose by integration style, not by trying to install everything:
+
+```text
+normal MCP server
+-> core + mcp + one Store
+
+custom lifecycle integration
+-> core + one Store
+
+local/test
+-> core + MemoryUsageStore
+```
+
+The MCP adapter depends conceptually on core; the Store adapters implement core's storage contract. The adapters are separate so an application does not carry Redis, Cloudflare, or Firestore dependencies it does not use.
+
 The Memory store is the process-local reference implementation. It is suitable for tests, local development, and controlled single-process deployments that explicitly accept restart loss. Use a shared provider-backed store when enforcement state must survive restarts or be shared across instances.
 
 ## Current installation path

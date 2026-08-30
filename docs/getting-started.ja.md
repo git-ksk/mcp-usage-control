@@ -76,6 +76,34 @@ repository checkoutから `pnpm example:free-plus` を実行すると、external
 | `mcp-usage-control-cloudflare` | Cloudflare Durable Objectsを保存先にする |
 | `mcp-usage-control-firestore` | Firestoreを保存先にする |
 
+### package構成を1枚で見る
+
+```text
+mcp-usage-control
+= エンジン本体: reserve / liability / renew / settle
+
+mcp-usage-control-mcp
+= MCP integration: tool handlerへエンジンを取り付ける
+
+mcp-usage-control-{redis,cloudflare,firestore}
+= authoritative stateの保存先
+```
+
+全部入れるのではなく、integration方法で選びます。
+
+```text
+普通のMCP server
+-> core + mcp + Storeを1つ
+
+lifecycleを自前で制御
+-> core + Storeを1つ
+
+local / test
+-> core + MemoryUsageStore
+```
+
+MCP adapterはcoreをMCP handlerへ接続し、Store adapterはcoreのstorage contractを実装します。packageを分けることで、Redisを使わないapplicationへRedis dependencyを、Firestoreを使わないapplicationへFirestore dependencyを持ち込まずに済みます。
+
 ### `mcp-usage-control-mcp` は中継サーバではない
 
 ここは誤解しやすいところです。
