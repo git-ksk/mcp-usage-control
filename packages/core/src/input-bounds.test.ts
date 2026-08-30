@@ -56,4 +56,78 @@ describe('v1 input envelope', () => {
       ),
     }])).toThrow(/32-budget input limit/);
   });
+
+  it('applies the UTF-8 identifier byte limit across identifier classes without echoing rejected input', () => {
+    const exact = 'a'.repeat(USAGE_INPUT_LIMITS.identifierBytes);
+    const tooLarge = '界'.repeat(Math.floor(USAGE_INPUT_LIMITS.identifierBytes / 3) + 1);
+
+    const validRequests = [
+      { operationId: exact, principal: { id: 'principal' }, tool: 'tool', args: {} },
+      { operationId: 'operation', principal: { id: exact }, tool: 'tool', args: {} },
+      { operationId: 'operation', principal: { id: 'principal', tenantId: exact }, tool: 'tool', args: {} },
+      { operationId: 'operation', principal: { id: 'principal' }, tool: exact, args: {} },
+    ];
+    for (const request of validRequests) expect(() => validateUsageRequestEnvelope(request)).not.toThrow();
+
+    const invalidRequests = [
+      { operationId: tooLarge, principal: { id: 'principal' }, tool: 'tool', args: {} },
+      { operationId: 'operation', principal: { id: tooLarge }, tool: 'tool', args: {} },
+      { operationId: 'operation', principal: { id: 'principal', tenantId: tooLarge }, tool: 'tool', args: {} },
+      { operationId: 'operation', principal: { id: 'principal' }, tool: tooLarge, args: {} },
+    ];
+    for (const request of invalidRequests) {
+      try {
+        validateUsageRequestEnvelope(request);
+        throw new Error('expected identifier limit rejection');
+      } catch (error) {
+        expect(String(error)).toMatch(/1024-byte input limit/);
+        expect(String(error)).not.toContain(tooLarge);
+      }
+    }
+
+    expect(() => validateUsageBudgetEnvelope([{ key: exact, limit: 1 }])).not.toThrow();
+    expect(() => validateUsageVectorEnvelope([{ key: exact, units: 1, budgets: [{ key: 'budget', limit: 1 }] }])).not.toThrow();
+    expect(() => validateUsageVectorEnvelope([{ key: 'dimension', units: 1, budgets: [{ key: exact, limit: 1 }] }])).not.toThrow();
+
+    for (const action of [
+      () => validateUsageBudgetEnvelope([{ key: tooLarge, limit: 1 }]),
+      () => validateUsageVectorEnvelope([{ key: tooLarge, units: 1, budgets: [{ key: 'budget', limit: 1 }] }]),
+      () => validateUsageVectorEnvelope([{ key: 'dimension', units: 1, budgets: [{ key: tooLarge, limit: 1 }] }]),
+    ]) {
+      try {
+        action();
+        throw new Error('expected identifier limit rejection');
+      } catch (error) {
+        expect(String(error)).toMatch(/1024-byte input limit/);
+        expect(String(error)).not.toContain(tooLarge);
+      }
+    }
+  });
+
+  it('bounds total vector budget edges independently at 128', () => {
+    const build = (edges: number) => {
+      const dimensions = [] as Array<{ key: string; units: number; budgets: Array<{ key: string; limit: number }> }>;
+      let remaining = edges;
+      let dimension = 0;
+      while (remaining > 0) {
+        const count = Math.min(USAGE_INPUT_LIMITS.vectorBudgetsPerDimension, remaining);
+        dimensions.push({
+          key: `dimension-${dimension}`,
+          units: 1,
+          budgets: Array.from({ length: count }, (_, index) => ({
+            key: `budget-${dimension}-${index}`,
+            limit: 1,
+          })),
+        });
+        remaining -= count;
+        dimension += 1;
+      }
+      return dimensions;
+    };
+
+    expect(() => validateUsageVectorEnvelope(build(USAGE_INPUT_LIMITS.vectorBudgetsTotal))).not.toThrow();
+    expect(() => validateUsageVectorEnvelope(build(USAGE_INPUT_LIMITS.vectorBudgetsTotal + 1)))
+      .toThrow(/128-budget input limit/);
+  });
+
 });

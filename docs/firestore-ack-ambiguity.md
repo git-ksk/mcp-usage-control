@@ -14,7 +14,7 @@ Retry the **same logical operation identity** only for reconciliation. If the or
 
 Do not generate a new `operationId` merely to escape the duplicate result. Doing so would create a distinct accounting operation and could double-reserve capacity.
 
-The v1 Firestore adapter intentionally does not add a read-only reserve lookup/resume API. A lost reserve acknowledgement therefore sacrifices availability rather than weakening quota safety. If no metered work started, the committed pending reservation is eventually released by normal lease expiry/recovery.
+`FirestoreUsageStore` implements scalar `OperationReconciliationStore` and v0.13 `VectorOperationReconciliationStore`. If the initial reserve acknowledgement is ambiguous, use the same trusted logical operation identity plus the expected units / budget topology for read-only reconciliation against authoritative retained state. Reconciliation does not create a second reservation and does not authorize replay of the business operation. If the Store cannot prove a matching state, treat the result as indeterminate and fail closed.
 
 ## `markLiable()`
 

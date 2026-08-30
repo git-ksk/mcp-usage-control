@@ -14,7 +14,7 @@ reconciliation目的でretryする場合も、**同じlogical operation identity
 
 `duplicate_operation` を回避するためだけに新しい `operationId` を生成してはいけません。別accounting operationとして扱われ、capacityを二重にreserveする可能性があります。
 
-v1のFirestore adapterでは、read-onlyのreserve lookup/resume APIは意図的に追加しません。reserve ACK喪失時はquota safetyを弱める代わりにavailabilityを犠牲にします。metered workが始まっていなければ、commit済みpending reservationは通常のlease expiry/recoveryで最終的にreleaseされます。
+`FirestoreUsageStore` はv0.13でscalar `OperationReconciliationStore` と `VectorOperationReconciliationStore` を実装しています。initial reserve ACKが曖昧な場合は、同じtrusted logical operation identityとexpected units / budget topologyを使ってread-only reconciliationを行い、authoritative retained stateを確認できます。reconciliation自体は新しいreservationを作らず、business operationの再実行も許可しません。stateを証明できない場合はindeterminateとしてfail closedします。
 
 ## `markLiable()`
 
