@@ -74,7 +74,7 @@ protectTool()
 - [Vector MCP integration](vector-mcp-integration.ja.md) — MCPでvector capacityを安全に使うexplicit lifecycle pattern
 - [MCP Tasks の利用量 accounting](mcp-tasks-accounting.ja.md) — long-running taskのaccounting state machineとbusiness task/result replayの分離
 - [Store実装contract](store-contract.ja.md) — `UsageStore` / `McpUsageFlowStore` のnormative semantics、production-safety evidence、portable conformance kit
-- [Operation reconciliation / status](operation-reconciliation.ja.md) — v0.8 read-only scalar operation state語彙、fail-closed ambiguity boundary、Store別support matrix、portable conformance
+- [Operation reconciliation / status](operation-reconciliation.ja.md) — v0.13 scalar/vector read-only operation state contract、fail-closed ambiguity boundary、provider capability matrix、portable conformance
 - [Mutable quota limit](mutable-quota-limits.ja.md) — same-key upgrade / downgrade / override semanticsとpolicy rollout consistency
 - [サブスク型MCP creditsの実装パターン](subscription-credits.ja.md) — Free / Plus月次weighted credits、dynamic cost、subscription / billingとの責務境界
 - [利用枠の期間を表すbudget key](accounting-window-keys.ja.md) — timezoneを明示した日次/月次keyの作り方と、config変更をaccounting identity migrationとして扱う理由

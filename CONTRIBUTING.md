@@ -10,7 +10,7 @@ This project treats quota/accounting behavior as correctness- and security-sensi
 
 Requirements:
 
-- Node.js 20+
+- Node.js 22+
 - pnpm 10
 - Docker or a local Redis 7 instance when reproducing Redis integration behavior
 
@@ -19,7 +19,7 @@ pnpm install
 pnpm check
 ```
 
-CI tests Node.js 20/22, real Redis 7, and MCP SDK v2 protocol integration behavior.
+CI tests Node.js 22/24, real Redis 7, and MCP SDK v2 protocol integration behavior.
 
 ## CI operating rules
 
@@ -27,7 +27,7 @@ The CI policy is to **keep safety checks intact while avoiding heavy work for do
 
 ### Required checks
 
-Branch protection on `main` treats `test (20)` and `test (22)` as required checks.
+Branch protection on `main` treats `test (22)` as the required aggregate release-safety check.
 
 Those check names are part of the repository's operating contract. If a workflow/job/matrix change would rename them, update branch protection as part of the same operational change. Do not rename the checks first and leave branch protection expecting the old names.
 
@@ -40,7 +40,7 @@ A pull request is documentation-only when every changed path is one of the follo
 - `docs/**`
 - Markdown (`*.md`) at any repository depth
 
-When every changed path matches that definition, the `changes` job classifies the pull request as documentation-only. The `test (20)` and `test (22)` jobs still run so branch protection sees the required check names, but each job takes only the lightweight success path and skips the heavy work:
+When every changed path matches that definition, the `changes` job classifies the pull request as documentation-only. The protected `test (22)` aggregate job still resolves successfully so branch protection sees its required check name, but it takes only the lightweight docs-only success path and skips the heavy work:
 
 - repository checkout
 - Node / pnpm setup

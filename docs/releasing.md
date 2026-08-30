@@ -86,8 +86,8 @@ npm publication is a later, explicit operation. It must not happen merely becaus
 2. perform the final public-contract review;
 3. configure/verify npm Trusted Publishing or a one-time bootstrap credential as appropriate;
 4. confirm the GitHub Release/tag to publish;
-5. manually run the `Publish npm` workflow with its explicit confirmation input;
-6. publish in dependency order: core -> MCP / Redis / Cloudflare / Firestore adapters;
+5. manually run the `Publish npm` workflow with its explicit confirmation input; it downloads the selected GitHub Release tarballs and verifies `SHA256SUMS` instead of repacking them;
+6. publish those exact validated/attested release tarball bytes in dependency order: core -> MCP / Redis / Cloudflare / Firestore adapters;
 7. verify registry metadata and installation from a clean consumer project on the supported Node.js floor.
 
 Prefer npm Trusted Publishing / OIDC on GitHub-hosted runners. Do not add long-lived npm tokens to repository files, logs, or release artifacts.
