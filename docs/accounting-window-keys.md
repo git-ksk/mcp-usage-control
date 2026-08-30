@@ -129,7 +129,7 @@ Treat these configuration changes like a quota-key migration. Do not roll them o
 
 Deriving a new window key does **not** mutate, reset, or retire the previous bucket. This preserves authoritative historical enforcement state, but it also means long-running deployments must choose an explicit retention policy before historical keys grow without bound.
 
-Retire or prune an old key only after the application has established that the exact accounting window is permanently over, no active reservation still references it, and any required replay/reconciliation horizon has passed. `MemoryUsageStore.retireBudgetKey()` and the optional Cloudflare historical budget pruning API are explicit lifecycle tools; neither infers window age automatically. See [Memory Store](memory-store.md) and [Cloudflare historical budget pruning](cloudflare-budget-pruning.md).
+Retire or prune an old key only after the application has established that the exact accounting window is permanently over, no active reservation still references it, and any required replay/reconciliation horizon has passed. Built-in Stores expose explicit, bounded lifecycle tools rather than inferring window age automatically: `MemoryUsageStore.retireBudgetKey()` for one exact key, Redis / Firestore `retireHistoricalBudgets()` for application-selected exact historical keys, and the optional Cloudflare historical budget pruning API. Each path refuses retirement while active reservation state still references the selected budget. See [Memory Store](memory-store.md), [Redis](redis.md), [Firestore](firestore.md), and [Cloudflare historical budget pruning](cloudflare-budget-pruning.md).
 
 ## What remains application-owned
 

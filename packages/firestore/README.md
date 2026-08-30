@@ -74,7 +74,7 @@ See the public guides and reference:
 
 ## Operation reconciliation (v0.8)
 
-`FirestoreUsageStore` implements optional scalar `OperationReconciliationStore` with a read-only Firestore transaction. It validates the deterministic operation document, retained units, and hashed budget identities without invoking cleanup/recovery writes. Emulator CI runs the portable reconciliation conformance suite.
+`FirestoreUsageStore` implements optional scalar `OperationReconciliationStore` and v0.13 `VectorOperationReconciliationStore` with read-only Firestore transactions. It validates the deterministic operation document plus expected scalar units or exact vector dimension/budget topology without invoking cleanup/recovery writes. Emulator CI runs the portable scalar and vector reconciliation conformance suites.
 
 ## Atomic vector usage (v0.7)
 
