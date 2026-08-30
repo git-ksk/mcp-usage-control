@@ -34,6 +34,10 @@ If two requests arrive when only 10 credits remain, the library can prevent both
 
 > Want to evaluate it quickly? Start with **[Getting started](docs/getting-started.md)**. For the design boundary, read **[Project positioning](docs/positioning.md)**.
 
+## Try the safety property yourself
+
+Run `pnpm example:free-plus` to execute a self-verifying Free 50 / Plus 500 monthly-credit example. It deliberately races two 10-credit reports for the final 10 Free credits and fails unless exactly one is admitted. See [Runnable Free / Plus credits example](examples/free-plus-credits/README.md).
+
 ## Current distribution status
 
 **The packages are not published to npm yet.** `v0.13.0` is the current validated GitHub/source release baseline. Until first registry publication, use the attached GitHub Release tarballs or a repository checkout. See **[Use from source / local tarballs](docs/using-from-source.md)**.
@@ -301,6 +305,7 @@ See [Observability](docs/observability.md) and [Operational usability](docs/oper
 ## Documentation
 
 - [Getting started](docs/getting-started.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [Use from source / local tarballs](docs/using-from-source.md)
 - [MCP integration](docs/mcp-integration.md)
 - [Subscription-style MCP credits](docs/subscription-credits.md)

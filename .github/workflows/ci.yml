@@ -153,6 +153,7 @@ jobs:
           exit 1
 
       - run: pnpm check
+      - run: pnpm example:free-plus
 
       - name: Verify public package versions are aligned
         shell: bash

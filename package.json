@@ -13,7 +13,8 @@
     "benchmark:memory": "node scripts/benchmark-usage-store.mjs memory",
     "benchmark:redis": "node scripts/benchmark-usage-store.mjs redis",
     "benchmark:firestore": "node scripts/benchmark-usage-store.mjs firestore",
-    "benchmark:cloudflare": "node scripts/benchmark-usage-store.mjs cloudflare"
+    "benchmark:cloudflare": "node scripts/benchmark-usage-store.mjs cloudflare",
+    "example:free-plus": "pnpm build && node examples/free-plus-credits/run.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
