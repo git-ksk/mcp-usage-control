@@ -68,9 +68,9 @@
     "mcp-usage-control": "workspace:^"
   },
   "peerDependencies": {
-    "redis": "^6.2.0"
+    "redis": "^6.2.1"
   },
   "devDependencies": {
-    "redis": "^6.2.0"
+    "redis": "^6.2.1"
   }
 }

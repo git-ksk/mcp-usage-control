@@ -57,6 +57,6 @@
     "mcp-usage-control": "workspace:^"
   },
   "devDependencies": {
-    "@google-cloud/firestore": "8.7.0"
+    "@google-cloud/firestore": "9.0.0"
   }
 }
