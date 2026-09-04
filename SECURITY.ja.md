@@ -4,7 +4,7 @@
 
 ## Supported versions
 
-security fixのsupport対象はlatest GitHub/source minor lineです。このpolicyでは **v0.13.xをcurrent released pre-v1 source baseline** とし、older v0.x source-release lineをsupersedeします。npm registry publishは別工程で、GitHub/source releaseをsupportしていてもnpm公開はdeferしたままです。supported runtime floorは **Node.js 22+** で、CI evidenceはNode.js 22 / 24をcoverします。Node.js 20はEOL済みで、supported / required CI contractには含めません。
+security fixのcurrent supported stable lineは **v1.0.x** です。すべてのv0.x source-release lineはsupersede済みです。5 packageすべてnpmへ `1.0.0` として公開済みです。GitHub/source releaseとnpm registry publicationは今後も独立してauthorizeするため、将来のsource releaseがregistry publishを暗黙にauthorizeすることはありません。supported runtime floorは **Node.js 22+** で、CI evidenceはNode.js 22 / 24をcoverします。Node.js 20はEOL済みで、supported / required CI contractには含めません。
 
 ## Dependency / workflow supply-chain maintenance
 
