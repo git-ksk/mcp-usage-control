@@ -2,7 +2,7 @@
 
 [English](v1-readiness.md) | [日本語](v1-readiness.ja.md)
 
-This document records evidence accumulated toward a future v1.0. It is a **readiness assessment**, not a release instruction or an authorization to publish packages.
+This document records evidence accumulated for v1.0. It is a **readiness assessment**, not a release instruction or an authorization to publish packages.
 
 No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
@@ -131,19 +131,19 @@ v0.11 established the accounting/runtime/storage/API freeze, v0.12 completed the
 
 ## npm distribution boundary
 
-The source-release baseline is `v1.0.0`. npm publication is a separate operation and has not occurred.
+The stable source/npm baseline is `v1.0.0`. All five packages were first published on 2026-09-04 through the separately authorized #6 gate and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
 
-Issue #6 remains open until first publication is actually desired, **separately explicitly authorized**, completed, and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
+Issue #6 is completed and closed. Future npm publications remain independent operations and require explicit authorization through the manual OIDC Trusted Publishing workflow.
 
 A source release never implicitly authorizes registry publication.
 
 ## v1 promotion rule
 
-v1.0 should introduce **no new accounting model**. The bounded v0.13 blocker-closure tranche is complete and its release evidence is green; v1.0 is therefore a stable-promotion step over the frozen model. npm publication remains independently authorized under #6.
+v1.0 introduces **no new accounting model**. The bounded v0.13 blocker-closure tranche is complete and its release evidence is green; v1.0 is the stable promotion over the frozen model. The first-publication gate #6 is complete, while future npm publications remain independently authorized.
 
 See [Roadmap](roadmap.md), [Release policy](releasing.md), [Cost-bearing operations](cost-bearing-operations.md), [Persisted-state compatibility](persisted-state-compatibility.md), [v1 public API freeze](v1-public-api-freeze.md), and provider-specific documentation for the current support boundaries.
 
 
 ## v0.13 final blocker closure
 
-The final audit items #191-#198 are complete: authoritative multi-round flow expiry, standalone shipped docs, safe Redis/Firestore historical-budget retirement, lease-renewal uncertainty signaling, initial vector-reserve reconciliation, provider-neutral input bounds, Node 20 CI retirement, and minimum/current peer-dependency compatibility. These changes hardened recovery and operations around the frozen accounting model without introducing a new charging model. Issue #6 remains independently authorized.
+The final audit items #191-#198 are complete: authoritative multi-round flow expiry, standalone shipped docs, safe Redis/Firestore historical-budget retirement, lease-renewal uncertainty signaling, initial vector-reserve reconciliation, provider-neutral input bounds, Node 20 CI retirement, and minimum/current peer-dependency compatibility. These changes hardened recovery and operations around the frozen accounting model without introducing a new charging model. Issue #6 is complete; future registry publication remains independently authorized.
