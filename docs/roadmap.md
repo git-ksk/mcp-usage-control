@@ -12,9 +12,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v1.0.0 is the current stable GitHub/source release baseline.** All five publishable manifests are aligned at `1.0.0`, require Node.js 22+, and remain unpublished to npm.
+**v1.0.0 is the current stable GitHub/source and npm baseline.** All five publishable manifests are aligned at `1.0.0`, require Node.js 22+, and were published to npm on 2026-09-04.
 
-First npm publication is a separately authorized operation tracked by #6. Source-release progress never implies registry publication.
+The separately authorized first-publication gate #6 is complete and closed. Future registry publications remain separately authorized operations; source-release progress never implies registry publication.
 
 ```text
 v0.6 progressive growth [RELEASED]
@@ -139,7 +139,7 @@ No genuine Workers Free-plan exhaustion/platform-overload event occurred natural
 
 The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.13 final blocker-closure** tranche (#191-#198) are complete without redefining the frozen accounting lifecycle or persisted Store contract. v0.13.0 carries the final correctness, operations, distribution, runtime, and peer-compatibility evidence required for stable promotion.
 
-**v1.0.0 is now the released feature-free stable-promotion milestone.** Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
+**v1.0.0 is the released feature-free stable-promotion milestone and the five-package npm baseline.** The first npm publication gate #6 is complete for `v1.0.0`. Future registry releases remain independently authorized and use the manual OIDC Trusted Publishing workflow; source-release progress does not authorize registry publication.
 
 ## v1 completion definition
 
@@ -185,7 +185,7 @@ Before v1.0:
 | #183 safe quota-window/reset UX projection | v0.12 | **Completed; additive non-authoritative helper** |
 | #184 provider benchmark/cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
 | #191-#198 final v1 blocker closure | v0.13 | **Completed / released; no new billing model** |
-| #6 first npm publication | separate v0.13/v1 distribution gate | **Open; explicit authorization required** |
+| #6 first npm publication | separate v0.13/v1 distribution gate | **Completed / closed; v1.0.0 published and verified** |
 
 ## Release policy
 

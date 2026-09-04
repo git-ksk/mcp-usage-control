@@ -2,13 +2,13 @@
 
 [English](using-from-source.md) | [日本語](using-from-source.ja.md)
 
-> **現在の配布状況:** packageはまだnpmへ公開していません。初回registry publishが完了するまでは、repository checkoutまたはローカルでpackしたtarballを使ってください。
+> **現在の配布状況:** 5 packageすべてnpmへ `1.0.0` として公開済みです。このページはcontributor、未release commit、local patch、pre-release dogfooding向けのsource / local tarball手順として残します。
 
 ## GitHub Release artifact
 
 release-workflow hardening以降のsource releaseでは、5つの**exact CI-validated package tarball**と `SHA256SUMS` をattachし、同じtarballへGitHub artifact attestationを生成します。attached archiveをinstallする場合はchecksumをverifyし、同名のlocal rebuildがbyte-identicalとは仮定しないでください。
 
-これらはpackage/source distribution用assetであり、npm registry publicationをauthorize / implyしません。
+これらはpackage/source distribution用assetであり、将来のnpm registry publicationをauthorize / implyしません。
 
 ## 1. Repositoryをcloneして検証
 
@@ -52,11 +52,11 @@ printf 'packed version: %s\n' "$version"
 .packs/mcp-usage-control-firestore-${version}.tgz
 ```
 
-現時点では、このtarballが将来のnpm packageに最も近い利用形態です。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証します。
+これらのtarballは、公開済みnpm packageに対応するreproducibleなsource-build artifactです。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証します。
 
 ## 3. 別projectへinstall
 
-consumer projectからabsolute pathまたは正しく解決できるpathを指定します。先にcheckout versionを解決し、adapter packageが未公開npmのcore packageを取りに行かないよう、必要なlocal tarballは同じinstall commandで指定するのが安全です。
+consumer projectからabsolute pathまたは正しく解決できるpathを指定します。先にcheckout versionを解決し、registry artifactとlocal artifactを混在させないよう、必要なlocal tarballは同じinstall commandで指定するのが安全です。
 
 ```console
 version="$(node -p "require('/absolute/path/to/mcp-usage-control/packages/core/package.json').version")"
@@ -180,6 +180,6 @@ pnpm check
 
 in-memory storeはtest / local development向けです。distributed enforcementの確認ではRedis adapter、Cloudflare専用workerd integration workflow、またはFirestore Emulator integration workflowを使います。
 
-## npm公開後
+## 公開済みnpm baseline
 
-初回npm publish完了後は、public docsのprimary install手順をregistry installへ切り替えます。このsource / tarball手順は、その後もcontributor、未release commit、local patch、pre-release dogfooding向けとして残します。
+通常のconsumerではnpm registryの `1.0.0` がprimary install pathです。このsource / tarball手順は、contributor、未release commit、local patch、GitHub Release artifactの再現性確認、pre-release dogfooding向けとして引き続き利用できます。

@@ -2,13 +2,13 @@
 
 [English](using-from-source.md) | [日本語](using-from-source.ja.md)
 
-> **Current distribution status:** the packages are not published to npm yet. Until the first registry publish completes, use the repository checkout or locally packed tarballs described here.
+> **Current distribution status:** all five packages are published to npm at `1.0.0`. This page remains the source/local-tarball path for contributors, unreleased commits, local patches, and pre-release dogfooding.
 
 ## GitHub Release artifacts
 
 Starting with release-workflow hardening after v0.11.0, source releases attach the five **exact CI-validated package tarballs** plus `SHA256SUMS`, with GitHub artifact attestations generated for the same tarballs. Verify the checksum before installing an attached archive; do not assume a similarly named local rebuild is byte-identical.
 
-These assets are package/source distribution only. They do not authorize or imply npm registry publication.
+These assets are package/source distribution only. They do not authorize or imply a future npm registry publication.
 
 ## 1. Clone and verify the repository
 
@@ -52,11 +52,11 @@ This produces the five package tarballs for the current checkout version, for ex
 .packs/mcp-usage-control-firestore-${version}.tgz
 ```
 
-These tarballs are the closest current equivalent to the future npm packages. CI builds the same tarballs, rejects source/test-file leakage, installs them into a clean consumer project, and verifies their public ESM imports.
+These tarballs are the reproducible source-build counterpart to the published npm packages. CI builds the same tarballs, rejects source/test-file leakage, installs them into a clean consumer project, and verifies their public ESM imports.
 
 ## 3. Install into another project
 
-Use absolute or correctly resolved paths from the consumer project. Resolve the checkout version first and install the local tarballs together so adapter packages can resolve the local core package without requiring npm publication.
+Use absolute or correctly resolved paths from the consumer project. Resolve the checkout version first and install the local tarballs together so adapter packages resolve the local core package from the same checkout rather than mixing registry and local artifacts.
 
 ```console
 version="$(node -p "require('/absolute/path/to/mcp-usage-control/packages/core/package.json').version")"
@@ -180,6 +180,6 @@ pnpm check
 
 The in-memory store is suitable for tests and local development. Use the Redis adapter, the dedicated Cloudflare workerd integration workflow, or the Firestore Emulator integration workflow for distributed-enforcement verification.
 
-## When npm publication is available
+## Published npm baseline
 
-After the first npm publish completes, the public docs will switch the primary installation path to registry installation. This source/tarball workflow remains useful for contributors, unreleased commits, local patches, and pre-release dogfooding.
+For normal consumers, the primary installation path is now the npm registry at `1.0.0`. This source/tarball workflow remains useful for contributors, unreleased commits, local patches, reproducible GitHub Release artifact checks, and pre-release dogfooding.
