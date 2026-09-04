@@ -9,7 +9,7 @@ User-facing documentation for `mcp-usage-control`.
 If this is your first visit, read these in order:
 
 1. **[Getting started](getting-started.md)** — what the library solves, the smallest example, and how to choose packages/stores.
-2. **[Use from source / local tarballs](using-from-source.md)** — the current installation path before npm publication.
+2. **[Use from source / local tarballs](using-from-source.md)** — contributor, unreleased-commit, local-patch, and pre-release installation paths alongside the published npm packages.
 3. **[MCP integration](mcp-integration.md)** — practical examples for `protectTool()` and `protectMultiRoundTool()`.
 
 ## Choose a store
