@@ -1,0 +1,258 @@
+name: Prepare v1.0.0 release
+
+on:
+  push:
+    branches:
+      - release/v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: release/v1.0.0
+          fetch-depth: 0
+
+      - name: Apply feature-free v1.0.0 promotion edits
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+          import re
+
+          VERSION = "1.0.0"
+          DATE = "2026-09-04"
+
+          package_paths = [
+              "packages/core/package.json",
+              "packages/mcp/package.json",
+              "packages/redis/package.json",
+              "packages/cloudflare/package.json",
+              "packages/firestore/package.json",
+          ]
+          for name in package_paths:
+              path = Path(name)
+              data = json.loads(path.read_text())
+              if data.get("version") != "0.13.0":
+                  raise SystemExit(f"unexpected version in {name}: {data.get('version')}")
+              data["version"] = VERSION
+              path.write_text(json.dumps(data, indent=2) + "\n")
+
+          def replace_exact(filename: str, old: str, new: str) -> None:
+              path = Path(filename)
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text missing from {filename}: {old!r}")
+              path.write_text(text.replace(old, new, 1))
+
+          def replace_all(filename: str, old: str, new: str, minimum: int = 1) -> None:
+              path = Path(filename)
+              text = path.read_text()
+              count = text.count(old)
+              if count < minimum:
+                  raise SystemExit(f"expected at least {minimum} matches in {filename}: {old!r}")
+              path.write_text(text.replace(old, new))
+
+          # Primary README status: stable promotion only, no accounting/API changes.
+          replace_exact(
+              "README.md",
+              "**The packages are not published to npm yet.** `v0.13.0` is the current validated GitHub/source release baseline.",
+              "**The packages are not published to npm yet.** `v1.0.0` is the current stable GitHub/source release baseline.",
+          )
+          replace_exact(
+              "README.md",
+              "All five package manifests are aligned at `0.13.0`. **v0.13.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.",
+              "All five package manifests are aligned at `1.0.0`. **v1.0.0 is the current stable GitHub/source release baseline**; npm registry publication remains intentionally deferred.",
+          )
+          replace_exact(
+              "README.md",
+              "The accounting lifecycle and Store contract are frozen for the v1 candidate. The current `v0.13.0` source release is the hardened baseline; the planned v1 step is a feature-free stable promotion rather than another feature expansion.",
+              "`v1.0.0` is the feature-free stable promotion of the frozen accounting lifecycle and Store contract hardened through v0.13. No new accounting model, Store contract, or billing authority was introduced by the stable promotion.",
+          )
+          replace_exact(
+              "README.md",
+              "Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 candidate evidence.",
+              "Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 stable evidence.",
+          )
+
+          replace_exact(
+              "README.ja.md",
+              "**まだnpmへ公開していません。** `v0.13.0` がvalidated GitHub/source release baselineです。",
+              "**まだnpmへ公開していません。** `v1.0.0` がcurrent stable GitHub/source release baselineです。",
+          )
+          replace_exact(
+              "README.ja.md",
+              "5 package manifestは `0.13.0` で揃っています。**v0.13.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。",
+              "5 package manifestは `1.0.0` で揃っています。**v1.0.0がcurrent stable GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。",
+          )
+          replace_exact(
+              "README.ja.md",
+              "v1 candidateのaccounting lifecycle / Store contractはfreeze済みです。current `v0.13.0` source releaseがhardened baselineで、次のv1は機能追加ではなくfeature-freeなstable promotionを予定しています。",
+              "`v1.0.0` はv0.13までにhardenしたfreeze済みaccounting lifecycle / Store contractをfeature-freeでstable promotionしたreleaseです。stable promotionで新しいaccounting model、Store contract、billing authorityは追加していません。",
+          )
+          replace_exact(
+              "README.ja.md",
+              "Core lifecycle、Redis / Cloudflare / Firestore Store、single-round `protectTool()`、current multi-round accountingはv1 candidate evidenceの対象です。",
+              "Core lifecycle、Redis / Cloudflare / Firestore Store、single-round `protectTool()`、current multi-round accountingはv1 stable evidenceの対象です。",
+          )
+
+          # Roadmap: mark the stable promotion as released while preserving the historical capability line.
+          replace_exact(
+              "docs/roadmap.md",
+              "**v0.13.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `0.13.0`, require Node.js 22+, and remain unpublished to npm.",
+              "**v1.0.0 is the current stable GitHub/source release baseline.** All five publishable manifests are aligned at `1.0.0`, require Node.js 22+, and remain unpublished to npm.",
+          )
+          replace_exact(
+              "docs/roadmap.md",
+              " -> v1.0 feature-free stable promotion",
+              " -> v1.0 feature-free stable promotion [RELEASED]",
+          )
+          replace_exact(
+              "docs/roadmap.md",
+              "**v1.0 is now the next feature-free stable-promotion milestone.** Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.",
+              "**v1.0.0 is now the released feature-free stable-promotion milestone.** Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.",
+          )
+
+          replace_exact(
+              "docs/roadmap.ja.md",
+              "**v0.13.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.13.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。",
+              "**v1.0.0がcurrent stable GitHub/source release baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。",
+          )
+          replace_exact(
+              "docs/roadmap.ja.md",
+              " -> v1.0 feature-free stable promotion",
+              " -> v1.0 feature-free stable promotion [RELEASED]",
+          )
+          roadmap_ja = Path("docs/roadmap.ja.md")
+          text = roadmap_ja.read_text()
+          text = re.sub(
+              r"\*\*v1\.0[^\n]*次[^\n]*stable[^\n]*\*\*",
+              "**v1.0.0はrelease済みのfeature-free stable-promotion milestoneです。**",
+              text,
+              count=1,
+          )
+          roadmap_ja.write_text(text)
+
+          # Readiness record becomes a completed stable-promotion record.
+          replace_exact(
+              "docs/v1-readiness.md",
+              "**v0.13.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `0.13.0` and require Node.js 22 or later.",
+              "**v1.0.0 is the current stable GitHub/source release baseline.** All five publishable manifests are aligned at `1.0.0` and require Node.js 22 or later.",
+          )
+          replace_exact(
+              "docs/v1-readiness.md",
+              "**The accounting model remains frozen, but the final v1 audit identified a bounded v0.13 blocker-closure tranche that must be green before stable promotion.**",
+              "**Stable promotion is approved on the completed v0.13 blocker-closure evidence: v1.0.0 adds no accounting model or Store-contract change.**",
+          )
+          replace_exact(
+              "docs/v1-readiness.md",
+              "v1.0 remains a feature-free stable promotion over that hardened surface.",
+              "v1.0.0 is the completed feature-free stable promotion over that hardened surface.",
+          )
+
+          replace_exact(
+              "docs/v1-readiness.ja.md",
+              "**v0.13.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.13.0` に揃い、Node.js 22以上をrequireします。",
+              "**v1.0.0がcurrent stable GitHub/source release baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22以上をrequireします。",
+          )
+          replace_exact(
+              "docs/v1-readiness.ja.md",
+              "**accounting modelはfreeze維持ですが、最終v1 auditでboundedなv0.13 blocker-closure trancheが見つかり、stable promotion前にgreenが必要です。**",
+              "**v0.13 blocker-closure evidenceは完了しており、v1.0.0 stable promotionを承認できる状態です。v1.0.0でaccounting model / Store contractは変更しません。**",
+          )
+          readiness_ja = Path("docs/v1-readiness.ja.md")
+          text = readiness_ja.read_text()
+          text = text.replace(
+              "v1.0はfeature-free stable promotionのままです。",
+              "v1.0.0はそのhardened surfaceをfeature-freeでstable promotionしたreleaseです。",
+          )
+          readiness_ja.write_text(text)
+
+          # The release policy is no longer described as pre-1.0-only.
+          replace_exact(
+              "docs/releasing.md",
+              "The pre-1.0 release line contains five publishable npm packages:",
+              "The release line contains five publishable npm packages:",
+          )
+          replace_exact("docs/releasing.md", "## Pre-1.0 release gate", "## Release gate")
+          replace_exact(
+              "docs/releasing.md",
+              "A pre-1.0 GitHub/source release is ready only when the applicable surfaces satisfy these gates:",
+              "A GitHub/source release is ready only when the applicable surfaces satisfy these gates:",
+          )
+
+          releasing_ja = Path("docs/releasing.ja.md")
+          text = releasing_ja.read_text()
+          text = text.replace("pre-1.0 release line", "release line")
+          text = text.replace("## Pre-1.0 release gate", "## Release gate")
+          text = text.replace("pre-1.0 GitHub/source release", "GitHub/source release")
+          releasing_ja.write_text(text)
+
+          # Stable-release competitive re-review date (the capability decisions remain unchanged).
+          replace_exact(
+              "docs/competitive-capabilities.md",
+              "Last reviewed: **2026-08-29**.",
+              "Last reviewed: **2026-09-04**.",
+          )
+          replace_exact(
+              "docs/competitive-capabilities.ja.md",
+              "最終レビュー: **2026-08-29**。",
+              "最終レビュー: **2026-09-04**。",
+          )
+
+          # Changelog sections are the release workflow's source of release notes.
+          changelog = Path("CHANGELOG.md")
+          text = changelog.read_text()
+          marker = "## [0.13.0] - 2026-08-29"
+          if marker not in text or "## [1.0.0]" in text:
+              raise SystemExit("unexpected English changelog state")
+          section = f"""## [1.0.0] - {DATE}\n\nFirst stable GitHub/source release. v1.0.0 is a feature-free promotion of the accounting, recovery, storage, MCP-integration, and release-safety surface hardened through v0.13. npm publication remains separately authorized under #6 and is not part of this source release.\n\n### Stable contract\n\n- Promotes the frozen reserve -> liability -> grow -> renew -> settle lifecycle without adding a new accounting model, billing authority, or financial-ledger responsibility.\n- Keeps atomic multi-budget/vector admission, replay fencing, conservative cost-liable expiry, bounded growth/settlement, lost-ACK reconciliation, and one-time MCP multi-round resume semantics unchanged.\n- Keeps package names, public subpaths, Node.js 22+ floor, Store compatibility contract, and provider-specific durability/time/HA boundaries frozen for the v1 compatibility line.\n\n### Release and ecosystem boundary\n\n- Aligns all five public package manifests at `1.0.0`; supported runtime evidence remains Node.js 22/24 with the aggregate `test (22)` release-safety gate.\n- Re-ran the stable-release competitive boundary review on 2026-09-04; broader billing, gateway, waiting-room, dashboard, and entitlement-control-plane features remain intentionally outside core.\n- First-class MCP Tasks runtime support remains gated on upstream stabilization rather than freezing an experimental adapter into v1.\n\n### Distribution\n\n- This GitHub/source release does **not** publish to npm. First registry publication remains a separate explicit operation under #6.\n- The GitHub Release workflow must validate the exact tagged protected-main SHA, pack and clean-install the exact five tarballs, generate `SHA256SUMS`, and attest the package artifacts before creating the release.\n\n"""
+          changelog.write_text(text.replace(marker, section + marker, 1))
+
+          changelog_ja = Path("CHANGELOG.ja.md")
+          text = changelog_ja.read_text()
+          marker = "## [0.13.0] - 2026-08-29"
+          if marker not in text or "## [1.0.0]" in text:
+              raise SystemExit("unexpected Japanese changelog state")
+          section = f"""## [1.0.0] - {DATE}\n\n初のstable GitHub/source releaseです。v1.0.0はv0.13までにhardenしたaccounting / recovery / storage / MCP integration / release-safety surfaceをfeature-freeでstable promotionします。npm publicationは#6のseparate authorization対象のままで、このsource releaseには含めません。\n\n### Stable contract\n\n- reserve -> liability -> grow -> renew -> settleのfreeze済みlifecycleを、新しいaccounting model、billing authority、financial-ledger responsibilityを追加せずstable promotionします。\n- atomic multi-budget/vector admission、replay fencing、cost-liable expiryのconservative処理、bounded growth/settlement、lost-ACK reconciliation、MCP multi-round one-time resume semanticsは変更しません。\n- package名、public subpath、Node.js 22+ floor、Store compatibility contract、providerごとのdurability / time / HA境界をv1 compatibility lineとしてfreeze維持します。\n\n### Release / ecosystem boundary\n\n- 5 public package manifestを `1.0.0` に揃えます。supported runtime evidenceはNode.js 22/24、aggregate `test (22)` release-safety gateを維持します。\n- 2026-09-04にstable-release競合boundaryを再確認し、billing、gateway、waiting-room、dashboard、entitlement control planeは引き続き意図的にcore外と判断しました。\n- first-class MCP Tasks runtime supportはexperimental adapterをv1へfreezeせず、upstream stabilization待ちを維持します。\n\n### Distribution\n\n- このGitHub/source releaseでは **npm publishしません**。first registry publicationは#6のseparate explicit operationのままです。\n- GitHub Release workflowでexact tagged protected-main SHAを検証し、5 tarballのpack / clean install、`SHA256SUMS`、artifact attestationを完了してからreleaseを作成します。\n\n"""
+          changelog_ja.write_text(text.replace(marker, section + marker, 1))
+
+          # Guard against stale "current baseline" statements in active release-facing docs.
+          for filename in [
+              "README.md",
+              "README.ja.md",
+              "docs/roadmap.md",
+              "docs/roadmap.ja.md",
+              "docs/v1-readiness.md",
+              "docs/v1-readiness.ja.md",
+          ]:
+              for line in Path(filename).read_text().splitlines():
+                  active_status = any(token in line.lower() for token in ["current", "baseline", "現在", "次のv1"])
+                  if active_status and ("v0.13.0" in line or "`0.13.0`" in line):
+                      raise SystemExit(f"stale current v0.13 status remains in {filename}: {line}")
+
+          print("v1.0.0 feature-free release preparation edits applied")
+          PY
+
+      - name: Verify diff hygiene
+        run: |
+          git diff --check
+          git diff --stat
+          git diff -- packages/core/package.json packages/mcp/package.json packages/redis/package.json packages/cloudflare/package.json packages/firestore/package.json
+
+      - name: Commit prepared release changes and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/release-v1-prep.yml
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: prepare v1.0.0 stable promotion"
+          git push origin HEAD:release/v1.0.0
