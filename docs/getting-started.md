@@ -34,9 +34,9 @@ request
 
 It deliberately does not own authentication, subscriptions, checkout, invoicing, or your financial ledger.
 
-## Evaluate it before npm publication
+## Install the published packages
 
-The packages are not on npm yet. For evaluation, use the validated `v0.13.0` GitHub Release tarballs or a repository checkout. The exact clean-consumer commands are in [Use from source / local tarballs](using-from-source.md).
+All five packages are published to npm at `1.0.0`. Install the core package plus only the integration adapter and Store backend your application needs. The validated GitHub Release tarballs and repository checkout remain available for reproducible source evaluation; see [Use from source / local tarballs](using-from-source.md).
 
 **Node.js 22 or later is required.**
 
@@ -92,18 +92,19 @@ The Memory store is the process-local reference implementation. It is suitable f
 
 ## Current installation path
 
-The packages are not published to npm yet. For now, use a repository checkout or locally packed `.tgz` files.
-
-To verify the repository:
+For normal consumers, install from npm. For example:
 
 ```console
-git clone https://github.com/git-ksk/mcp-usage-control.git
-cd mcp-usage-control
-pnpm install --frozen-lockfile
-pnpm check
+npm install mcp-usage-control
 ```
 
-See [Use from source / local tarballs](using-from-source.md) for exact commands to install the packages into another application.
+For a typical MCP server, add the MCP adapter and one production Store backend, for example Redis:
+
+```console
+npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
+```
+
+Use only the backend your deployment needs. Contributors, unreleased commits, local patches, and pre-release dogfooding can use the repository checkout or exact GitHub Release/local tarballs documented in [Use from source / local tarballs](using-from-source.md).
 
 **Node.js 22 or later is required.** Supported CI and release-safety evidence cover Node.js 22 and 24. Node.js 20 is EOL and is not part of the supported or required CI contract.
 
