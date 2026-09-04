@@ -2,7 +2,7 @@
 
 [English](v1-readiness.md) | [日本語](v1-readiness.ja.md)
 
-このdocumentは将来のv1.0に向けて蓄積したevidenceを記録する **readiness assessment** です。release指示でもpackage publishのauthorizationでもありません。
+このdocumentはv1.0に向けて蓄積したevidenceを記録する **readiness assessment** です。release指示でもpackage publishのauthorizationでもありません。
 
 このdocumentだけでv1.0 tag、GitHub Release、npm publicationを実行しません。
 
@@ -131,19 +131,19 @@ v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177�
 
 ## npm distribution boundary
 
-source-release baselineは `v1.0.0` です。npm publicationは別操作で、まだ実行していません。
+stableなsource/npm baselineは `v1.0.0` です。5 packageすべてを2026-09-04に、separate authorizationされた#6 gate経由で初回公開し、package ownership / availability、provenance、registry metadata、package content、clean-consumer installをverify済みです。
 
-#6はfirst publicationを実際に希望し、**separate explicit authorization** を行い、package ownership / availability、provenance、registry metadata、package content、clean-consumer installをverifyするまでopenのままです。
+#6は完了・close済みです。今後のnpm publicationも独立した操作として、manual OIDC Trusted Publishing workflowで明示authorizeして実行します。
 
 source releaseがregistry publicationを暗黙authorizeすることはありません。
 
 ## v1 promotion rule
 
-v1.0では **新accounting modelを追加しません**。boundedなv0.13 blocker-closure trancheは完了しrelease evidenceもgreenなので、v1.0はfrozen modelをstableへ昇格するstepです。npm publicationは#6で独立authorizationのままです。
+v1.0では **新accounting modelを追加しません**。boundedなv0.13 blocker-closure trancheは完了しrelease evidenceもgreenなので、v1.0はfrozen modelをstableへ昇格したreleaseです。初回publication gate #6は完了し、今後のnpm publicationは引き続き独立authorizationです。
 
 [Roadmap](roadmap.ja.md)、[Release policy](releasing.ja.md)、[Cost-bearing operation](cost-bearing-operations.ja.md)、[Persisted-state compatibility](persisted-state-compatibility.ja.md)、[v1 public API freeze](v1-public-api-freeze.ja.md)、各provider docsでcurrent support boundaryを確認してください。
 
 
 ## v0.13 final blocker closure
 
-最終auditの#191〜#198は完了済みです。multi-round flow expiry authority、shipped docs、Redis / Firestore historical-budget retirement、renew uncertainty signal、initial vector-reserve reconciliation、provider-neutral input bound、Node 20 CI退役、minimum/current peer compatibilityを、新しいcharging modelを追加せずに閉じました。#6は独立authorizationのままです。
+最終auditの#191〜#198は完了済みです。multi-round flow expiry authority、shipped docs、Redis / Firestore historical-budget retirement、renew uncertainty signal、initial vector-reserve reconciliation、provider-neutral input bound、Node 20 CI退役、minimum/current peer compatibilityを、新しいcharging modelを追加せずに閉じました。#6は完了済みで、今後のregistry publicationは独立authorizationを維持します。
