@@ -131,7 +131,7 @@ v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177�
 
 ## npm distribution boundary
 
-source-release baselineは `v0.13.0` です。npm publicationは別操作で、まだ実行していません。
+source-release baselineは `v1.0.0` です。npm publicationは別操作で、まだ実行していません。
 
 #6はfirst publicationを実際に希望し、**separate explicit authorization** を行い、package ownership / availability、provenance、registry metadata、package content、clean-consumer installをverifyするまでopenのままです。
 

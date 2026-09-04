@@ -131,7 +131,7 @@ v0.11 established the accounting/runtime/storage/API freeze, v0.12 completed the
 
 ## npm distribution boundary
 
-The source-release baseline is `v0.13.0`. npm publication is a separate operation and has not occurred.
+The source-release baseline is `v1.0.0`. npm publication is a separate operation and has not occurred.
 
 Issue #6 remains open until first publication is actually desired, **separately explicitly authorized**, completed, and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
 
