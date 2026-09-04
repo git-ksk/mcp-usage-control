@@ -10,7 +10,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 **v1.0.0 is the current stable GitHub/source release baseline.** All five publishable manifests are aligned at `1.0.0` and require Node.js 22 or later.
 
-The packages remain **unpublished to npm**. First registry publication is separately tracked by #6 and requires explicit authorization independent from source releases.
+All five packages were first published to npm as `1.0.0` on 2026-09-04 after the separately authorized #6 publication gate. Registry metadata, integrity, signed provenance, and clean-consumer installation were verified after publication.
 
 The v0.11 freeze line has now resolved the accounting/reliability/runtime/storage/API/governance tranche:
 
@@ -23,7 +23,7 @@ The v0.11 freeze line has now resolved the accounting/reliability/runtime/storag
 - #160 made the already-protected `test (22)` context an aggregate release-safety gate for applicable Node/Redis/package/Cloudflare/Firestore evidence;
 - #24 completed the real Monokura Cloudflare credential rotation, new-caller proof, and rotated-out credential rejection while preserving the existing accounting identity. Genuine Workers platform-limit exhaustion/overload was not naturally observed and is not claimed as deployed evidence.
 
-The v0.11 completion tranche is closed. Issue #6 remains a separate publication gate and runs only when explicitly authorized; it is not implicitly authorized by a source release.
+The v0.11 completion tranche is closed. The separate #6 publication gate was explicitly authorized and completed for `v1.0.0`; future registry releases continue to use the manual publication workflow rather than being implied by source releases.
 
 ## Verdict
 

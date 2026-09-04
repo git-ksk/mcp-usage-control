@@ -40,7 +40,7 @@ Run `pnpm example:free-plus` to execute a self-verifying Free 50 / Plus 500 mont
 
 ## Current distribution status
 
-**The packages are not published to npm yet.** `v1.0.0` is the current stable GitHub/source release baseline. Until first registry publication, use the attached GitHub Release tarballs or a repository checkout. See **[Use from source / local tarballs](docs/using-from-source.md)**.
+**All five packages are published to npm at `1.0.0`.** `v1.0.0` is also the current stable GitHub/source release baseline. Install only the integration layer and Store backend you need; GitHub Release tarballs remain available as reproducible source-release artifacts. See **[Use from source / local tarballs](docs/using-from-source.md)** for non-registry workflows.
 
 Requirements: **Node.js 22+**, ESM. CI covers Node.js 22/24, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
 
@@ -104,7 +104,7 @@ Typical combinations:
 
 You do **not** install all five packages for a normal application. Pick the integration layer you need and one Store backend that matches the deployment.
 
-All five package manifests are aligned at `1.0.0`. **v1.0.0 is the current stable GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `1.0.0`, and all five packages are published on npm. **v1.0.0 is the current stable GitHub/source and npm baseline.**
 
 
 ## v1 status

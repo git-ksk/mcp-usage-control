@@ -40,7 +40,7 @@ report -> 10 credits
 
 ## 現在の配布状況
 
-**まだnpmへ公開していません。** `v1.0.0` がcurrent stable GitHub/source release baselineです。初回registry publishまではGitHub Release tarballまたはrepository checkoutを使います。詳しくは **[Source / local tarballから使う](docs/using-from-source.ja.md)** を参照してください。
+**5 packageすべてをnpmへ `1.0.0` として公開済みです。** `v1.0.0` はcurrent stable GitHub/source release baselineでもあります。通常は必要なintegration layerとStore backendだけをinstallしてください。GitHub Release tarballはreproducibleなsource-release artifactとして引き続き利用できます。non-registry workflowは **[Source / local tarballから使う](docs/using-from-source.ja.md)** を参照してください。
 
 要件は **Node.js 22+ / ESM**。CIではNode.js 22/24、Redis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
 
@@ -104,7 +104,7 @@ redis / cloudflare / firestore
 
 普通のapplicationで5 package全部をinstallする必要はありません。必要なintegration layerと、deploymentに合うStore backendを1つ選びます。
 
-5 package manifestは `1.0.0` で揃っています。**v1.0.0がcurrent stable GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+5 package manifestは `1.0.0` で揃っており、5 packageすべてnpm公開済みです。**v1.0.0がcurrent stable GitHub/source / npm baseline**です。
 
 
 ## v1 status
