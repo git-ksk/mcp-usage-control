@@ -8,6 +8,27 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [1.0.0] - 2026-09-04
+
+First stable GitHub/source release. v1.0.0 is a feature-free promotion of the accounting, recovery, storage, MCP-integration, and release-safety surface hardened through v0.13. npm publication remains separately authorized under #6 and is not part of this source release.
+
+### Stable contract
+
+- Promotes the frozen reserve -> liability -> grow -> renew -> settle lifecycle without adding a new accounting model, billing authority, or financial-ledger responsibility.
+- Keeps atomic multi-budget/vector admission, replay fencing, conservative cost-liable expiry, bounded growth/settlement, lost-ACK reconciliation, and one-time MCP multi-round resume semantics unchanged.
+- Keeps package names, public subpaths, Node.js 22+ floor, Store compatibility contract, and provider-specific durability/time/HA boundaries frozen for the v1 compatibility line.
+
+### Release and ecosystem boundary
+
+- Aligns all five public package manifests at `1.0.0`; supported runtime evidence remains Node.js 22/24 with the aggregate `test (22)` release-safety gate.
+- Re-ran the stable-release competitive boundary review on 2026-09-04; broader billing, gateway, waiting-room, dashboard, and entitlement-control-plane features remain intentionally outside core.
+- First-class MCP Tasks runtime support remains gated on upstream stabilization rather than freezing an experimental adapter into v1.
+
+### Distribution
+
+- This GitHub/source release does **not** publish to npm. First registry publication remains a separate explicit operation under #6.
+- The GitHub Release workflow must validate the exact tagged protected-main SHA, pack and clean-install the exact five tarballs, generate `SHA256SUMS`, and attest the package artifacts before creating the release.
+
 ## [0.13.0] - 2026-08-29
 
 Thirteenth GitHub/source release candidate focused on closing the final v1 correctness, operations, distribution, and compatibility blockers discovered after v0.12. npm publication remains separately authorized under #6 and is not part of this tranche.

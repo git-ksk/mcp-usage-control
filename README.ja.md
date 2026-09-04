@@ -40,7 +40,7 @@ report -> 10 credits
 
 ## 現在の配布状況
 
-**まだnpmへ公開していません。** `v0.13.0` がvalidated GitHub/source release baselineです。初回registry publishまではGitHub Release tarballまたはrepository checkoutを使います。詳しくは **[Source / local tarballから使う](docs/using-from-source.ja.md)** を参照してください。
+**まだnpmへ公開していません。** `v1.0.0` がcurrent stable GitHub/source release baselineです。初回registry publishまではGitHub Release tarballまたはrepository checkoutを使います。詳しくは **[Source / local tarballから使う](docs/using-from-source.ja.md)** を参照してください。
 
 要件は **Node.js 22+ / ESM**。CIではNode.js 22/24、Redis 7、MCP TypeScript SDK v2 path、Cloudflare local/workerd、Firestore Emulator、package tarball、clean-consumer importを検証しています。
 
@@ -104,14 +104,14 @@ redis / cloudflare / firestore
 
 普通のapplicationで5 package全部をinstallする必要はありません。必要なintegration layerと、deploymentに合うStore backendを1つ選びます。
 
-5 package manifestは `0.13.0` で揃っています。**v0.13.0がcurrent GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
+5 package manifestは `1.0.0` で揃っています。**v1.0.0がcurrent stable GitHub/source release baseline**で、npm registry publicationは引き続き意図的にdeferredです。
 
 
 ## v1 status
 
-v1 candidateのaccounting lifecycle / Store contractはfreeze済みです。current `v0.13.0` source releaseがhardened baselineで、次のv1は機能追加ではなくfeature-freeなstable promotionを予定しています。
+`v1.0.0` はv0.13までにhardenしたfreeze済みaccounting lifecycle / Store contractをfeature-freeでstable promotionしたreleaseです。stable promotionで新しいaccounting model、Store contract、billing authorityは追加していません。
 
-Core lifecycle、Redis / Cloudflare / Firestore Store、single-round `protectTool()`、current multi-round accountingはv1 candidate evidenceの対象です。first-class MCP Tasks runtime supportはupstream stabilization待ちです。billing、financial ledger、gateway、workflow replayは引き続きscope外です。
+Core lifecycle、Redis / Cloudflare / Firestore Store、single-round `protectTool()`、current multi-round accountingはv1 stable evidenceの対象です。first-class MCP Tasks runtime supportはupstream stabilization待ちです。billing、financial ledger、gateway、workflow replayは引き続きscope外です。
 
 詳細なrelease boundaryとevidenceは **[v1.0 readiness review](docs/v1-readiness.ja.md)** と **[Roadmap](docs/roadmap.ja.md)** を参照してください。
 
@@ -338,7 +338,7 @@ Project policy: [Contributing](CONTRIBUTING.ja.md) · [Security](SECURITY.ja.md)
 
 ## Release boundary
 
-`v0.13.0` がcurrent released source baselineです。v1-blocker closure trancheは完了し、次はfeature追加なしのv1.0 stable promotionです。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
+`v1.0.0` がcurrent stable released source baselineです。v1-blocker closure trancheは完了状態を維持し、stable promotionで新しいaccounting modelは追加していません。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。
 
 **npm publicationは別途explicit authorizationが必要で、まだ完了していません。**
 

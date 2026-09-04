@@ -1,6 +1,6 @@
 {
   "name": "mcp-usage-control-mcp",
-  "version": "0.13.0",
+  "version": "1.0.0",
   "description": "MCP TypeScript SDK v2 adapter for mcp-usage-control.",
   "type": "module",
   "license": "Apache-2.0",

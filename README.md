@@ -40,7 +40,7 @@ Run `pnpm example:free-plus` to execute a self-verifying Free 50 / Plus 500 mont
 
 ## Current distribution status
 
-**The packages are not published to npm yet.** `v0.13.0` is the current validated GitHub/source release baseline. Until first registry publication, use the attached GitHub Release tarballs or a repository checkout. See **[Use from source / local tarballs](docs/using-from-source.md)**.
+**The packages are not published to npm yet.** `v1.0.0` is the current stable GitHub/source release baseline. Until first registry publication, use the attached GitHub Release tarballs or a repository checkout. See **[Use from source / local tarballs](docs/using-from-source.md)**.
 
 Requirements: **Node.js 22+**, ESM. CI covers Node.js 22/24, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
 
@@ -104,14 +104,14 @@ Typical combinations:
 
 You do **not** install all five packages for a normal application. Pick the integration layer you need and one Store backend that matches the deployment.
 
-All five package manifests are aligned at `0.13.0`. **v0.13.0 is the current GitHub/source release baseline**; npm registry publication remains intentionally deferred.
+All five package manifests are aligned at `1.0.0`. **v1.0.0 is the current stable GitHub/source release baseline**; npm registry publication remains intentionally deferred.
 
 
 ## v1 status
 
-The accounting lifecycle and Store contract are frozen for the v1 candidate. The current `v0.13.0` source release is the hardened baseline; the planned v1 step is a feature-free stable promotion rather than another feature expansion.
+`v1.0.0` is the feature-free stable promotion of the frozen accounting lifecycle and Store contract hardened through v0.13. No new accounting model, Store contract, or billing authority was introduced by the stable promotion.
 
-Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 candidate evidence. First-class MCP Tasks runtime support remains dependent on upstream stabilization. Billing, financial-ledger, gateway, and workflow-replay responsibilities remain out of scope.
+Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 stable evidence. First-class MCP Tasks runtime support remains dependent on upstream stabilization. Billing, financial-ledger, gateway, and workflow-replay responsibilities remain out of scope.
 
 For the detailed release boundary and evidence, see **[v1.0 readiness review](docs/v1-readiness.md)** and **[Roadmap](docs/roadmap.md)**.
 
@@ -354,7 +354,7 @@ Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · 
 
 ## Release boundary
 
-`v0.13.0` is the current released source baseline. The v1-blocker closure tranche is complete and v1.0 is the next feature-free stable-promotion milestone. Issue #6 remains a separate explicitly authorized npm-publication gate.
+`v1.0.0` is the current stable released source baseline. The v1-blocker closure tranche remains complete and the stable promotion introduced no new accounting model. Issue #6 remains a separate explicitly authorized npm-publication gate.
 
 **npm publication remains a separate explicitly authorized operation and has not been completed.**
 

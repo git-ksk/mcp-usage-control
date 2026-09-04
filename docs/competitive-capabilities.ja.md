@@ -2,7 +2,7 @@
 
 [English](competitive-capabilities.md) | [日本語](competitive-capabilities.ja.md)
 
-最終レビュー: **2026-08-29**。
+最終レビュー: **2026-09-04**。
 
 これはfeature数やperformance rankingではなく、product boundaryの監査です。隣接するrate-limit / quota / entitlement製品は `mcp-usage-control` より広い問題を扱います。transactional usage enforcementまたは安全なintegration UXを改善し、billing / gateway / control-plane authorityをcoreへ持ち込まないものだけを採用します。
 

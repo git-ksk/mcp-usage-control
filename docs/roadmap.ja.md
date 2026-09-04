@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v0.13.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.13.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
+**v1.0.0がcurrent stable GitHub/source release baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
 
 first npm publicationは#6で追跡するseparate explicit authorization必須の操作です。source-release progressがregistry publicationを意味することはありません。
 
@@ -25,7 +25,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
  -> v0.13 v1-blocker closure [RELEASED]
- -> v1.0 feature-free stable promotion
+ -> v1.0 feature-free stable promotion [RELEASED]
 ```
 
 ## 今後も崩さないsafety boundary
@@ -139,7 +139,7 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0.13 final blocker-closure** tranche (#191〜#198) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。v0.13.0でstable promotionに必要なfinal correctness / operations / distribution / runtime / peer-compatibility evidenceが揃っています。
 
-**v1.0が次のfeature-free stable-promotion milestoneです。** #6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
+**v1.0.0はrelease済みのfeature-free stable-promotion milestoneです。** #6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 

@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v0.13.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `0.13.0` に揃い、Node.js 22以上をrequireします。
+**v1.0.0がcurrent stable GitHub/source release baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22以上をrequireします。
 
 packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
 
@@ -27,7 +27,7 @@ v0.11 completion trancheはclose済みです。#6はseparate publication gateで
 
 ## 判定
 
-**accounting modelはfreeze維持ですが、最終v1 auditでboundedなv0.13 blocker-closure trancheが見つかり、stable promotion前にgreenが必要です。**
+**v0.13 blocker-closure evidenceは完了しており、v1.0.0 stable promotionを承認できる状態です。v1.0.0でaccounting model / Store contractは変更しません。**
 
 ## Stable accounting invariant
 

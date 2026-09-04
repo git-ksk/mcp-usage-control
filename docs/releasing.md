@@ -6,7 +6,7 @@
 
 GitHub/source releases and npm registry publication are separate operations.
 
-The pre-1.0 release line contains five publishable npm packages:
+The release line contains five publishable npm packages:
 
 - `mcp-usage-control`
 - `mcp-usage-control-mcp`
@@ -44,9 +44,9 @@ The supported v1 runtime matrix is **Node.js 22 and 24**, with package metadata 
 
 Standalone `cloudflare-safety` and `firestore-safety` workflows remain useful diagnostic evidence, but the protected aggregate `test (22)` context no longer depends on administrators separately adding those provider contexts to branch protection.
 
-## Pre-1.0 release gate
+## Release gate
 
-A pre-1.0 GitHub/source release is ready only when the applicable surfaces satisfy these gates:
+A GitHub/source release is ready only when the applicable surfaces satisfy these gates:
 
 - multi-budget admission is all-or-nothing in Memory, Redis, Cloudflare, and Firestore stores where applicable;
 - idempotency scope and bounded tombstone retention are documented/tested;

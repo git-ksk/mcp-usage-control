@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v0.13.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `0.13.0`, require Node.js 22+, and remain unpublished to npm.
+**v1.0.0 is the current stable GitHub/source release baseline.** All five publishable manifests are aligned at `1.0.0`, require Node.js 22+, and remain unpublished to npm.
 
 First npm publication is a separately authorized operation tracked by #6. Source-release progress never implies registry publication.
 
@@ -25,7 +25,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.11 accounting/completion/API/release-safety freeze [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
  -> v0.13 v1-blocker closure [RELEASED]
- -> v1.0 feature-free stable promotion
+ -> v1.0 feature-free stable promotion [RELEASED]
 ```
 
 ## Safety boundary that must not regress
@@ -139,7 +139,7 @@ No genuine Workers Free-plan exhaustion/platform-overload event occurred natural
 
 The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.13 final blocker-closure** tranche (#191-#198) are complete without redefining the frozen accounting lifecycle or persisted Store contract. v0.13.0 carries the final correctness, operations, distribution, runtime, and peer-compatibility evidence required for stable promotion.
 
-**v1.0 is now the next feature-free stable-promotion milestone.** Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
+**v1.0.0 is now the released feature-free stable-promotion milestone.** Issue #6 remains an independent npm-distribution gate and may run only after separate explicit authorization; source-release progress does not authorize registry publication.
 
 ## v1 completion definition
 
