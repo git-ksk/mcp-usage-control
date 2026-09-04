@@ -33,7 +33,6 @@ jobs:
           --health-retries 10
     env:
       REDIS_URL: redis://127.0.0.1:6379
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Resolve release tag
         id: release
@@ -124,11 +123,6 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          if [[ -n "${NPM_TOKEN:-}" ]]; then
-            export NODE_AUTH_TOKEN="$NPM_TOKEN"
-          else
-            unset NODE_AUTH_TOKEN || true
-          fi
 
           publish_one() {
             local name="$1"
