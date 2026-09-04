@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v0.13.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `0.13.0` and require Node.js 22 or later.
+**v1.0.0 is the current stable GitHub/source release baseline.** All five publishable manifests are aligned at `1.0.0` and require Node.js 22 or later.
 
 The packages remain **unpublished to npm**. First registry publication is separately tracked by #6 and requires explicit authorization independent from source releases.
 
@@ -27,7 +27,7 @@ The v0.11 completion tranche is closed. Issue #6 remains a separate publication 
 
 ## Verdict
 
-**The accounting model remains frozen, but the final v1 audit identified a bounded v0.13 blocker-closure tranche that must be green before stable promotion.**
+**Stable promotion is approved on the completed v0.13 blocker-closure evidence: v1.0.0 adds no accounting model or Store-contract change.**
 
 ## Stable accounting invariants
 
@@ -127,11 +127,11 @@ A genuine Workers Free-plan exhaustion/platform-overload event did not occur nat
 
 v0.11 established the accounting/runtime/storage/API freeze, v0.12 completed the bounded #177-#184 product/operations hardening checkpoint, and v0.13.0 completed the final #191-#198 blocker-closure checkpoint. The frozen accounting lifecycle and persisted Store contract remain unchanged.
 
-**The source-release evidence required for stable promotion is now complete. v1.0 remains a feature-free stable promotion over that hardened surface.**
+**The source-release evidence required for stable promotion is now complete. v1.0.0 is the completed feature-free stable promotion over that hardened surface.**
 
 ## npm distribution boundary
 
-The source-release baseline is `v0.13.0`. npm publication is a separate operation and has not occurred.
+The source-release baseline is `v1.0.0`. npm publication is a separate operation and has not occurred.
 
 Issue #6 remains open until first publication is actually desired, **separately explicitly authorized**, completed, and verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
 

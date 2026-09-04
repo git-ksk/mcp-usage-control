@@ -2,7 +2,7 @@
 
 [English](competitive-capabilities.md) | [日本語](competitive-capabilities.ja.md)
 
-Last reviewed: **2026-08-29**.
+Last reviewed: **2026-09-04**.
 
 This is a product-boundary audit, not a feature checklist or performance ranking. Adjacent rate-limit, quota, and entitlement systems solve broader problems than `mcp-usage-control`. A capability is adopted only when it improves transactional usage enforcement or safe integration UX without moving billing, gateway, or control-plane authority into core.
 

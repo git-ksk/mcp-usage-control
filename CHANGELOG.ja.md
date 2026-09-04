@@ -8,6 +8,27 @@
 
 現在entryはありません。
 
+## [1.0.0] - 2026-09-04
+
+初のstable GitHub/source releaseです。v1.0.0はv0.13までにhardenしたaccounting / recovery / storage / MCP integration / release-safety surfaceをfeature-freeでstable promotionします。npm publicationは#6のseparate authorization対象のままで、このsource releaseには含めません。
+
+### Stable contract
+
+- reserve -> liability -> grow -> renew -> settleのfreeze済みlifecycleを、新しいaccounting model、billing authority、financial-ledger responsibilityを追加せずstable promotionします。
+- atomic multi-budget/vector admission、replay fencing、cost-liable expiryのconservative処理、bounded growth/settlement、lost-ACK reconciliation、MCP multi-round one-time resume semanticsは変更しません。
+- package名、public subpath、Node.js 22+ floor、Store compatibility contract、providerごとのdurability / time / HA境界をv1 compatibility lineとしてfreeze維持します。
+
+### Release / ecosystem boundary
+
+- 5 public package manifestを `1.0.0` に揃えます。supported runtime evidenceはNode.js 22/24、aggregate `test (22)` release-safety gateを維持します。
+- 2026-09-04にstable-release競合boundaryを再確認し、billing、gateway、waiting-room、dashboard、entitlement control planeは引き続き意図的にcore外と判断しました。
+- first-class MCP Tasks runtime supportはexperimental adapterをv1へfreezeせず、upstream stabilization待ちを維持します。
+
+### Distribution
+
+- このGitHub/source releaseでは **npm publishしません**。first registry publicationは#6のseparate explicit operationのままです。
+- GitHub Release workflowでexact tagged protected-main SHAを検証し、5 tarballのpack / clean install、`SHA256SUMS`、artifact attestationを完了してからreleaseを作成します。
+
 ## [0.13.0] - 2026-08-29
 
 v0.12後の最終v1 auditで見つかったcorrectness / operations / distribution / compatibility blockerを閉じる第13回GitHub/source release candidateです。npm publicationは#6のseparate authorizationのままで、このtrancheには含めません。

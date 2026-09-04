@@ -6,7 +6,7 @@
 
 GitHub/source releaseとnpm registry publishは別工程とします。
 
-pre-1.0 release lineには5つのpublish可能なnpm packageがあります。
+release lineには5つのpublish可能なnpm packageがあります。
 
 - `mcp-usage-control`
 - `mcp-usage-control-mcp`
@@ -44,9 +44,9 @@ v1のsupported runtime matrixは **Node.js 22 / 24** で、package metadataは `
 
 standaloneの `cloudflare-safety` / `firestore-safety` workflowはprovider診断用evidenceとして維持します。一方、protectedなaggregate `test (22)` 自体が必要なprovider evidenceを内包するため、branch protectionへprovider contextを個別追加しなくてもrelease-critical evidenceをbypassできません。
 
-## Pre-1.0 release gate
+## Release gate
 
-pre-1.0 GitHub/source releaseは、対象surfaceについて次を満たした場合のみreadyとします。
+GitHub/source releaseは、対象surfaceについて次を満たした場合のみreadyとします。
 
 - 適用可能なMemory / Redis / Cloudflare / Firestore storeでmulti-budget admissionがall-or-nothing。
 - idempotency scope / bounded tombstone retentionをdocument / test済み。
