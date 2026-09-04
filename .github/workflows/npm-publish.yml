@@ -152,6 +152,27 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          for name in mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis mcp-usage-control-cloudflare mcp-usage-control-firestore; do
-            test "$(npm view "${name}@${VERSION}" version)" = "$VERSION"
+          names=(
+            mcp-usage-control
+            mcp-usage-control-mcp
+            mcp-usage-control-redis
+            mcp-usage-control-cloudflare
+            mcp-usage-control-firestore
+          )
+          for attempt in $(seq 1 18); do
+            missing=0
+            for name in "${names[@]}"; do
+              observed="$(npm view "${name}@${VERSION}" version 2>/dev/null || true)"
+              if [[ "$observed" != "$VERSION" ]]; then
+                echo "registry propagation pending for ${name}@${VERSION} (attempt ${attempt}/18)"
+                missing=1
+              fi
+            done
+            if [[ "$missing" -eq 0 ]]; then
+              echo "all registry versions are visible"
+              exit 0
+            fi
+            sleep 5
           done
+          echo "registry verification did not converge within 90 seconds" >&2
+          exit 1

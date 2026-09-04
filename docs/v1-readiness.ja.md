@@ -10,7 +10,7 @@
 
 **v1.0.0がcurrent stable GitHub/source release baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22以上をrequireします。
 
-packageは **npm未公開** です。first registry publicationは#6で別途追跡し、source releaseとは独立したexplicit authorizationが必要です。
+5 packageすべてを2026-09-04にnpmへ `1.0.0` として初回公開済みです。#6のseparate publication gateを明示authorizeして実行し、公開後にregistry metadata / integrity / signed provenance / clean-consumer installを検証しました。
 
 v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / governance trancheを解消しました。
 
@@ -23,7 +23,7 @@ v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / g
 - #160でprotectedな `test (22)` をapplicableなNode / Redis / package / Cloudflare / Firestore evidenceのaggregate release-safety gateへ変更
 - #24でreal Monokura Cloudflare credential rotation、新caller proof、rotated-out credential rejectionを既存accounting identityのまま完了。genuine Workers platform-limit exhaustion / overloadは自然観測しておらず、deployed evidenceとしてclaimしません。
 
-v0.11 completion trancheはclose済みです。#6はseparate publication gateで、明示authorizationがある場合だけ実行し、source releaseから暗黙authorizeしません。
+v0.11 completion trancheはclose済みです。#6のseparate publication gateは `v1.0.0` に対して明示authorizeされ完了しました。今後のregistry releaseもsource releaseから暗黙authorizeせず、manual publication workflowを使います。
 
 ## 判定
 
