@@ -50,14 +50,6 @@ jobs:
                   raise SystemExit(f"expected text missing from {filename}: {old!r}")
               path.write_text(text.replace(old, new, 1))
 
-          def replace_all(filename: str, old: str, new: str, minimum: int = 1) -> None:
-              path = Path(filename)
-              text = path.read_text()
-              count = text.count(old)
-              if count < minimum:
-                  raise SystemExit(f"expected at least {minimum} matches in {filename}: {old!r}")
-              path.write_text(text.replace(old, new))
-
           # Primary README status: stable promotion only, no accounting/API changes.
           replace_exact(
               "README.md",
@@ -79,6 +71,11 @@ jobs:
               "Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 candidate evidence.",
               "Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 stable evidence.",
           )
+          replace_exact(
+              "README.md",
+              "`v0.13.0` is the current released source baseline. The v1-blocker closure tranche is complete and v1.0 is the next feature-free stable-promotion milestone. Issue #6 remains a separate explicitly authorized npm-publication gate.",
+              "`v1.0.0` is the current stable released source baseline. The v1-blocker closure tranche remains complete and the stable promotion introduced no new accounting model. Issue #6 remains a separate explicitly authorized npm-publication gate.",
+          )
 
           replace_exact(
               "README.ja.md",
@@ -99,6 +96,11 @@ jobs:
               "README.ja.md",
               "Core lifecycle、Redis / Cloudflare / Firestore Store、single-round `protectTool()`、current multi-round accountingはv1 candidate evidenceの対象です。",
               "Core lifecycle、Redis / Cloudflare / Firestore Store、single-round `protectTool()`、current multi-round accountingはv1 stable evidenceの対象です。",
+          )
+          replace_exact(
+              "README.ja.md",
+              "`v0.13.0` がcurrent released source baselineです。v1-blocker closure trancheは完了し、次はfeature追加なしのv1.0 stable promotionです。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。",
+              "`v1.0.0` がcurrent stable released source baselineです。v1-blocker closure trancheは完了状態を維持し、stable promotionで新しいaccounting modelは追加していません。#6はseparate explicit authorization必須のnpm-publication gateとして維持します。",
           )
 
           # Roadmap: mark the stable promotion as released while preserving the historical capability line.
