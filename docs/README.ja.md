@@ -14,7 +14,7 @@ API名やclass名は英語のまま使いますが、説明文はできるだけ
    何を解決するライブラリなのか、最小構成、各packageとStoreの違いを説明します。
 
 2. **[Source / local tarballから使う](using-from-source.ja.md)**  
-   npm公開前の現在のinstall方法です。
+   npm公開済みpackageとは別に、contributor、未release commit、local patch、pre-release検証で使うinstall方法です。
 
 3. **[MCPサーバへの組み込み](mcp-integration.ja.md)**  
    `mcp-usage-control-mcp` が何をするpackageなのか、`protectTool()` / `protectMultiRoundTool()` の使い方を説明します。
