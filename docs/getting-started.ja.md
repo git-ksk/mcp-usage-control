@@ -34,9 +34,9 @@ request
 
 authentication、subscription、checkout、invoice、financial ledgerはapplication側の責任です。
 
-## npm公開前の評価方法
+## 公開済みpackageをinstallする
 
-packageはまだnpm未公開です。評価にはvalidated `v0.13.0` GitHub Release tarballまたはrepository checkoutを使います。clean consumerへのexact commandは [Source / local tarballから使う](using-from-source.ja.md) にあります。
+5 packageすべてnpmへ `1.0.0` として公開済みです。通常はcoreに加えて、applicationで必要なintegration adapterとStore backendだけをinstallしてください。reproducibleなsource評価にはvalidated GitHub Release tarballやrepository checkoutも利用できます。詳しくは [Source / local tarballから使う](using-from-source.ja.md) を参照してください。
 
 **Node.js 22以降が必要です。**
 
@@ -136,18 +136,19 @@ protectTool()  ← mcp-usage-control-mcp
 
 ## 現在のインストール方法
 
-packageはまだnpmへ公開していません。現在はrepositoryをcloneして使うか、ローカルで`.tgz`を作って別projectへinstallします。
-
-repository自体を確認するだけなら:
+通常のconsumerはnpmからinstallします。Coreのみなら:
 
 ```console
-git clone https://github.com/git-ksk/mcp-usage-control.git
-cd mcp-usage-control
-pnpm install --frozen-lockfile
-pnpm check
+npm install mcp-usage-control
 ```
 
-別applicationへinstallする手順は [Source / local tarballから使う](using-from-source.ja.md) を参照してください。
+一般的なMCP serverでRedisをStoreとして使う例:
+
+```console
+npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
+```
+
+deploymentで必要なbackendだけを追加してください。contributor、未release commit、local patch、pre-release dogfoodingではrepository checkoutやexact GitHub Release / local tarballも利用できます。詳しくは [Source / local tarballから使う](using-from-source.ja.md) を参照してください。
 
 **Node.js 22以上が必要です。** supported CI / release-safety evidenceはNode.js 22 / 24をcoverします。Node.js 20はEOL済みで、supported / required CI contractには含めません。
 
