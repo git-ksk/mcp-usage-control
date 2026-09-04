@@ -12,9 +12,9 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.0.0がcurrent stable GitHub/source release baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22+をrequireし、npmにはまだ公開していません。
+**v1.0.0がcurrent stable GitHub/source / npm baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22+をrequireし、2026-09-04にnpmへ公開済みです。
 
-first npm publicationは#6で追跡するseparate explicit authorization必須の操作です。source-release progressがregistry publicationを意味することはありません。
+separate authorizationで実行した初回npm publication gate #6は完了・close済みです。今後のregistry publicationも引き続き独立してauthorizeし、source-release progressがregistry publicationを意味することはありません。
 
 ```text
 v0.6 progressive growth [RELEASED]
@@ -139,7 +139,7 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0.13 final blocker-closure** tranche (#191〜#198) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。v0.13.0でstable promotionに必要なfinal correctness / operations / distribution / runtime / peer-compatibility evidenceが揃っています。
 
-**v1.0.0はrelease済みのfeature-free stable-promotion milestoneです。** #6はindependentなnpm-distribution gateとして維持し、separate explicit authorization後だけ実行します。source-release progressがregistry publicationをauthorizeすることはありません。
+**v1.0.0はrelease済みのfeature-free stable-promotion milestoneであり、5 packageのnpm baselineでもあります。** 初回npm publication gate #6は `v1.0.0` について完了済みです。今後のregistry releaseも独立してauthorizeし、manual OIDC Trusted Publishing workflowを使います。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
@@ -185,7 +185,7 @@ v1.0前に:
 | #183 safe quota-window/reset UX projection | v0.12 | **Completed; additive non-authoritative helper** |
 | #184 provider benchmark / cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
 | #191〜#198 final v1 blocker closure | v0.13 | **Completed / Release済み; 新billing modelなし** |
-| #6 first npm publication | separate v0.13/v1 distribution gate | **Open; explicit authorization必須** |
+| #6 first npm publication | separate v0.13/v1 distribution gate | **Completed / Closed; v1.0.0 publish・verification完了** |
 
 ## Release policy
 
