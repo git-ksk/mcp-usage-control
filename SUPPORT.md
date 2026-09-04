@@ -2,7 +2,7 @@
 
 [English](SUPPORT.md) | [日本語](SUPPORT.ja.md)
 
-`mcp-usage-control` is currently a pre-v1 open-source project. Community support is best-effort and there is no commercial support SLA.
+`mcp-usage-control` is an open-source project with a stable v1 baseline. Community support is best-effort and there is no commercial support SLA.
 
 ## Supported runtime
 
@@ -55,10 +55,10 @@ Do not use a public issue for a vulnerability that could enable quota bypass, do
 
 ## Questions about current limitations
 
-Known pre-v1 limitations include:
+Known current limitations and boundaries include:
 
-- public API/name freeze is completed through the v0.11 line rather than assumed from earlier source releases;
-- npm registry publication remains deferred until the separately authorized first publish tracked in #6;
+- the public API/name freeze established before v1 is the compatibility baseline for the v1.0.x line;
+- npm packages are published, while every future registry publication remains separately authorized through the manual OIDC Trusted Publishing workflow;
 - stable first-class MCP Tasks wire/runtime integration remains deferred while the upstream surface is experimental;
 - scalar operation reconciliation is supported by Memory, Redis, Firestore, and Cloudflare; vector initial-reserve reconciliation is supported by Memory, Redis, and Firestore, while Cloudflare remains an explicit fail-closed vector exception;
 - strict provider-specific fencing after lease loss is outside the generic core;
