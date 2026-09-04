@@ -2,7 +2,7 @@
 
 [English](SUPPORT.md) | [日本語](SUPPORT.ja.md)
 
-`mcp-usage-control` は現在pre-v1のopen-source projectです。community supportはbest-effortで、commercial support SLAはありません。
+`mcp-usage-control` はstableなv1 baselineを持つopen-source projectです。community supportはbest-effortで、commercial support SLAはありません。
 
 ## Supported runtime
 
@@ -55,10 +55,10 @@ quota bypass、double spending、unauthorized access、cross-tenant leakage、in
 
 ## Current limitationについて
 
-既知のpre-v1 limitationには次があります。
+現在の既知のlimitation / boundaryには次があります。
 
-- public API / name freezeはolder source releaseから暗黙に仮定せず、v0.11 lineで完了させる
-- npm registry publicationは#6の明示authorization付きfirst publishまでdeferred
+- v1前に確立したpublic API / name freezeをv1.0.x lineのcompatibility baselineとして維持する
+- npm packageは公開済みだが、今後のregistry publicationもmanual OIDC Trusted Publishing workflowで毎回独立してauthorizeする
 - stableなfirst-class MCP Tasks wire/runtime integrationはupstream surfaceがexperimentalな間deferred
 - scalar operation reconciliationはMemory / Redis / Firestore / Cloudflareで対応し、vector initial-reserve reconciliationはMemory / Redis / Firestoreで対応。Cloudflareは明示的なfail-closed vector例外
 - lease loss後の厳密なprovider-specific fencingはgeneric coreの責務外
