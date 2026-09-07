@@ -8,42 +8,32 @@
 
 The supported runtime floor is **Node.js 22+**. CI and release-safety evidence cover Node.js 22 and 24. Node.js 20 reached upstream EOL and is not part of the supported or required CI contract.
 
-## Before opening an issue
+## Find help
 
-Check:
-
-- [Getting started](docs/getting-started.md)
-- [MCP integration](docs/mcp-integration.md)
-- [Architecture](docs/architecture.md)
-- [Redis adapter](docs/redis.md)
-- existing GitHub issues
-
-For local development, use Node.js 22 or later and run:
-
-```console
-pnpm install
-pnpm check
-```
-
-If the problem concerns Redis, note the Redis version and whether the failure happens under concurrency, retry, expiry, or network/storage failure conditions.
+| Need | Where to go |
+| --- | --- |
+| First integration | [Getting started](docs/getting-started.md) and [MCP integration](docs/mcp-integration.md) |
+| Unexpected accounting behavior | [Troubleshooting](docs/troubleshooting.md) |
+| Storage or deployment problem | [Redis](docs/redis.md), [Cloudflare](docs/cloudflare.md), or [Firestore](docs/firestore.md) |
+| Development and test setup | [Contributing](CONTRIBUTING.md) |
+| Known issues or new reports | [GitHub issues](https://github.com/git-ksk/mcp-usage-control/issues) |
 
 ## Bug reports
 
-Use the bug-report issue template. Include:
+Use the [bug-report template](https://github.com/git-ksk/mcp-usage-control/issues/new/choose). Include:
 
-- commit SHA or version;
-- Node.js version;
-- storage adapter and Redis version if applicable;
-- minimal reproduction;
-- expected vs actual behavior;
-- whether the issue involves duplicate calls, concurrency, retry, lease expiry, or settlement;
-- sanitized logs or error messages.
+- Package versions or commit SHA, Node.js version, and package manager.
+- The storage adapter, backend/client versions, and single- or multi-instance topology.
+- A minimal reproduction and expected versus actual behavior.
+- Relevant lifecycle steps: admission, liability, renewal, execution, and settlement.
+- Whether it involves retries, concurrency, expiry, or a lost acknowledgement.
+- Sanitized error details and which tests were run or skipped.
 
-Do not include credentials, tokens, cookies, connection strings with secrets, raw production principal IDs, or private customer data.
+Do not include credentials, tokens, cookies, secret connection strings, raw production principal IDs, or private customer data. Use representative identifiers consistently so operation relationships remain understandable.
 
 ## Feature requests
 
-Use the feature-request template and explain the intended use case, required safety invariant, and why the change belongs in core versus an adapter.
+Use the feature-request template. Describe the product use case, the required accounting behavior, and whether an integration adapter could solve it. A concrete example is more useful than an API proposal alone.
 
 ## Dependency advisories
 

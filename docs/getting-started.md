@@ -2,289 +2,164 @@
 
 [English](getting-started.md) | [日本語](getting-started.ja.md)
 
-This guide answers one question: **can I safely put a monthly credit limit in front of an MCP tool without building a quota state machine myself?**
+Add a monthly credit limit to a tool, then choose the integration and storage your application needs. This guide starts with a runnable local example and introduces the production boundaries afterward.
 
-## Start with a concrete product rule
+## Install
 
-Assume your MCP product has:
+Use **Node.js 22+ and ESM**. CI covers Node.js 22 and 24.
 
-```text
-Free plan:  50 credits / month
-Plus plan: 500 credits / month
-search:      1 credit
-report:     10 credits
-```
-
-You want `report` to start only when all required credits have been atomically reserved. A naive `read remaining -> run tool -> increment usage` flow can overspend under concurrency; `mcp-usage-control` turns that into `reserve -> mark liable -> execute -> settle`.
-
-This library is a good fit if those credits represent real cost or a product promise. If all you need is a coarse requests-per-minute throttle, use a normal rate limiter instead.
-
-## What the library owns
-
-It owns the correctness boundary between **tool execution and usage accounting**:
-
-```text
-request
-  -> policy quotes units and budgets
-  -> store atomically reserves quota
-  -> lease becomes cost-liable immediately before metered work
-  -> tool executes
-  -> actual usage settles
-```
-
-It deliberately does not own authentication, subscriptions, checkout, invoicing, or your financial ledger.
-
-## Install the published packages
-
-All five packages are published to npm at `1.0.0`. Install the core package plus only the integration adapter and Store backend your application needs. The validated GitHub Release tarballs and repository checkout remain available for reproducible source evaluation; see [Use from source / local tarballs](using-from-source.md).
-
-**Node.js 22 or later is required.**
-
-## Run the concurrency proof
-
-From a repository checkout, `pnpm example:free-plus` runs a self-verifying example with no external service. It spends 40/50 Free credits, races two 10-credit reports for the final 10, and asserts that only one starts. This is the fastest way to verify the core safety property before reading the advanced APIs.
-
-## Three concepts to remember
-
-- **Policy** — decides whether a call is allowed, how many units it costs, and which budgets apply.
-- **Store** — atomically updates budgets and reservations. Choose Memory, Redis, Cloudflare, or Firestore.
-- **Lease** — represents one reserved execution slot and exposes `markLiable()`, `renew()`, and `settle()`.
-
-## Which package should I use?
-
-| Package | Use it for |
-| --- | --- |
-| `mcp-usage-control` | Core API and Memory store. Start here |
-| `mcp-usage-control-mcp` | Wrapping MCP SDK v2 tool handlers |
-| `mcp-usage-control-redis` | Redis-backed high-frequency/shared quotas |
-| `mcp-usage-control-cloudflare` | Cloudflare Durable Objects |
-| `mcp-usage-control-firestore` | Firebase/GCP deployments using Firestore as the authoritative store |
-
-### The package split in one picture
-
-```text
-mcp-usage-control
-= engine: reserve / liability / renew / settle
-
-mcp-usage-control-mcp
-= MCP integration: wraps tool handlers with the engine
-
-mcp-usage-control-{redis,cloudflare,firestore}
-= authoritative state backend
-```
-
-Choose by integration style, not by trying to install everything:
-
-```text
-normal MCP server
--> core + mcp + one Store
-
-custom lifecycle integration
--> core + one Store
-
-local/test
--> core + MemoryUsageStore
-```
-
-The MCP adapter depends conceptually on core; the Store adapters implement core's storage contract. The adapters are separate so an application does not carry Redis, Cloudflare, or Firestore dependencies it does not use.
-
-The Memory store is the process-local reference implementation. It is suitable for tests, local development, and controlled single-process deployments that explicitly accept restart loss. Use a shared provider-backed store when enforcement state must survive restarts or be shared across instances.
-
-## Current installation path
-
-For normal consumers, install from npm. For example:
-
-```console
+```sh
 npm install mcp-usage-control
 ```
 
-For a typical MCP server, add the MCP adapter and one production Store backend, for example Redis:
+The core includes `MemoryUsageStore`, so the example needs no external service. For a repository checkout or release archive, use [Source / local tarballs](using-from-source.md).
 
-```console
-npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
-```
+## Three concepts to remember
 
-Use only the backend your deployment needs. Contributors, unreleased commits, local patches, and pre-release dogfooding can use the repository checkout or exact GitHub Release/local tarballs documented in [Use from source / local tarballs](using-from-source.md).
+| Concept | Responsibility |
+| --- | --- |
+| **Policy** | Quotes the cost and selects the budgets that apply to a call |
+| **Store** | Reserves and updates every participating budget atomically |
+| **Lease** | Represents the reservation: `markLiable()`, `renew()`, and `settle()` control its lifecycle |
 
-**Node.js 22 or later is required.** Supported CI and release-safety evidence cover Node.js 22 and 24. Node.js 20 is EOL and is not part of the supported or required CI contract.
+The library owns usage enforcement. Your application supplies trusted identity, plan entitlements, cost measurement, and business-side-effect idempotency. Billing and authentication are separate responsibilities.
 
 ## Smallest example
 
-Start with the Memory store to understand the API:
+Save this as `demo.mjs`, then run `node demo.mjs`. It reserves 10 credits against a 50-credit calendar-month budget, runs a mock report, and settles 3 credits. The unused 7 credits become available again.
 
-```ts
+```js
 import {
   MemoryUsageStore,
   UsageControl,
-  type UsagePolicy,
+  createWindowedBudgetKey,
 } from 'mcp-usage-control';
 
-const policy: UsagePolicy = {
-  quote(request) {
+const monthly = createWindowedBudgetKey({
+  period: 'calendar-month',
+  timeZone: 'UTC',
+  namespace: 'credits',
+  clock: Date.now,
+});
+
+const control = new UsageControl(new MemoryUsageStore(), {
+  quote({ principal, tool }) {
+    if (tool !== 'report') return { decision: 'deny', reason: 'unsupported_tool' };
     return {
       decision: 'allow',
-      units: 1,
+      units: 10,
       budget: {
-        key: `user:${request.principal.id}:daily:2026-08-12`,
-        limit: 20,
+        key: monthly.key({ scope: 'user', id: principal.id }),
+        limit: 50,
       },
     };
   },
-};
-
-const control = new UsageControl(new MemoryUsageStore(), policy);
-```
-
-This policy means one tool call costs one unit and each user gets 20 units for that day.
-
-Budget keys are application-defined. The runtime does not infer reset dates, so a daily limit should include its window in the key. The same key remains the same accounting bucket until application policy deliberately stops using or safely retires it.
-
-## Several budgets can be enforced together
-
-One call can charge a user-daily, user-monthly, and tenant-monthly budget at the same time:
-
-```ts
-const policy: UsagePolicy = {
-  quote(request) {
-    const tenantId = request.principal.tenantId ?? 'personal';
-
-    return {
-      decision: 'allow',
-      units: 1,
-      budgets: [
-        { key: `day:user:${request.principal.id}:2026-08-12`, limit: 20 },
-        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
-        { key: `month:tenant:${tenantId}:2026-08`, limit: 2_000 },
-      ],
-    };
-  },
-};
-```
-
-Admission is **all-or-nothing**: all three budgets reserve successfully, or none of them does.
-
-## Use the core API directly
-
-```ts
-const admission = await control.reserve({
-  operationId: 'logical-request-123',
-  principal: { id: 'user-42', tenantId: 'org-7' },
-  tool: 'search',
-  args: { query: 'example' },
 });
 
-if (!admission.allowed) {
-  throw new Error(`usage denied: ${admission.reason}`);
+// Replace this mock with your metered provider call.
+async function performMeteredWork() {
+  return { text: 'Example report', actualUnits: 3 };
 }
 
-await admission.lease.markLiable();
+async function runReport(operationId) {
+  const admission = await control.reserve({
+    operationId,
+    principal: { id: 'user-42' },
+    tool: 'report',
+    args: {},
+  });
+  if (!admission.allowed) {
+    throw new Error(`usage denied: ${admission.reason}`);
+  }
 
-try {
-  const result = await performMeteredWork();
-  await admission.lease.settle(1, 'success');
-  return result;
-} catch (error) {
-  await admission.lease.settle(
-    admission.lease.reservedUnits,
-    'error',
-  );
-  throw error;
+  await admission.lease.markLiable();
+  let result;
+  try {
+    result = await performMeteredWork();
+  } catch (error) {
+    // Unknown cost: conservatively retain the reserved amount.
+    await admission.lease.settle(admission.lease.reservedUnits, 'error');
+    throw error;
+  }
+
+  // Outside the handler catch: a settlement error must not trigger another settlement.
+  await admission.lease.settle(result.actualUnits, 'success');
+  return result.text;
 }
+
+console.log(await runReport('report-001')); // Example report
 ```
+
+This is a short-running, single-user demonstration. In an application, derive the principal from trusted authentication and reuse a stable operation ID for retries. Use actual usage only when it is known, and keep it within the reserved amount.
 
 ### What does `markLiable()` mean?
 
-It marks the point where real cost may have started.
-
-- A reservation that expires while still `pending` can release its reserved capacity.
-- If a worker dies after `markLiable()`, the full reservation is conservatively retained.
-
-This prevents a process crash from becoming a free refund after execution has already started.
+It records the point immediately before work may incur cost. An expired **pending** reservation can release capacity. After it becomes **cost-liable**, unknown usage retains the full reservation conservatively. A worker crash after paid work may have begun is therefore not an automatic refund.
 
 ### What does `settle()` do?
 
-It finalizes the difference between reserved units and actual units.
+It finalizes actual usage and releases any unused reservation. Settle zero only when the application knows that no metered resource was consumed. An exception by itself does not prove zero cost.
 
-Settle to `0` only when the application can determine that no metered resource was consumed.
+If settlement fails with an ambiguous outcome, do not immediately issue a second settlement or reserve again. Follow the selected store's [reconciliation contract](operation-reconciliation.md). An accounting failure can occur even after the business operation succeeded; result recovery belongs to the application.
 
-Long-running tools may also need `renew()` to keep the lease alive. The MCP adapter handles heartbeat renewal while a protected handler is running; custom integrations that can outlive the reservation TTL must provide an equivalent authoritative renewal loop.
+Long-running direct-core integrations must renew the lease while authoritative work remains active. The MCP wrapper handles renewal by default. See [MCP integration](mcp-integration.md).
+
+## Budget windows and several budgets
+
+The example uses `createWindowedBudgetKey()` to select the current calendar month in UTC. The store does not automatically reset a counter in place. A new key selects a new accounting bucket; changing timezone, namespace, or identity mapping can change which budget is enforced.
+
+Use [accounting-window keys](accounting-window-keys.md) for calendar windows and [subscription credits](subscription-credits.md) for Free/Plus plans and weighted tool costs. Custom subscription billing cycles remain application-defined.
+
+One quote may return `budgets` instead of `budget` to enforce user-daily, user-monthly, and tenant-monthly limits together. Admission is **all-or-nothing**: every budget reserves or none does. Build each key from the intended trusted scope and period.
+
+## Which package should I use?
+
+| Integration | Install |
+| --- | --- |
+| Local example or custom lifecycle | `mcp-usage-control` |
+| MCP TypeScript SDK v2 tools | Core + `mcp-usage-control-mcp` |
+| Durable or shared enforcement | Add one of the store adapters below |
+
+For an MCP server backed by Redis:
+
+```sh
+npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis @modelcontextprotocol/server@^2.0.0 redis@^6.2.0
+```
+
+`mcp-usage-control-mcp` wraps handlers inside your server. It is not a separate gateway. [The integration guide](mcp-integration.md) covers `protectTool()`, tools without an input schema, and integrity-verified multi-round `input_required` flows.
 
 ## Choosing a production store
 
 | Store | Good fit | Main trade-off |
 | --- | --- | --- |
-| Memory | Tests, local development, controlled single-process use | Restart loss; not shared across processes |
-| Redis | High frequency, shared quotas, low latency | Requires Redis HA/persistence planning |
-| Cloudflare Durable Objects | Cloudflare-centric deployments | A Durable Object is the serialization point |
-| Firestore | Firebase/GCP, mostly user-scoped quotas | Large shared budgets can create document contention |
+| [Memory](memory-store.md) | Local tests and controlled single-process use | State is lost on restart and is not shared |
+| [Redis](redis.md) | Shared quotas and frequent updates | Persistence and HA need deployment planning |
+| [Cloudflare Durable Objects](cloudflare.md) | Cloudflare deployments | One Durable Object is one transaction domain |
+| [Firestore](firestore.md) | Firebase/GCP and mostly user-scoped budgets | Heavily shared budget documents can become contention hotspots |
 
-Read [Firestore](firestore.md), [Redis](redis.md), or [Cloudflare](cloudflare.md) before selecting a production store.
-
-## Wrap an MCP tool
-
-Use `protectTool()` for a single-round MCP tool:
-
-```ts
-import { protectTool } from 'mcp-usage-control-mcp';
-
-server.registerTool(
-  'search',
-  { /* schema and metadata */ },
-  protectTool(
-    {
-      control,
-      tool: 'search',
-      principal: ctx => ({ id: ctx.http.authInfo.subject }),
-      operationId: (_args, ctx) => String(ctx.mcpReq.id),
-    },
-    async (args, ctx) => search(args, ctx),
-  ),
-);
-```
-
-`protectTool()` handles reserve, cost-liability, heartbeat renewal, handler execution, and settlement.
-
-Pass `noInput: true` for a tool with no input schema.
-
-### Multi-round `input_required` tools
-
-Use `protectMultiRoundTool()` for multi-round flows.
-
-The first request reserves once. Later rounds reattach to the same server-side lease instead of creating a fresh reservation. Because MCP `requestState` travels through the client and is untrusted, combine the wrapper with the MCP SDK's `createRequestStateCodec()` integrity verification.
-
-See [MCP integration](mcp-integration.md) for the complete configuration.
+Provider guides describe the supported clock, durability, and failure behavior. A passing Memory example does not verify a production provider deployment.
 
 ## Reuse the same `operationId` for retries
 
-Replay protection is scoped to:
+Replay protection is scoped to `(tenantId, principal.id, tool, operationId)` during retention. Duplicate admission is rejected; this does not replay the business result. Do not generate a fresh ID just to bypass a `duplicate_operation` denial.
 
-```text
-(tenantId, principal.id, tool, operationId)
+## Run the concurrency proof
+
+With Node.js 22+ and the repository's pinned pnpm 10.15.0:
+
+```sh
+git clone https://github.com/git-ksk/mcp-usage-control.git
+cd mcp-usage-control
+pnpm install --frozen-lockfile
+pnpm example:free-plus
 ```
 
-Use the same `operationId` when retrying the same logical operation.
-
-`operationId` is not an authentication credential. Principal and tenant identity must come from trusted server-side authentication context.
-
-## Production checklist
-
-Before putting the library on an enforcement path:
-
-- run on Node.js 22 or later;
-- derive principal and tenant identity from trusted server-side context;
-- use stable `operationId` values for retries;
-- return every applicable daily/monthly/tenant budget in one quote;
-- choose TTL and renewal behavior that fits tool duration;
-- settle zero units only when cost non-incurrence is known;
-- never turn a store failure into an unmetered allow;
-- understand the durability and contention behavior of the selected store;
-- do not treat usage enforcement state as the financial ledger itself.
+The [Free/Plus example](../examples/free-plus-credits/README.md) verifies that exactly one of two reports can reserve the final 10 credits and that a duplicate operation cannot reserve again.
 
 ## What to read next
 
-- Start an MCP integration: [MCP integration](mcp-integration.md)
-- Model Free/Plus weighted credits: [Subscription-style MCP credits](subscription-credits.md)
-- Choose a store: [Redis](redis.md) / [Cloudflare](cloudflare.md) / [Firestore](firestore.md)
-- Understand the design: [Architecture](architecture.md)
-- Look up the public API: [API reference](api-reference.md)
-- Review production security: [Security policy](../SECURITY.md)
+- Integrate a tool: [MCP integration](mcp-integration.md).
+- Model product plans: [Subscription credits](subscription-credits.md).
+- Diagnose failures: [Troubleshooting](troubleshooting.md).
+- Review all public APIs: [API reference](api-reference.md).
+- Explore the design: [Architecture](architecture.md) and [Store contract](store-contract.md).

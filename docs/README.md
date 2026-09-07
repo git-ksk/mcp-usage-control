@@ -4,16 +4,15 @@
 
 User-facing documentation for `mcp-usage-control`.
 
-
 > **Try it first:** the [README quick start](../README.md#quick-start) needs no database. The [Free / Plus example](../examples/free-plus-credits/README.md) checks concurrent admission and duplicate-operation protection.
 
 ## Start here
 
-If this is your first visit, read these in order:
+Start with the first two guides. Use the third when developing or installing from source:
 
 1. **[Getting started](getting-started.md)** — what the library solves, the smallest example, and how to choose packages/stores.
-2. **[Use from source / local tarballs](using-from-source.md)** — contributor, unreleased-commit, local-patch, and pre-release installation paths alongside the published npm packages.
-3. **[MCP integration](mcp-integration.md)** — practical examples for `protectTool()` and `protectMultiRoundTool()`.
+2. **[MCP integration](mcp-integration.md)** — practical examples for `protectTool()` and `protectMultiRoundTool()`.
+3. **[Use from source / local tarballs](using-from-source.md)** — contributor, unreleased-commit, local-patch, and pre-release installation paths alongside the published npm packages.
 
 ## Choose a store
 
@@ -70,9 +69,9 @@ If you are implementing a custom store, read the **[Store implementation contrac
 
 ## CI behavior
 
-For pull requests that change only `docs/**` and Markdown (`*.md`) files, CI first classifies the change and then completes the `test (22)` / `test (24)` matrix checks through a lightweight path.
+Documentation-only changes (`docs/**` and Markdown files at any depth) run a checkout and `git diff --check` in `docs-only`. The aggregate **`test (22)`** check verifies that result. Runtime tests, package installation, and provider integration jobs are skipped on that path.
 
-That path does not start Redis, check out the repository in the matrix jobs, set up Node.js/pnpm, install dependencies, run tests, pack packages, or install the clean consumer project. If any non-documentation path such as source code, workflows, package manifests, lockfiles, or configuration changes, the full Node.js 22/24 CI matrix runs the same build/test/package/clean-consumer evidence. Node 22/24 are the supported v1 runtime evidence.
+Changes outside those patterns run the applicable Node.js 22/24, package, peer-compatibility, and provider checks. See [Contributing](../CONTRIBUTING.md) and the [workflow](../.github/workflows/ci.yml) for the actual scope rules.
 
 ## Project policies
 

@@ -1,10 +1,18 @@
-# Cloudflare Durable Objects adapter — current source
+# Cloudflare Durable Objects adapter
 
 [English](cloudflare.md) | [日本語](cloudflare.ja.md)
 
 `mcp-usage-control-cloudflare` implements the core `UsageStore` contract with a SQLite-backed Cloudflare Durable Object.
 
-> **Current distribution status:** the package is not published to npm yet. Use [source / local tarballs](using-from-source.md).
+## Install
+
+Use Node.js 22+. Install from npm:
+
+```sh
+npm install mcp-usage-control mcp-usage-control-cloudflare
+```
+
+For local patches or release archives, use [Source / local tarballs](using-from-source.md).
 
 ## Why Durable Objects
 

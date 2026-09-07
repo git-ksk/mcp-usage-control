@@ -6,6 +6,16 @@
 
 Firebase Admin SDKやGoogle CloudのNode.js Firestore clientを、そのまま渡して使えます。
 
+## インストール
+
+Node.js 22以上のサーバーで使用します。Firebase Admin SDKを使う場合：
+
+```sh
+npm install mcp-usage-control mcp-usage-control-firestore firebase-admin
+```
+
+`firebase-admin` の代わりに `@google-cloud/firestore` も使用できます。以下の例ではFirebase Adminの初期化と認証情報の設定が済み、`policy` が定義されている前提です。
+
 ## まず結論
 
 Firestoreが向いているのは、次のような構成です。

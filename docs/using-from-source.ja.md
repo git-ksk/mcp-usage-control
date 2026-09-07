@@ -8,7 +8,7 @@
 
 release-workflow hardening以降のsource releaseでは、5つの**exact CI-validated package tarball**と `SHA256SUMS` をattachし、同じtarballへGitHub artifact attestationを生成します。attached archiveをinstallする場合はchecksumをverifyし、同名のlocal rebuildがbyte-identicalとは仮定しないでください。
 
-これらはpackage/source distribution用assetであり、将来のnpm registry publicationをauthorize / implyしません。
+通常のアプリへの導入はnpmを使います。アーカイブは特定のリリース成果物を調査・導入するときに利用できます。同じバージョンをローカルで再ビルドしても、配布物とバイト単位で同一とは限りません。
 
 ## 1. Repositoryをcloneして検証
 
@@ -16,13 +16,16 @@ release-workflow hardening以降のsource releaseでは、5つの**exact CI-vali
 git clone https://github.com/git-ksk/mcp-usage-control.git
 cd mcp-usage-control
 pnpm install --frozen-lockfile
-pnpm check
+pnpm build
+pnpm example:free-plus
 ```
+
+この手順はビルドと外部サービス不要の例を確認します。Redisを含む検証は [貢献ガイド](../CONTRIBUTING.ja.md) を参照してください。`REDIS_URL` が未設定の場合、一部のRedis統合テストはスキップされます。
 
 必要条件:
 
 - Node.js 22+
-- repository開発ではpnpm 10.15.x
+- repository開発ではpnpm 10.15.0
 - Redis adapterのtest / 利用ではRedis 7
 - Cloudflare専用integration pathを実行する場合のみWrangler / workerd
 
@@ -31,8 +34,8 @@ pnpm check
 repository rootで実行します。
 
 ```console
-rm -rf .packs
 mkdir -p .packs
+pnpm build
 pnpm --dir packages/core pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/mcp pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/redis pack --pack-destination "$PWD/.packs"
@@ -52,7 +55,7 @@ printf 'packed version: %s\n' "$version"
 .packs/mcp-usage-control-firestore-${version}.tgz
 ```
 
-これらのtarballは、公開済みnpm packageに対応するreproducibleなsource-build artifactです。CIでも同じtarballを生成し、source / test fileの混入がないことを確認し、cleanなconsumer projectへinstallしてpublic ESM importまで検証します。
+tarballにはローカルの変更を含む現在のビルドが入ります。リリースCIでは内容の検査と、別の利用側プロジェクトでのESM importも確認します。ローカルでpackできただけでは、その検証すべてを再現したことにはなりません。
 
 ## 3. 別projectへinstall
 
@@ -179,7 +182,3 @@ pnpm check
 ```
 
 in-memory storeはtest / local development向けです。distributed enforcementの確認ではRedis adapter、Cloudflare専用workerd integration workflow、またはFirestore Emulator integration workflowを使います。
-
-## 公開済みnpm baseline
-
-通常のconsumerではnpm registryの `1.0.0` がprimary install pathです。このsource / tarball手順は、contributor、未release commit、local patch、GitHub Release artifactの再現性確認、pre-release dogfooding向けとして引き続き利用できます。

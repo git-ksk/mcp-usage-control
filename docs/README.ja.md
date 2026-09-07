@@ -6,21 +6,15 @@
 
 API名やclass名は英語のまま使いますが、説明文はできるだけ日本語として自然に読める形にしています。
 
-
 > **まず動かしてみる：** [READMEのクイックスタート](../README.ja.md#クイックスタート) はデータベース不要。[Free / Plusの実行例](../examples/free-plus-credits/README.md) では同時実行と重複予約防止を確認できます。
 
 ## 初めて読むなら
 
-まずは次の3ページだけで十分です。
+最初の2ページで基本の導入を進められます。ソースからの開発・導入が必要な場合は3番目を参照してください。
 
-1. **[はじめに](getting-started.ja.md)**  
-   何を解決するライブラリなのか、最小構成、各packageとStoreの違いを説明します。
-
-2. **[Source / local tarballから使う](using-from-source.ja.md)**  
-   npm公開済みpackageとは別に、contributor、未release commit、local patch、pre-release検証で使うinstall方法です。
-
-3. **[MCPサーバへの組み込み](mcp-integration.ja.md)**  
-   `mcp-usage-control-mcp` が何をするpackageなのか、`protectTool()` / `protectMultiRoundTool()` の使い方を説明します。
+1. **[はじめに](getting-started.ja.md)** — 動かせる最小例、利用枠の仕組み、パッケージとストアの選び方。
+2. **[MCPサーバへの組み込み](mcp-integration.ja.md)** — `protectTool()` と `protectMultiRoundTool()` の設定。
+3. **[ソース・ローカルtarballから使う](using-from-source.ja.md)** — リポジトリ開発、ローカル修正、リリースアーカイブからの導入。
 
 ## `mcp-usage-control-mcp` が分かりにくい場合
 
@@ -104,11 +98,11 @@ protectTool()
 - [`mcp-usage-control-cloudflare`](../packages/cloudflare/README.md) — Durable Objects Store
 - [`mcp-usage-control-firestore`](../packages/firestore/README.md) — Firestore Store
 
-## CIについて
+## CIの動き
 
-`docs/**` とMarkdown (`*.md`) だけを変更したPull Requestでは、CIは変更範囲を判定したあと `test (22)` / `test (24)` のmatrix checkを軽量pathで終了します。
+ドキュメントだけの変更（`docs/**` と任意の階層のMarkdown）は、`docs-only` でチェックアウトと `git diff --check` を実行します。集約チェック **`test (22)`** が結果を確認し、実行時テスト・パッケージのインストール・ストア統合テストは省略します。
 
-この場合はRedis起動、matrix jobでのcheckout、Node.js / pnpm setup、dependency install、test、package pack、clean consumer installを実行しません。source code、workflow、package manifest、lockfile、configなどMarkdown以外の変更が1つでも含まれる場合は、Node.js 22 / 24のfull CI matrixで同じbuild / test / package / clean-consumer evidenceを実行します。v1のsupported runtime evidenceはNode 22 / 24です。
+それ以外の変更では、対象に応じたNode.js 22/24・パッケージ・依存関係の互換性・ストアの検証を実行します。詳しい条件は [貢献ガイド](../CONTRIBUTING.ja.md) と [ワークフロー](../.github/workflows/ci.yml) を参照してください。
 
 ## Project policies
 
