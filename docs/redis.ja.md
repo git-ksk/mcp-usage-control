@@ -1,10 +1,18 @@
-# Redis adapter — current source
+# Redis adapter
 
 [English](redis.md) | [日本語](redis.ja.md)
 
 `mcp-usage-control-redis` は `mcp-usage-control` のdistributed production-store adapterです。
 
-> **現在の配布状況:** packageはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) に従ってlocal core + Redis tarballをinstallし、`redis@6.2.0` を組み合わせてください。
+## インストール
+
+Node.js 22以上を使用します。通常はnpmから導入してください。
+
+```sh
+npm install mcp-usage-control mcp-usage-control-redis redis@^6.2.0
+```
+
+ローカル修正やリリースアーカイブを使う場合は [ソース・ローカルtarballのガイド](using-from-source.ja.md) を参照してください。
 
 current v1-frozen source lineはRedis 7 / node-redis 6.2.xでtestしています。supported v1 runtimeはNode.js 22+です。
 

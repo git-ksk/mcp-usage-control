@@ -1,14 +1,24 @@
-# MCP integration — current source
+# MCP integration
 
 [English](mcp-integration.md) | [日本語](mcp-integration.ja.md)
 
 `mcp-usage-control-mcp` adapts the core lifecycle to `@modelcontextprotocol/server` v2 tool handlers. Use `protectTool()` for single-round tools and `protectMultiRoundTool()` for explicit MCP v2 `input_required` suspend/resume flows.
 
-> **Current distribution status:** the adapter is not published to npm yet. Build/install the local core + MCP tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `@modelcontextprotocol/server@2.0.0`.
+## Install
+
+Use Node.js 22+. Install from npm:
+
+```sh
+npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.0.0
+```
+
+For local patches or release archives, use [Source / local tarballs](using-from-source.md).
 
 The adapter does not authenticate callers or decide subscriptions. The application must derive a trusted `Principal` and a suitable logical `operationId`.
 
 ## Register a protected single-round tool
+
+The following is an integration fragment. `server` is your configured MCP server, `control` is the `UsageControl` from [Getting started](getting-started.md), and `z` is Zod. Implement the authentication, operation-ID, and search functions in your application. A JSON-RPC request ID that changes on retry is not a stable logical operation ID.
 
 ```ts
 import { protectTool } from 'mcp-usage-control-mcp';

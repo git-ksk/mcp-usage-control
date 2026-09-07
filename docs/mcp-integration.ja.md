@@ -18,7 +18,15 @@ protectTool() / protectMultiRoundTool()
 
 MCPサーバ側で既存のhandlerを包むだけなので、usage controlのために通信経路を増やす必要はありません。
 
-> 現在packageはまだnpmへ公開していません。[Source / local tarballから使う](using-from-source.ja.md) の手順でcore + MCP adapterをinstallしてください。CIでは `@modelcontextprotocol/server@2.0.0` と組み合わせて検証しています。
+## インストール
+
+Node.js 22以上を使用します。通常はnpmから導入してください。
+
+```sh
+npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.0.0
+```
+
+ローカル修正やリリースアーカイブを使う場合は [ソース・ローカルtarballのガイド](using-from-source.ja.md) を参照してください。
 
 ## 何を自動化してくれる？
 
@@ -43,6 +51,8 @@ handler開始直前に markLiable()
 ただし、このadapterは認証やsubscription判定そのものを行いません。`principal` や `operationId` はapplication側で信頼できる情報から渡します。
 
 ## 一般的なtoolを包む
+
+以下は既存サーバーへ組み込む断片です。`server` は設定済みのMCPサーバー、`control` は [導入ガイド](getting-started.ja.md) で作る `UsageControl`、`z` はZodです。認証・操作ID・検索処理の関数はアプリ側で実装します。再試行で変わるJSON-RPCリクエストIDを、そのまま論理操作IDとして使わないでください。
 
 ```ts
 import { protectTool } from 'mcp-usage-control-mcp';

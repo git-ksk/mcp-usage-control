@@ -6,81 +6,66 @@ Thanks for contributing to `mcp-usage-control`.
 
 This project treats quota/accounting behavior as correctness- and security-sensitive. Small-looking changes to reservation, liability, expiry, retry, classification, or settlement semantics can create oversubscription or under-accounting, so those changes need explicit invariant tests.
 
-## Development
+## Start contributing
 
-Requirements:
+Documentation fixes, examples, bug reproductions, and focused code changes are welcome. For a larger feature or storage-contract change, explain the use case in an issue first. Report vulnerabilities privately through [Security](SECURITY.md).
 
-- Node.js 22+
-- pnpm 10
-- Docker or a local Redis 7 instance when reproducing Redis integration behavior
+Use Node.js 22+ and **pnpm 10.15.0**, pinned in `package.json`:
 
-```console
-pnpm install
-pnpm check
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+pnpm example:free-plus
 ```
 
-CI tests Node.js 22/24, real Redis 7, and MCP SDK v2 protocol integration behavior.
+The example needs no external service. For runtime changes, run `pnpm check` and the integration tests relevant to the affected store. Some Redis integration tests are skipped without `REDIS_URL`; a local pass without it is not Redis integration evidence.
+
+### Test with Redis
+
+Start an isolated Redis 7 instance on a free local port:
+
+```sh
+docker run --detach --rm --name muc-contrib-redis -p 127.0.0.1:16379:6379 redis:7-alpine
+docker exec muc-contrib-redis redis-cli ping
+```
+
+After `PONG`, run:
+
+```sh
+REDIS_URL=redis://127.0.0.1:16379 pnpm check
+docker stop muc-contrib-redis
+```
+
+Stop the container when finished, including after a failed test. Cloudflare/workerd and Firestore Emulator use separate integration workflows; consult the provider guides for their setup. Never run these tests against production accounting state.
 
 ## CI operating rules
 
-The CI policy is to **keep safety checks intact while avoiding heavy work for documentation-only changes**.
+The source of truth is [ci.yml](.github/workflows/ci.yml). The aggregate check is named **`test (22)`**; it verifies every applicable job, rather than running only Node.js 22 tests itself. Preserve that check name when changing workflow structure, and coordinate any required-check configuration changes.
 
-### Required checks
+| Changed paths | Expected validation |
+| --- | --- |
+| Only `docs/**` and/or Markdown at any depth | `docs-only` checks out the repository and runs `git diff --check`; the aggregate check verifies its result |
+| Any path outside those documentation patterns | Node.js 22/24 build/test/package checks, peer compatibility, and dependency review on PRs |
+| Core, provider, or relevant CI workflow | Applicable Cloudflare/workerd and Firestore Emulator evidence, as selected by the workflow |
+| Missing or unusable comparison base | Full validation conservatively |
 
-Branch protection on `main` treats `test (22)` as the required aggregate release-safety check.
+Documentation-only changes skip runtime tests and package installation. Files such as SVGs under `docs/` still match `docs/**`. A non-Markdown file outside `docs/` takes the full path.
 
-Those check names are part of the repository's operating contract. If a workflow/job/matrix change would rename them, update branch protection as part of the same operational change. Do not rename the checks first and leave branch protection expecting the old names.
-
-Do not use workflow-level `paths-ignore` to suppress a required workflow. If the workflow never starts, the required checks may never be created and a documentation-only pull request can become unmergeable.
-
-### Documentation-only pull requests
-
-A pull request is documentation-only when every changed path is one of the following:
-
-- `docs/**`
-- Markdown (`*.md`) at any repository depth
-
-When every changed path matches that definition, the `changes` job classifies the pull request as documentation-only. The protected `test (22)` aggregate job still resolves successfully so branch protection sees its required check name, but it takes only the lightweight docs-only success path and skips the heavy work:
-
-- repository checkout
-- Node / pnpm setup
-- dependency installation
-- Redis startup
-- `pnpm check`
-- public-package packing and package-content verification
-- tarball installation in a clean consumer project
-
-Keeping the required jobs alive while skipping their heavy steps is the repository's documentation-only CI strategy.
-
-### When full CI is required
-
-If even one non-documentation path changes, full CI runs. Source files, workflows, `package.json`, lockfiles, configuration files, and other non-Markdown paths all require the full path.
-
-If CI cannot determine a usable base SHA or cannot reliably determine the changed paths, it fails safe by running full CI. An ambiguous change set must never become a reason to skip tests.
-
-Changes to `.github/workflows/ci.yml` itself are non-Markdown changes and therefore always exercise full CI.
-
-### Store-specific integration workflows
-
-Cloudflare and Firestore integration tests are intentionally separate from the general CI workflow and are scoped to their relevant paths:
-
-- Cloudflare Integration: `packages/cloudflare/**`, `packages/core/**`, `.github/workflows/cloudflare-integration.yml`
-- Firestore Integration: `packages/firestore/**`, `packages/core/**`, `.github/workflows/firestore-integration.yml`
-
-A Firestore-only change should not run Cloudflare Integration, and vice versa. Changes under `packages/core/**` intentionally run both because both adapters depend on the core contract.
-
-When adding another store adapter or integration workflow, scope its triggers to the adapter itself, the shared packages it actually depends on, and the workflow file itself. If a broader trigger is necessary, explain the dependency reason in the pull request.
+Do not suppress the entire required workflow with `paths-ignore`: an absent check can block merging. Provider workflows also classify scope internally and report aggregate safety checks. Check the actual workflow conditions when changing their triggers.
 
 ## Repository layout
 
-```text
-packages/core    provider- and MCP-independent usage-control contract
-packages/mcp     @modelcontextprotocol/server v2 integration
-packages/redis   production-oriented Redis UsageStore adapter
-docs             architecture and user guides
-```
+| Path | Responsibility |
+| --- | --- |
+| `packages/core` | Provider- and MCP-independent usage control |
+| `packages/mcp` | MCP SDK v2 integration |
+| `packages/redis` | Redis usage and MCP flow stores |
+| `packages/cloudflare` | Durable Objects and authenticated remote access |
+| `packages/firestore` | Server-side Firestore store |
+| `examples` | Runnable examples |
+| `docs` | Guides, contracts, and release evidence |
 
-Keep storage-, protocol-, billing-, and provider-specific concerns outside `core` unless the abstraction itself genuinely requires them.
+Keep provider-, protocol-, and billing-specific concerns outside core unless the abstraction requires them.
 
 ## Design rules
 

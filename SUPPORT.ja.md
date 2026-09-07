@@ -1,67 +1,55 @@
-# Support
+# サポート
 
 [English](SUPPORT.md) | [日本語](SUPPORT.ja.md)
 
-`mcp-usage-control` はstableなv1 baselineを持つopen-source projectです。community supportはbest-effortで、commercial support SLAはありません。
+`mcp-usage-control` はv1安定版を提供するオープンソースプロジェクトです。コミュニティによる可能な範囲でのサポートを行い、商用の応答時間保証（SLA）は設けていません。
 
-## Supported runtime
+## 対応する実行環境
 
-supported runtime floorは **Node.js 22+** です。CI / release-safety evidenceはNode.js 22 / 24をcoverします。Node.js 20はupstream EOL済みで、supported / required CI contractには含めません。
+対応する実行環境は **Node.js 22以上** です。CIとリリース時の検証対象はNode.js 22と24で、Node.js 20は含みません。
 
-## Issueを開く前に
+## 問い合わせ先を選ぶ
 
-次を確認してください。
+| 目的 | 読むページ |
+| --- | --- |
+| 初めて組み込む | [はじめに](docs/getting-started.ja.md) / [MCP連携](docs/mcp-integration.ja.md) |
+| 利用量の動作がおかしい | [トラブルシューティング](docs/troubleshooting.ja.md) |
+| ストア・デプロイの問題 | [Redis](docs/redis.ja.md) / [Cloudflare](docs/cloudflare.ja.md) / [Firestore](docs/firestore.ja.md) |
+| 開発環境・テストの準備 | [貢献ガイド](CONTRIBUTING.ja.md) |
+| 既知の問題の確認・報告 | [GitHub Issues](https://github.com/git-ksk/mcp-usage-control/issues) |
 
-- [Getting started](docs/getting-started.ja.md)
-- [MCP integration](docs/mcp-integration.ja.md)
-- [Architecture](docs/architecture.ja.md)
-- [Redis adapter](docs/redis.ja.md)
-- 既存のGitHub Issue
+## 不具合を報告する
 
-local developmentではNode.js 22以上を使い、次を実行してください。
+[不具合報告テンプレート](https://github.com/git-ksk/mcp-usage-control/issues/new/choose) を使い、次の情報を添えてください。
 
-```console
-pnpm install
-pnpm check
-```
+- パッケージのバージョンまたはコミットSHA、Node.jsのバージョン、パッケージマネージャー
+- ストアアダプター、バックエンドとクライアントのバージョン、単一・複数インスタンスの構成
+- 最小の再現例と、期待した動作・実際の動作
+- 予約、コスト発生の記録、更新、実行、使用量の確定のうち、問題が起きる段階
+- 再試行、同時実行、期限切れ、応答の消失との関係
+- 機密情報を除いたエラーと、実行・スキップしたテスト
 
-Redis関連のproblemでは、Redis versionと、concurrency、retry、expiry、network/storage failureのどの条件で再現するかを記載してください。
+認証情報、トークン、Cookie、秘密を含む接続文字列、本番のユーザーID、非公開の顧客データは載せないでください。IDは一貫した仮の値に置き換えると、操作同士の関係を保って説明できます。
 
-## Bug report
+## 機能を提案する
 
-bug-report Issue templateを使用してください。次を含めると調査しやすくなります。
+機能提案テンプレートを使い、製品での用途、必要な利用量管理の動作、連携アダプターで解決できるかを説明してください。API案だけでなく、具体例があると検討しやすくなります。
 
-- commit SHA / version
-- Node.js version
-- storage adapterと、必要ならRedis version
-- minimal reproduction
-- expected / actual behavior
-- duplicate call、concurrency、retry、lease expiry、settlementとの関係
-- sanitize済みlog / error message
+## 依存関係の脆弱性情報
 
-credential、token、cookie、secretを含むconnection string、raw production principal ID、private customer dataを含めないでください。
+対応バージョンの依存パッケージとGitHub Actionsの脆弱性は、[セキュリティポリシー](SECURITY.ja.md) の自動チェックと調査手順で扱います。重大・高リスクの問題では、対象の依存関係、対応リリースへの影響、悪用の可能性、判明していれば安全な更新先を記録します。
 
-## Feature request
+## セキュリティの問題
 
-feature-request templateを使用し、use case、維持すべきsafety invariant、その変更がcoreとadapterのどちらに属するべきかを説明してください。
+利用上限の回避、二重消費、不正アクセス、組織間の情報漏えい、使用量の不整合につながる脆弱性には公開Issueを使わず、[セキュリティポリシー](SECURITY.ja.md) に従ってください。
 
-## Dependency advisory
+## 現在の対応範囲
 
-supported lineのdependency / GitHub Actions advisoryは [SECURITY.ja.md](SECURITY.ja.md) のautomated check / triage policyで扱います。Critical/Highではaffected dependency/action、supported releaseへのimpact、applicability / exploitability判断、判明していればsafe target versionを記録します。
+- v1前に確定した公開APIと名称を、v1.0.xの互換性の基準とします。
+- npmパッケージは公開済みです。今後の公開は、手動のOIDC Trusted Publishingワークフローで個別に承認します。
+- MCP Tasksの安定版専用アダプターは、上流の実装仕様が実験段階のため未提供です。
+- 単一単位の操作状態照合はMemory・Redis・Firestore・Cloudflareに対応します。ベクトルの初回予約の照合はMemory・Redis・Firestoreに対応し、Cloudflareでは明示的に拒否します。
+- リース喪失後に外部サービス側の処理を厳密に止める仕組みは、汎用コアの範囲外です。
+- 課金、決済、認証、分析のバックエンドはコアに内蔵しません。
 
-## Security issue
-
-quota bypass、double spending、unauthorized access、cross-tenant leakage、inconsistent settlementにつながるvulnerabilityにはpublic Issueを使用しないでください。[SECURITY.ja.md](SECURITY.ja.md) に従ってください。
-
-## Current limitationについて
-
-現在の既知のlimitation / boundaryには次があります。
-
-- v1前に確立したpublic API / name freezeをv1.0.x lineのcompatibility baselineとして維持する
-- npm packageは公開済みだが、今後のregistry publicationもmanual OIDC Trusted Publishing workflowで毎回独立してauthorizeする
-- stableなfirst-class MCP Tasks wire/runtime integrationはupstream surfaceがexperimentalな間deferred
-- scalar operation reconciliationはMemory / Redis / Firestore / Cloudflareで対応し、vector initial-reserve reconciliationはMemory / Redis / Firestoreで対応。Cloudflareは明示的なfail-closed vector例外
-- lease loss後の厳密なprovider-specific fencingはgeneric coreの責務外
-- billing、payment、authentication、analytics backendをcoreへ内蔵しない
-
-これらのboundaryに関する質問でも、具体的なdocumentation gapを示す場合や、scopeの明確なadapter提案であればIssueは有用です。
+詳細は [操作状態の照合](docs/operation-reconciliation.ja.md) と [ロードマップ](docs/roadmap.ja.md) を参照してください。既知の制約でも、説明不足の指摘や範囲の明確なアダプター提案は歓迎します。

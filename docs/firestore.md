@@ -4,6 +4,16 @@
 
 `mcp-usage-control-firestore` is a `UsageStore` adapter backed by server-side Firestore transactions.
 
+## Install
+
+Use a Node.js 22+ server. With Firebase Admin:
+
+```sh
+npm install mcp-usage-control mcp-usage-control-firestore firebase-admin
+```
+
+You can use `@google-cloud/firestore` instead of `firebase-admin`. The setup below assumes Firebase Admin is initialized, credentials are configured, and `policy` is defined.
+
 ## Short version
 
 Firestore is a good fit when:

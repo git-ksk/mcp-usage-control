@@ -2,349 +2,164 @@
 
 [English](getting-started.md) | [日本語](getting-started.ja.md)
 
-このguideは1つの問いに答えます。**MCP toolの前に月次credit上限を置きたいとき、quota state machineを自前で作らず安全に実装できるか？**
+ツールに月次クレジットの上限を付け、アプリに合う連携方法と保存先を選びます。まずローカルで動く例を試し、その後で本番利用に必要な条件を確認します。
 
-## 具体的なproduct ruleから始める
+## インストール
 
-例えば次のMCP productを考えます。
+**Node.js 22以上・ESM** を使用してください。CIの対象はNode.js 22と24です。
 
-```text
-Free plan:  月50 credits
-Plus plan: 月500 credits
-search:        1 credit
-report:       10 credits
-```
-
-`report` は必要creditをatomicにreserveできた場合だけ開始したいとします。単純な `remainingを読む -> tool実行 -> usage加算` は同時実行でoverspendできます。`mcp-usage-control` はこれを `reserve -> mark liable -> execute -> settle` にします。
-
-creditが実コストやproduct上の約束を表すなら向いています。単純なrequests-per-minute throttleだけなら一般的なrate limiterの方が適切です。
-
-## libraryが責任を持つ範囲
-
-責任範囲は **tool executionとusage accountingのcorrectness boundary** です。
-
-```text
-request
-  -> policyがunits / budgetsをquote
-  -> Storeがquotaをatomic reserve
-  -> metered work直前にleaseをcost-liable化
-  -> tool実行
-  -> actual usageをsettle
-```
-
-authentication、subscription、checkout、invoice、financial ledgerはapplication側の責任です。
-
-## 公開済みpackageをinstallする
-
-5 packageすべてnpmへ `1.0.0` として公開済みです。通常はcoreに加えて、applicationで必要なintegration adapterとStore backendだけをinstallしてください。reproducibleなsource評価にはvalidated GitHub Release tarballやrepository checkoutも利用できます。詳しくは [Source / local tarballから使う](using-from-source.ja.md) を参照してください。
-
-**Node.js 22以降が必要です。**
-
-## concurrency proofを実行する
-
-repository checkoutから `pnpm example:free-plus` を実行すると、external serviceなしでself-verifying exampleが動きます。Free 50 creditsのうち40を消費したあと、残り10に対して10-credit reportを2件raceさせ、1件だけが開始されることをassertします。advanced APIを読む前にcore safety propertyを確認する最短経路です。
-
-## まず覚える3つ
-
-### Policy — 何を許可するか決める
-
-「このtool callを許可するか」「何unit消費するか」「どの利用枠に計上するか」を決めます。
-
-### Store — 利用状況を保存する
-
-予約中の利用量や確定済みの利用量を保存します。
-
-用途に応じてMemory / Redis / Cloudflare Durable Objects / Firestoreから選べます。
-
-### Lease — 1回の実行に割り当てられた利用枠
-
-`reserve()` に成功するとleaseが返ります。
-
-主に次の操作を行います。
-
-- `markLiable()` — ここから先は実コストが発生した可能性がある、と記録する
-- `renew()` — 長時間処理のために有効期限を延ばす
-- `settle()` — 実際に使った量を確定する
-
-## どのpackageを使えばいい？
-
-| Package | 役割 |
-| --- | --- |
-| `mcp-usage-control` | 本体。Policy、UsageControl、Memory storeを含む |
-| `mcp-usage-control-mcp` | **MCPサーバのtool handlerを包むラッパー**。利用枠の予約から確定までを自動化する |
-| `mcp-usage-control-redis` | Redisを利用状況の保存先にする |
-| `mcp-usage-control-cloudflare` | Cloudflare Durable Objectsを保存先にする |
-| `mcp-usage-control-firestore` | Firestoreを保存先にする |
-
-### package構成を1枚で見る
-
-```text
-mcp-usage-control
-= エンジン本体: reserve / liability / renew / settle
-
-mcp-usage-control-mcp
-= MCP integration: tool handlerへエンジンを取り付ける
-
-mcp-usage-control-{redis,cloudflare,firestore}
-= authoritative stateの保存先
-```
-
-全部入れるのではなく、integration方法で選びます。
-
-```text
-普通のMCP server
--> core + mcp + Storeを1つ
-
-lifecycleを自前で制御
--> core + Storeを1つ
-
-local / test
--> core + MemoryUsageStore
-```
-
-MCP adapterはcoreをMCP handlerへ接続し、Store adapterはcoreのstorage contractを実装します。packageを分けることで、Redisを使わないapplicationへRedis dependencyを、Firestoreを使わないapplicationへFirestore dependencyを持ち込まずに済みます。
-
-### `mcp-usage-control-mcp` は中継サーバではない
-
-ここは誤解しやすいところです。
-
-`mcp-usage-control-mcp` は、MCPクライアントとMCPサーバの間に置くproxyやGatewayではありません。
-
-```text
-MCP Client
-   ↓
-MCP Server
-   ↓
-protectTool()  ← mcp-usage-control-mcp
-   ↓
-元のtool handler
-```
-
-既存のMCPサーバ内でtool handlerを `protectTool()` で包むことで、次の処理を自動化します。
-
-```text
-利用枠を予約
-  ↓
-実コスト発生開始を記録
-  ↓
-必要に応じて有効期限を延長
-  ↓
-元のtool handlerを実行
-  ↓
-成功・失敗に応じて利用量を確定
-```
-
-## 現在のインストール方法
-
-通常のconsumerはnpmからinstallします。Coreのみなら:
-
-```console
+```sh
 npm install mcp-usage-control
 ```
 
-一般的なMCP serverでRedisをStoreとして使う例:
+コアには `MemoryUsageStore` が含まれるため、この例には外部サービスが不要です。リポジトリやリリースアーカイブからの導入は [ソース・ローカルtarballのガイド](using-from-source.ja.md) を参照してください。
 
-```console
-npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
-```
+## まず覚える3つ
 
-deploymentで必要なbackendだけを追加してください。contributor、未release commit、local patch、pre-release dogfoodingではrepository checkoutやexact GitHub Release / local tarballも利用できます。詳しくは [Source / local tarballから使う](using-from-source.ja.md) を参照してください。
+| 概念 | 役割 |
+| --- | --- |
+| **Policy** | 消費量を見積もり、適用する利用枠を選ぶ |
+| **Store** | 関係するすべての利用枠を一括で予約・更新する |
+| **Lease** | 予約を表す。`markLiable()`、`renew()`、`settle()` で状態を管理する |
 
-**Node.js 22以上が必要です。** supported CI / release-safety evidenceはNode.js 22 / 24をcoverします。Node.js 20はEOL済みで、supported / required CI contractには含めません。
+ライブラリは利用量の制御を担当します。信頼できるユーザー情報、プランの権利、実使用量の測定、業務処理の重複実行防止はアプリ側で用意します。課金や認証は別の責務です。
 
 ## 最小構成
 
-まずはMemory storeで動きを確認できます。
+以下を `demo.mjs` に保存し、`node demo.mjs` で実行してください。月50クレジットの利用枠から10を予約し、模擬レポートを実行して3クレジットを確定します。未使用の7クレジットは再び利用できます。
 
-```ts
+```js
 import {
   MemoryUsageStore,
   UsageControl,
-  type UsagePolicy,
+  createWindowedBudgetKey,
 } from 'mcp-usage-control';
 
-const policy: UsagePolicy = {
-  quote(request) {
+const monthly = createWindowedBudgetKey({
+  period: 'calendar-month',
+  timeZone: 'UTC',
+  namespace: 'credits',
+  clock: Date.now,
+});
+
+const control = new UsageControl(new MemoryUsageStore(), {
+  quote({ principal, tool }) {
+    if (tool !== 'report') return { decision: 'deny', reason: 'unsupported_tool' };
     return {
       decision: 'allow',
-      units: 1,
+      units: 10,
       budget: {
-        key: `user:${request.principal.id}:daily:2026-08-12`,
-        limit: 20,
+        key: monthly.key({ scope: 'user', id: principal.id }),
+        limit: 50,
       },
     };
   },
-};
-
-const control = new UsageControl(new MemoryUsageStore(), policy);
-```
-
-この例では「1回のtool callで1 unit消費」「1ユーザーにつき1日20 unitまで」です。
-
-日付の切り替えはruntimeが自動判定しません。日次上限なら、上の例のように日付をbudget keyへ含めます。同じkeyはapplication policyが利用を終了するか安全にretireするまで同じaccounting bucketです。
-
-## 複数の上限を同時に守る
-
-1回のtool callを、複数の利用枠へ同時に計上できます。
-
-たとえば:
-
-- ユーザーの日次上限
-- ユーザーの月次上限
-- テナント全体の月次上限
-
-```ts
-const policy: UsagePolicy = {
-  quote(request) {
-    const tenantId = request.principal.tenantId ?? 'personal';
-
-    return {
-      decision: 'allow',
-      units: 1,
-      budgets: [
-        { key: `day:user:${request.principal.id}:2026-08-12`, limit: 20 },
-        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
-        { key: `month:tenant:${tenantId}:2026-08`, limit: 2_000 },
-      ],
-    };
-  },
-};
-```
-
-3つの利用枠はまとめて判定されます。
-
-**全部予約できる場合だけ成功し、1つでも不足していれば1つも予約しません。**
-
-## Core APIを直接使う
-
-```ts
-const admission = await control.reserve({
-  operationId: 'logical-request-123',
-  principal: { id: 'user-42', tenantId: 'org-7' },
-  tool: 'search',
-  args: { query: 'example' },
 });
 
-if (!admission.allowed) {
-  throw new Error(`usage denied: ${admission.reason}`);
+// この模擬処理を、実際にリソースを消費する処理に置き換えます。
+async function performMeteredWork() {
+  return { text: 'Example report', actualUnits: 3 };
 }
 
-await admission.lease.markLiable();
+async function runReport(operationId) {
+  const admission = await control.reserve({
+    operationId,
+    principal: { id: 'user-42' },
+    tool: 'report',
+    args: {},
+  });
+  if (!admission.allowed) {
+    throw new Error(`usage denied: ${admission.reason}`);
+  }
 
-try {
-  const result = await performMeteredWork();
-  await admission.lease.settle(1, 'success');
-  return result;
-} catch (error) {
-  await admission.lease.settle(
-    admission.lease.reservedUnits,
-    'error',
-  );
-  throw error;
+  await admission.lease.markLiable();
+  let result;
+  try {
+    result = await performMeteredWork();
+  } catch (error) {
+    // 消費量が不明な場合は、予約した全量を保守的に保持します。
+    await admission.lease.settle(admission.lease.reservedUnits, 'error');
+    throw error;
+  }
+
+  // 処理のcatchの外に置き、確定エラーで別の確定処理を再試行しないようにします。
+  await admission.lease.settle(result.actualUnits, 'success');
+  return result.text;
 }
+
+console.log(await runReport('report-001')); // Example report
 ```
+
+これは短時間・単一ユーザーのデモです。アプリでは認証情報からユーザーを特定し、同じ処理の再試行には同じ操作IDを使います。実使用量は判明している値を使い、予約量を超えないようにしてください。
 
 ### `markLiable()` が必要な理由
 
-`reserve()` しただけで、まだ外部APIや有料処理を呼んでいない段階なら、処理が消えたときに予約枠を戻せます。
-
-一方、外部APIを呼び始めたあとにprocessが落ちた場合、本当にコストが発生していないとは言えません。
-
-そこで `markLiable()` を境界として使います。
-
-- `markLiable()` 前に期限切れ → 予約枠を戻せる
-- `markLiable()` 後に期限切れ → 予約した量を保守的に残す
-
-process crashが自動的な無料refundになるのを防ぐための仕組みです。
+コストが発生し得る処理の直前を記録します。**pending** のまま期限切れになった予約は解放できます。**cost-liable** になった後で実使用量が不明な場合は、予約全量を保守的に保持します。有料処理の開始後にワーカーが落ちても、自動的に利用枠を返却しません。
 
 ### `settle()` は実際の消費量を確定する
 
-たとえば最大5 unitを予約したものの、実際には3 unitしか使わなかった場合、`settle(3, 'success')` として差分を戻せます。
+実使用量を確定し、予約との差分を解放します。0で確定できるのは、リソースを消費していないとアプリが判断できる場合だけです。例外が発生したことだけでは、コストが0だとは分かりません。
 
-`0` で確定するのは、「外部APIを呼んでいない」など、実コストが発生していないとapplication側で判断できる場合だけにしてください。
+確定処理の成否が不明になった場合は、直ちに別の確定処理や新規予約を行わず、選択したストアの [状態照合の契約](operation-reconciliation.ja.md) に従ってください。業務処理が成功していても利用量の確定に失敗する場合があり、業務結果の復元はアプリ側が担当します。
+
+Core APIで長時間処理を行う場合は、処理が続く間リースを更新する必要があります。MCPラッパーは標準で更新を行います。詳しくは [MCP連携](mcp-integration.ja.md) を参照してください。
+
+## 集計期間と複数の利用枠
+
+この例は `createWindowedBudgetKey()` でUTCの現在の暦月を選びます。ストアが同じカウンターを自動リセットするわけではありません。キーが変わると別の利用枠になるため、タイムゾーン・名前空間・ユーザー識別方法を変えると、適用される予算も変わり得ます。
+
+暦日・暦月には [集計期間のキー](accounting-window-keys.ja.md)、Free/Plusやツール別の消費量には [サブスク型クレジット](subscription-credits.ja.md) を参照してください。独自の課金周期はアプリ側で定義します。
+
+1回の見積もりで `budget` の代わりに `budgets` を返すと、ユーザーの日次・月次・組織の月次上限などを同時に適用できます。**全部予約できる場合だけ成功し、1つでも不足していれば1つも予約しません。** 各キーは、意図した対象と集計期間に基づいて作ります。
+
+## どのパッケージを使うか
+
+| 連携方法 | インストールするもの |
+| --- | --- |
+| ローカルの例・独自の処理管理 | `mcp-usage-control` |
+| MCP TypeScript SDK v2のツール | コア + `mcp-usage-control-mcp` |
+| 利用量の永続化・共有 | 下記のストアアダプターから1つ追加 |
+
+Redisを使うMCPサーバーの例：
+
+```sh
+npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis @modelcontextprotocol/server@^2.0.0 redis@^6.2.0
+```
+
+`mcp-usage-control-mcp` はサーバー内でハンドラーを包みます。別のゲートウェイを配置するものではありません。[MCP連携ガイド](mcp-integration.ja.md) では `protectTool()`、入力スキーマのないツール、改ざん検証を伴う複数ラウンドの `input_required` を扱います。
 
 ## 本番ではどのStoreを選ぶ？
 
-| Store | 向いている構成 | 注意点 |
+| ストア | 向いている構成 | 主な制約 |
 | --- | --- | --- |
-| Memory | test、ローカル開発、restart lossを許容するcontrolled single-process用途 | restartでstate消失。複数instanceでは共有できない |
-| Redis | 高頻度、共有quota、低latency | HA / persistenceの設計が必要 |
-| Cloudflare Durable Objects | Cloudflare中心 | Durable Objectが更新の集約点になる |
-| Firestore | Firebase / GCP、ユーザー単位quota中心 | 大きな共有budgetでは同じdocumentへの更新競合に注意 |
+| [Memory](memory-store.ja.md) | ローカルテスト・管理された単一プロセス | 再起動で状態が失われ、別プロセスとは共有できない |
+| [Redis](redis.ja.md) | 共有の利用枠・頻繁な更新 | 永続化と可用性の設計が必要 |
+| [Cloudflare Durable Objects](cloudflare.ja.md) | Cloudflare上の構成 | 1つのDurable Objectが1つのトランザクション領域 |
+| [Firestore](firestore.ja.md) | Firebase/GCP・主にユーザー単位の予算 | 共有範囲の大きい予算では更新が競合しやすい |
 
-詳しくは [Redis](redis.ja.md)、[Cloudflare](cloudflare.ja.md)、[Firestore](firestore.ja.md) の各ページを確認してください。
+時計・永続化・障害時の条件は各ガイドに記載しています。Memoryの例が動くだけでは、本番ストアのデプロイを検証したことにはなりません。
 
-## MCP toolへ組み込む
+## 再試行では同じ `operationId` を使う
 
-MCPサーバで `mcp-usage-control-mcp` の `protectTool()` を使うと、既存handlerへusage controlを後付けできます。
+重複予約の判定範囲は、保持期間中の `(tenantId, principal.id, tool, operationId)` です。重複した予約は拒否されますが、業務結果の再返却は行いません。`duplicate_operation` を回避するためだけに新しいIDを発行しないでください。
 
-```ts
-import { protectTool } from 'mcp-usage-control-mcp';
+## 同時実行の検証例を動かす
 
-server.registerTool(
-  'search',
-  { /* schema and metadata */ },
-  protectTool(
-    {
-      control,
-      tool: 'search',
-      principal: ctx => ({ id: ctx.http.authInfo.subject }),
-      operationId: (_args, ctx) => String(ctx.mcpReq.id),
-    },
-    async (args, ctx) => search(args, ctx),
-  ),
-);
+Node.js 22以上と、リポジトリ指定のpnpm 10.15.0を使用します。
+
+```sh
+git clone https://github.com/git-ksk/mcp-usage-control.git
+cd mcp-usage-control
+pnpm install --frozen-lockfile
+pnpm example:free-plus
 ```
 
-`protectTool()` が次を担当します。
-
-- 実行前の利用枠予約
-- handler開始直前の `markLiable()`
-- 実行中のheartbeat / `renew()`
-- 成功・tool error・例外の判定
-- `settle()`
-
-元のtool handlerは、本来の処理に集中できます。
-
-input schemaがないtoolでは `noInput: true` を指定します。
-
-### `input_required` を使うmulti-round tool
-
-ユーザー確認などで一度 `input_required` を返し、別requestで再開するtoolには `protectMultiRoundTool()` を使います。
-
-この場合、roundごとに新しい利用枠を予約するのではなく、**初回に予約した同じleaseを引き継ぎます**。
-
-詳しい設定例は [MCP integration](mcp-integration.ja.md) を参照してください。
-
-## retryでは同じ `operationId` を使う
-
-同じ処理のretryを二重利用として数えないため、同じlogical operationでは同じ `operationId` を使います。
-
-replay protectionの範囲は次です。
-
-```text
-(tenantId, principal.id, tool, operationId)
-```
-
-`operationId` は認証情報ではありません。ユーザーIDやtenant IDは、信頼できるserver-sideの認証情報から取得してください。
-
-## 本番導入前の確認
-
-- Node.js 22以上で実行する
-- principal / tenantをclient入力からそのまま信用しない
-- retryでは同じlogical operationに同じ `operationId` を使う
-- 日次・月次・tenant上限など必要なbudgetを1回のquoteへ含める
-- toolの実行時間に合うTTL / renew設定にする
-- 実コストが発生していないと判断できる場合だけ0 unitでsettleする
-- Store障害時に「判定できないからallow」へfallbackしない
-- 使用するStoreのdurabilityや競合特性を理解する
-- usage controlのStoreを金融帳簿そのものとして扱わない
+[Free/Plusの例](../examples/free-plus-credits/README.md) は、残り10クレジットを2件のレポートのうち1件だけが予約できることと、同じ処理で再予約できないことを検証します。
 
 ## 次に読む
 
-- MCPサーバへ組み込む: [MCP integration](mcp-integration.ja.md)
-- Free / Plusのweighted creditsを組む: [サブスク型MCP creditsの実装パターン](subscription-credits.ja.md)
-- Storeを選ぶ: [Redis](redis.ja.md) / [Cloudflare](cloudflare.ja.md) / [Firestore](firestore.ja.md)
-- 内部設計を理解する: [Architecture](architecture.ja.md)
-- APIを確認する: [API reference](api-reference.ja.md)
-- セキュリティ: [Security policy](../SECURITY.ja.md)
+- ツールに組み込む：[MCP連携](mcp-integration.ja.md)
+- プランを設計する：[サブスク型クレジット](subscription-credits.ja.md)
+- 問題を調べる：[トラブルシューティング](troubleshooting.ja.md)
+- 公開APIを確認する：[APIリファレンス](api-reference.ja.md)
+- 設計を理解する：[アーキテクチャ](architecture.ja.md) / [ストア実装契約](store-contract.ja.md)

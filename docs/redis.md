@@ -1,10 +1,18 @@
-# Redis adapter — current source
+# Redis adapter
 
 [English](redis.md) | [日本語](redis.ja.md)
 
 `mcp-usage-control-redis` is the distributed production-store adapter for `mcp-usage-control`.
 
-> **Current distribution status:** the package is not published to npm yet. Build/install the local core + Redis tarballs as described in [Use from source / local tarballs](using-from-source.md), together with `redis@6.2.0`.
+## Install
+
+Use Node.js 22+. Install from npm:
+
+```sh
+npm install mcp-usage-control mcp-usage-control-redis redis@^6.2.0
+```
+
+For local patches or release archives, use [Source / local tarballs](using-from-source.md).
 
 The current v1-frozen source line is tested with Redis 7 and node-redis 6.2.x. The supported v1 runtime is Node.js 22+.
 

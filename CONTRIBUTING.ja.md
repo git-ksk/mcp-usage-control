@@ -1,135 +1,120 @@
-# Contributing
+# 貢献ガイド
 
 [English](CONTRIBUTING.md) | [日本語](CONTRIBUTING.ja.md)
 
-`mcp-usage-control` へのcontributionありがとうございます。
+`mcp-usage-control` の改善に参加するためのガイドです。
 
-このprojectではquota / accounting behaviorをcorrectness・security上の重要領域として扱います。reservation、liability、expiry、retry、classification、settlementの小さな変更でもoversubscriptionやunder-accountingにつながるため、該当変更には明示的なinvariant testが必要です。
+利用枠の予約・コスト発生・期限切れ・再試行・使用量の確定は、正確性と安全性に関わる領域です。小さな変更でも上限超過や過少計上につながるため、変更する場合は守るべき条件を明示したテストが必要です。
 
-## Development
+## 貢献を始める
 
-必要環境:
+ドキュメントの修正、サンプル、不具合の再現例、焦点を絞ったコード変更を歓迎します。大きな機能追加やストア契約の変更は、先にIssueで用途を説明してください。脆弱性は [セキュリティポリシー](SECURITY.ja.md) に沿って非公開で報告します。
 
-- Node.js 22+
-- pnpm 10
-- Redis integration behaviorを再現する場合はDockerまたはlocal Redis 7
+Node.js 22以上と、`package.json` で指定する **pnpm 10.15.0** を使用します。
 
-```console
-pnpm install
-pnpm check
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+pnpm example:free-plus
 ```
 
-CIではNode.js 20 / 22、実Redis 7、MCP SDK v2 protocol integration behaviorをtestします。
+この例には外部サービスが不要です。実行時の動作を変える場合は `pnpm check` と、影響するストアの統合テストを実行してください。`REDIS_URL` が未設定だと一部のRedis統合テストはスキップされます。その状態で成功しても、Redis連携を検証したことにはなりません。
+
+### Redisを含めて検証する
+
+空いているローカルポートで、検証専用のRedis 7を起動します。
+
+```sh
+docker run --detach --rm --name muc-contrib-redis -p 127.0.0.1:16379:6379 redis:7-alpine
+docker exec muc-contrib-redis redis-cli ping
+```
+
+`PONG` を確認したら実行します。
+
+```sh
+REDIS_URL=redis://127.0.0.1:16379 pnpm check
+docker stop muc-contrib-redis
+```
+
+テスト失敗時も、終了後はコンテナを停止してください。Cloudflare/workerdとFirestore Emulatorには別の統合ワークフローがあります。設定は各ストアのガイドを参照し、本番の利用量データに対してテストしないでください。
 
 ## CI運用ルール
 
-CIは、**安全性を落とさず、ドキュメント変更では重い処理をしない**ことを基本方針にします。
+実際の条件は [ci.yml](.github/workflows/ci.yml) に定義されています。集約チェック名は **`test (22)`** です。Node.js 22だけを実行するジョブではなく、必要な全ジョブの結果を検証します。ワークフローの構造を変える際も名前を維持し、必須チェックの設定変更が必要なら同時に調整してください。
 
-### Required check
+| 変更対象 | 実行する検証 |
+| --- | --- |
+| `docs/**` または任意の階層のMarkdownのみ | `docs-only` がチェックアウトして `git diff --check` を実行し、集約チェックが結果を確認 |
+| 上記以外のパスを含む | Node.js 22/24のビルド・テスト・パッケージ検証、互換性検証、PRでの依存関係レビュー |
+| コア・ストア・関連CIワークフロー | ワークフローの条件に応じたCloudflare/workerd・Firestore Emulator検証 |
+| 比較元を取得・判定できない | 安全側に倒して全検証 |
 
-mainのbranch protectionでは `test (22)` をaggregate release-safety Required checkとして扱います。
+ドキュメントのみの変更では実行時テストとパッケージのインストールを省略します。`docs/` 配下のSVGも `docs/**` に含まれます。`docs/` 外の非Markdownファイルは全検証の対象です。
 
-この2つのcheck名は運用上の契約です。workflow内のjob名やmatrix構成を変更してcheck名が変わる場合は、branch protection側も同じ運用変更として見直してください。check名だけを先に変更しないでください。
+必須ワークフロー全体を `paths-ignore` で停止しないでください。チェックが生成されずマージを妨げる場合があります。ストア別のワークフローも内部で対象を判定し、集約した安全性チェックを返します。起動条件を変える際は実際の定義を確認してください。
 
-Required checkをworkflow全体の `paths-ignore` で止める構成は使いません。workflow自体が起動しないとRequired checkが生成されず、docs-only PRでもmergeできなくなる可能性があるためです。
+## リポジトリの構成
 
-### docs-only PR
+| パス | 役割 |
+| --- | --- |
+| `packages/core` | ストア・MCPに依存しない利用量制御 |
+| `packages/mcp` | MCP SDK v2連携 |
+| `packages/redis` | Redisの利用量・MCPフロー保存 |
+| `packages/cloudflare` | Durable Objectsと認証付きリモートアクセス |
+| `packages/firestore` | サーバー側のFirestoreストア |
+| `examples` | 実行できるサンプル |
+| `docs` | ガイド、契約、リリース検証結果 |
 
-次のどちらかだけを変更したPRはdocs-onlyとして扱います。
+抽象化そのものに必要な場合を除き、ストア・プロトコル・課金固有の処理はコアの外に置きます。
 
-- `docs/**`
-- 任意の階層にあるMarkdown (`*.md`)
+## 設計上のルール
 
-すべての変更pathがこの条件に入る場合、`changes` jobでdocs-onlyと判定し、`test (22)` aggregate jobはbranch protection向けに成功状態まで解決します。ただしdocs-onlyの軽量pathだけを通し、次の重い処理は省略します。
+- コアをMCP SDKや課金・決済サービスから独立させる。
+- 本番ストアでは、利用枠の判定と予約の作成を分離しない。
+- `pending -> cost-liable -> settled` の区別を維持し、実行開始後の停止で自動的に利用枠を返却しない。
+- すべてのエラーを自動返却の理由にせず、確定量に実際の消費を反映する。
+- 消費量を分類するフックは失敗し得る信頼できない拡張点として扱い、保守的な代替処理を維持する。
+- 操作IDを重複判定の入力として扱い、認証情報として扱わない。
+- 実行中の予約を更新可能なリースとして扱い、初回TTLだけを理由に正当な長時間処理の予約を回収しない。
+- 成否不明の書き込みを無条件に再試行しない。
+- ストアのエラーを黙って実行許可へ変換しない。
+- 入力スキーマのないMCPツールは実行時の `{}` から推測せず、`noInput: true` を明示する。SDKの公開コールバック型と実際の呼び出し方の両方をプロトコルテストで確認する。
+- 入力スキーマのあるMCPツールでは、検証済みの `(args, ctx)` を維持する。
+- MCPの `{ isError: true }` を通常の成功として扱わない。
+- 中断・再開時の利用量管理を明示せずに `input_required` 対応を追加しない。
+- Redisの原子性と永続性を区別して説明する。
+- ストア固有の処理をコアへ持ち込むより、小さなアダプターを優先する。
 
-- repository checkout
-- Node / pnpm setup
-- dependency install
-- Redis起動
-- `pnpm check`
-- public packageのpackと内容検査
-- clean consumerへのtarball install
+守るべき条件を変更する前に [アーキテクチャ](docs/architecture.ja.md) を確認してください。
 
-Required check名を残したまま中身だけ軽量化するのが、このrepoのdocs-only運用です。
+## プルリクエスト
 
-### full CIへ切り替える条件
+変更範囲を絞り、問題、影響する安全性の条件、検証した障害・同時実行のケース、API・保存状態・ドキュメントへの影響、移行と互換性を説明してください。
 
-Markdown以外の変更が1つでも含まれる場合はfull CIを実行します。source、workflow、`package.json`、lockfile、configなどはすべてfull CI対象です。
+動作を変える場合は、許可・拒否の両方を検証します。必要に応じて重複・再試行、同時実行、pendingとcost-liableの期限切れ、リース更新と喪失、プロセス停止からの回復、分類処理の失敗、成否不明の応答、MCPプロトコル上の動作も確認してください。
 
-変更差分の基準SHAを取得できない場合や、差分pathを正常に判定できない場合も、安全側に倒してfull CIを実行します。判定不能を理由にtestを省略しません。
+MCPアダプターを変える場合は単体テストを追加し、SDKの動作に関わる箇所では公式SDKの `Client + createMcpHandler` を使った統合テストも追加してください。
 
-`.github/workflows/ci.yml` 自体の変更もMarkdownではないため、必ずfull CIになります。
+## ドキュメント
 
-### Store固有のintegration workflow
+利用者向けの文書は英語・日本語で維持します。動作、設定、公開API、運用上の注意を変更する場合は、可能な限り同じPRで両言語を更新してください。
 
-CloudflareとFirestoreのintegration testは通常CIとは分離し、関係するpathだけで起動します。
+コードの識別子は英語を正とし、パッケージ名、API名、Redisキー、エラークラス名、設定項目名は翻訳しません。
 
-- Cloudflare Integration: `packages/cloudflare/**`、`packages/core/**`、`.github/workflows/cloudflare-integration.yml`
-- Firestore Integration: `packages/firestore/**`、`packages/core/**`、`.github/workflows/firestore-integration.yml`
+入口は [ドキュメント一覧](docs/README.ja.md) です。
 
-Firestoreだけの変更でCloudflare Integrationを動かしたり、その逆をしたりしないのが原則です。一方、`packages/core/**` は両adapterの前提contractなので、core変更時は両integration workflowを意図的に実行します。
+## コミット・PRの注意
 
-新しいStore adapterやintegration workflowを追加する場合も、adapter自身・依存する共有package・そのworkflow自身だけをtrigger対象にするのを基本とします。triggerを広げる場合は、依存関係上必要な理由をPRで説明してください。
+- 認証情報、トークン、Cookie、秘密を含む接続文字列、本番の識別情報をコミットしない。
+- 正確性に関わる変更に、無関係な整形やリファクタリングを混ぜない。
+- 安全性の条件を緩める前にテストを追加する。
+- 隠れた代替動作より、明示的な失敗を優先する。
+- 貢献用ブランチからパッケージを公開しない。
 
-## Repository layout
+## セキュリティの問題を報告する
 
-```text
-packages/core    provider / MCP非依存のusage-control contract
-packages/mcp     @modelcontextprotocol/server v2 integration
-packages/redis   production-oriented Redis UsageStore adapter
-docs             architecture / user guide
-```
+利用上限の回避、二重消費、権限のないアクセス、有料処理後の停止による不正な返却、組織間のアクセス、使用量の不整合につながる脆弱性は、公開Issueに投稿せず [セキュリティポリシー](SECURITY.ja.md) に従ってください。
 
-abstraction自体に必要でない限り、storage、protocol、billing、provider-specific concernを `core` に入れないでください。
+## 行動規範
 
-## Design rules
-
-- `core` はMCP SDKやbilling/payment providerから独立させる。
-- production storeでquota checkとreservation作成を分離しない。
-- `pending -> cost-liable -> settled` の区別を維持する。execution開始後のcrashをsilent refundにしない。
-- すべてのerrorを自動refundしない。settlementは実際に発生したmetered costを反映する。
-- cost-classification hookはfallible / untrusted extension pointとして扱い、conservative fallbackを維持する。
-- operation IDはidempotency inputでありauthentication credentialではない。
-- active reservationはrenewable leaseとして扱い、初回TTLだけで正常な長時間workを回収しない。
-- ambiguous writeをblind retryしない。
-- storage errorを黙ってallowへ変換しない。
-- input schemaがないMCP toolではruntime `{}` から推測せず、明示的な `noInput: true` modeを要求する。SDKのpublic no-input callback typeと実dispatch behaviorの両方をprotocol testでcoverする。
-- input schemaがあるMCP toolではvalidated `(args, ctx)` behaviorを維持する。
-- MCP `{ isError: true }` をnormal successとして扱わない。
-- explicitなmulti-round suspend/resume accounting semanticsなしに `input_required` supportを追加しない。
-- Redis atomicityとdurability claimを分離する。
-- provider-specific behaviorをcoreへ入れるよりsmall adapterを優先する。
-
-safety invariantを変更する前に [Architecture](docs/architecture.ja.md) を確認してください。
-
-## Pull Request
-
-PRはfocusedに保ち、problem、affected invariant、testしたfailure/concurrency case、API/storage/documentation impact、migration/compatibility impactを説明してください。
-
-behavior changeではallow / deny pathをcoverします。必要に応じてduplicate/retry、concurrency、pending vs cost-liable expiry、lease renewal/loss、process-crash recovery、classifier failure、ambiguous ACK、MCP protocol-level behaviorもtestしてください。
-
-MCP adapter behaviorを変更する場合、direct unit testに加えてSDK semanticsが関係する箇所は公式SDK `Client + createMcpHandler` integration testも追加してください。
-
-## Documentation
-
-user-facing documentationは英語・日本語で維持します。behavior、configuration、public API、operational warningを変更した場合は、可能な限り同じPRで両言語を更新してください。
-
-code identifierは英語を正とします。package名、API symbol、Redis key、error class名、configuration field名は翻訳しません。
-
-documentation indexは [docs/README.ja.md](docs/README.ja.md) です。
-
-## Commit / PR hygiene
-
-- credential、token、cookie、secretを含むconnection string、production identifierをcommitしない。
-- correctness-sensitive changeへ無関係なformat/refactorを混ぜない。
-- invariantを緩める前にtestを追加する。
-- hidden fallbackより明示的なfailure behaviorを優先する。
-- contribution branchからpackageをpublishしない。
-
-## Security issueの報告
-
-quota bypass、double spending、unauthorized entitlement access、crash-after-cost refund、cross-tenant access、inconsistent settlementにつながるvulnerabilityはpublic Issueへ投稿せず [SECURITY.ja.md](SECURITY.ja.md) に従ってください。
-
-## Code of Conduct
-
-projectへの参加は [CODE_OF_CONDUCT.ja.md](CODE_OF_CONDUCT.ja.md) に従います。
+プロジェクトへの参加は [行動規範](CODE_OF_CONDUCT.ja.md) に従います。

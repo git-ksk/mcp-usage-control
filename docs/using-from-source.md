@@ -8,7 +8,7 @@
 
 Starting with release-workflow hardening after v0.11.0, source releases attach the five **exact CI-validated package tarballs** plus `SHA256SUMS`, with GitHub artifact attestations generated for the same tarballs. Verify the checksum before installing an attached archive; do not assume a similarly named local rebuild is byte-identical.
 
-These assets are package/source distribution only. They do not authorize or imply a future npm registry publication.
+For normal application installs, use npm. The archives are useful when you need to inspect or install an exact release artifact; a local rebuild is not automatically byte-identical to that artifact.
 
 ## 1. Clone and verify the repository
 
@@ -16,13 +16,16 @@ These assets are package/source distribution only. They do not authorize or impl
 git clone https://github.com/git-ksk/mcp-usage-control.git
 cd mcp-usage-control
 pnpm install --frozen-lockfile
-pnpm check
+pnpm build
+pnpm example:free-plus
 ```
+
+These commands verify the build and service-free example. For validation with Redis, see [Contributing](../CONTRIBUTING.md). Some Redis integration tests are skipped when `REDIS_URL` is unset.
 
 Requirements:
 
 - Node.js 22+
-- pnpm 10.15.x for repository development
+- pnpm 10.15.0 for repository development
 - Redis 7 for Redis adapter tests/usage
 - Wrangler/workerd only when running the dedicated Cloudflare integration path
 
@@ -31,8 +34,8 @@ Requirements:
 From the repository root:
 
 ```console
-rm -rf .packs
 mkdir -p .packs
+pnpm build
 pnpm --dir packages/core pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/mcp pack --pack-destination "$PWD/.packs"
 pnpm --dir packages/redis pack --pack-destination "$PWD/.packs"
@@ -52,7 +55,7 @@ This produces the five package tarballs for the current checkout version, for ex
 .packs/mcp-usage-control-firestore-${version}.tgz
 ```
 
-These tarballs are the reproducible source-build counterpart to the published npm packages. CI builds the same tarballs, rejects source/test-file leakage, installs them into a clean consumer project, and verifies their public ESM imports.
+These tarballs contain the current local build, including any local changes. The release CI also checks package contents and public ESM imports in a clean consumer project; local packing alone does not reproduce all of that validation.
 
 ## 3. Install into another project
 
@@ -179,7 +182,3 @@ pnpm check
 ```
 
 The in-memory store is suitable for tests and local development. Use the Redis adapter, the dedicated Cloudflare workerd integration workflow, or the Firestore Emulator integration workflow for distributed-enforcement verification.
-
-## Published npm baseline
-
-For normal consumers, the primary installation path is now the npm registry at `1.0.0`. This source/tarball workflow remains useful for contributors, unreleased commits, local patches, reproducible GitHub Release artifact checks, and pre-release dogfooding.

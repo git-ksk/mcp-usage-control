@@ -1,31 +1,64 @@
-# Troubleshooting
+# トラブルシューティング
 
-integration自体は動くもののusage behaviorがおかしいときの入口です。
+[English](troubleshooting.md) | [日本語](troubleshooting.ja.md)
 
-## retryが `duplicate_operation` で拒否される
+症状に合う項目から確認してください。調査では元の操作IDとエラーを保持します。IDの変更や利用量の削除は原因を隠し、同じ処理を二重に許可する可能性があります。
 
-同じ `operationId` は同じlogical operationにだけ再利用します。duplicate admissionは意図的に拒否されます。guardを回避するためだけに新しいIDを生成しないでください。state-changing ACKをlostした場合は、blind retryではなく、対応Storeのdocumented reconciliation pathを使います。
+## 症状から探す
 
-## error後に `settle(0)` していい？
+| 症状 | 最初に確認すること | 詳細 |
+| --- | --- | --- |
+| パッケージ・実行環境のエラー | Node.js、ESM設定、導入パッケージと依存関係 | [はじめに](getting-started.ja.md) |
+| `duplicate_operation` | 既存の操作を再試行していないか | [操作状態の照合](operation-reconciliation.ja.md) |
+| `quota_exceeded` | 表示中の予算だけでなく、見積もりに含まれる全予算 | [集計期間のキー](accounting-window-keys.ja.md) |
+| 処理中にリースが切れる | 更新処理、プロセス停止、ストアへの接続 | [MCP連携](mcp-integration.ja.md) |
+| 再起動で利用量が消える | `MemoryUsageStore` を使用していないか | [ストア選択](getting-started.ja.md#本番ではどのstoreを選ぶ) |
+| Firestoreの更新が競合する | 同じ予算ドキュメントを共有するリクエスト数 | [Firestore](firestore.ja.md) |
 
-metered resourceを消費していないとapplicationが証明できる場合だけです。costが発生した可能性があるなら、unknown outcomeをautomatic refundにしません。
+## インストール・実行環境のエラー
 
-## Store障害時にrequestが失敗する
+Node.js 22以上とESMを使用します。ファイルを `.mjs` にするか、アプリの `package.json` に `"type": "module"` を設定してください。コアは `npm install mcp-usage-control` で導入できます。MCPサーバーにはMCPアダプターと対応SDKも必要です。保存先に合うストアアダプターを1つ選び、必要なクライアント依存関係は各ガイドで確認します。
 
-default safety contractです。authoritative Storeのambiguous failureをunmetered allowへ変換しません。Storeを復旧するかproduct boundaryでdenial/errorを扱い、enforcementの外側へgeneric fail-openを追加しないでください。
+リポジトリ開発では `node --version` と `pnpm --version` の両方を確認してください。指定のpnpmは10.15.0です。端末のpnpmが、エディターとは別のNode.jsを使う場合があります。pnpmのエラーに `node:sqlite` が出る場合は、アプリのコードを変える前にNode.jsとpnpmの組み合わせを確認します。
 
-## long-running toolのleaseがexpireする
+ローカルアーカイブは [ソース・ローカルtarballのガイド](using-from-source.ja.md) を参照してください。`mcp-usage-control-cloudflare/worker` はWorkers実行環境用であり、通常のNode.jsでは読み込めません。
 
-metered execution中はleaseをauthoritatively renewする必要があります。supported MCP wrapperの `protectTool()` はheartbeat renewalを行います。Core APIを直接使う場合は、execution durationとStore behaviorに合うrenewal loopが必要です。
+## 再試行が `duplicate_operation` で拒否される
 
-## Firestoreのshared quotaでcontentionする
+再実行防止情報の保持期間中は、意図した動作です。同じ処理には同じ `operationId` を使いますが、重複予約の拒否によって業務結果が再返却されるわけではありません。判定範囲は `(tenantId, principal.id, tool, operationId)` です。
 
-Firestoreは多くのuser-scoped budgetに適しますが、1つのheavily shared budgetはtransaction hotspotになり得ます。[Firestore](firestore.ja.md) のprovider guidanceを確認してください。high-frequency shared quotaはRedisなど別のserialization domainが適する場合があります。
+応答が失われた場合は、対応するストアの [状態照合手順](operation-reconciliation.ja.md) に従います。拒否を回避するためだけに新しいIDを発行しないでください。業務結果の復元と副作用の重複実行防止はアプリ側の責務です。
 
-## Memoryでは動くがproduction restartで消える
+## 残量が表示されているのに `quota_exceeded` になる
 
-`MemoryUsageStore` はprocess-local / restart-volatileです。test、example、restart lossを許容するcontrolled single-process deployment向けです。multi-instanceまたはrestart-durable enforcementではshared production Storeを使います。
+見積もりに含まれるすべての予算を確認します。ユーザーの残量があっても、組織や日次の上限に達している場合があります。どれか1つでも不足すると、予約全体が拒否されます。
 
-## 最初にどのpackageを入れる？
+予約成功時の `remainingByBudget` は、その時点でストアが算出した残量です。将来のリクエストで使える量を保証しません。ローカルのカウンターをプラン上限から引いたり、無関係な予算を1つにまとめたりしないでください。[集計期間のキー](accounting-window-keys.ja.md) が意図したタイムゾーン・対象・期間を選んでいるかも確認します。
 
-MCP TypeScript serverなら、まず `mcp-usage-control` + `mcp-usage-control-mcp` と考えるのが最短です。production Store adapterはdeployment backendを決めてから1つ追加します。npm公開前は [Source / local tarballから使う](using-from-source.ja.md) に従ってください。
+## エラー後に `settle(0)` してよいか
+
+リソースを消費していないとアプリが判断できる場合だけです。タイムアウト、例外、キャンセルの応答、プロセス停止だけではコスト0を証明できません。`markLiable()` 後の不明な使用量は保守的に扱います。
+
+成功時の確定処理は、業務ハンドラーを囲む `catch` の外に置きます。内側に置くと、確定エラーを受けて別の結果で再度確定してしまう場合があります。[導入ガイド](getting-started.ja.md) の例を参照してください。
+
+## ストア障害時にリクエストが失敗する
+
+利用量を判定するストアの障害を、無制限の実行許可には変えません。接続を復旧するか、アプリ側でエラーを扱います。成否不明の書き込みはストア固有の照合手順に従い、無条件に再試行しないでください。
+
+利用量の整合性に影響する可能性がある場合は、保存状態を変える前に [障害対応ガイド](incident-response.ja.md) を参照してください。
+
+## 長時間処理の途中でリースが切れる
+
+`protectTool()` は標準で実行中のリースを更新します。Core APIの直接利用では独自の更新ループが必要です。プロセスの一時停止、接続障害、TTL、更新間隔をストアの契約と照らして確認します。リース喪失後の処理もアプリ・外部サービスに応じて設計してください。コアは外部で発生した副作用を取り消せません。
+
+## ローカルでは動くが、本番の再起動で利用量が消える
+
+`MemoryUsageStore` はプロセス内に状態を保存するため、再起動で失われます。テストや、状態消失を許容する管理された単一プロセス向けです。共有や永続化にはRedis、Cloudflare Durable Objects、Firestoreを使用します。
+
+## Firestoreの共有予算で更新が競合する
+
+同じ予算キーは同じドキュメントに対応します。組織全体・システム全体の共有予算では更新が集中します。[Firestoreガイド](firestore.ja.md) に沿って参加予算数と処理の特性を確認し、保存構成を変える前に実際の負荷を検証してください。
+
+## 解決しない場合
+
+[サポートガイド](../SUPPORT.ja.md) に沿って、最小の再現例、バージョン、ストア、機密情報を除いたエラーを用意してください。脆弱性は公開Issueではなく [セキュリティポリシー](../SECURITY.ja.md) の手順で報告します。
