@@ -1,363 +1,169 @@
+<div align="center">
+
 # mcp-usage-control
 
+**Usage limits for MCP tools. Reserve before you run.**
+
+[![npm](https://img.shields.io/npm/v/mcp-usage-control?color=0f766e)](https://www.npmjs.com/package/mcp-usage-control)
 [![CI](https://github.com/git-ksk/mcp-usage-control/actions/workflows/ci.yml/badge.svg)](https://github.com/git-ksk/mcp-usage-control/actions/workflows/ci.yml)
+[![Node.js 22+](https://img.shields.io/badge/Node.js-22%2B-334155)](packages/core/package.json)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-334155)](LICENSE)
 
-[English](README.md) | [日本語](README.ja.md)
+[English](README.md) · [日本語](README.ja.md)
 
-**Keep MCP usage limits correct when execution, retries, and failures overlap.**
+[Quick start](#quick-start) · [Documentation](docs/README.md) · [Examples](examples/free-plus-credits/README.md) · [Contributing](CONTRIBUTING.md)
 
-Use `mcp-usage-control` when an MCP tool consumes a real limited resource: paid model calls, credits, exports, searches, jobs, or plan quotas. It atomically reserves usage **before** work starts and settles the actual usage afterward, so concurrency, retries, crashes, and lost acknowledgements do not silently overspend the same quota.
+</div>
 
-A typical fit is a product with rules such as:
+![Two 10-credit requests compete for 10 remaining credits. An atomic reservation admits one and denies the other before work starts.](docs/assets/usage-control.svg)
 
-```text
-Free   -> 50 credits / month
-Plus   -> 500 credits / month
-search -> 1 credit
-report -> 10 credits
-```
+Give your MCP tools Free/Plus credits, per-user quotas, and shared tenant budgets. `mcp-usage-control` reserves capacity atomically before work starts, then settles actual usage afterward.
 
-If two requests arrive when only 10 credits remain, the library can prevent both 10-credit jobs from starting. If a worker crashes after paid work may have begun, the reservation is not optimistically refunded. If the same logical operation is retried, replay protection prevents a second independent reservation.
+When two reports compete for the last 10 credits, only one starts. When a worker crashes after paid work may have begun, unknown usage is retained conservatively. Retrying the same logical operation does not create a second independent reservation during replay retention.
 
-### Use it when
+## Why use it?
 
-- MCP tools consume paid or scarce resources;
-- Free/Pro, user, tenant, daily, or monthly limits must remain correct under concurrency;
-- retries, process loss, long-running work, or multi-round MCP flows are realistic production events;
-- quota safety matters more than failing open during ambiguous backend failures.
-
-### Do not use it when
-
-- you only need a simple requests-per-minute rate limit;
-- you need billing, invoicing, checkout, subscription management, or a financial ledger;
-- approximate / eventually consistent global quotas are acceptable and strict reservation semantics are unnecessary.
-
-> Want to evaluate it quickly? Start with **[Getting started](docs/getting-started.md)**. For the design boundary, read **[Project positioning](docs/positioning.md)**.
-
-## Try the safety property yourself
-
-Run `pnpm example:free-plus` to execute a self-verifying Free 50 / Plus 500 monthly-credit example. It deliberately races two 10-credit reports for the final 10 Free credits and fails unless exactly one is admitted. See [Runnable Free / Plus credits example](examples/free-plus-credits/README.md).
-
-## Current distribution status
-
-**All five packages are published to npm at `1.0.0`.** `v1.0.0` is also the current stable GitHub/source release baseline. Install only the integration layer and Store backend you need; GitHub Release tarballs remain available as reproducible source-release artifacts. See **[Use from source / local tarballs](docs/using-from-source.md)** for non-registry workflows.
-
-Requirements: **Node.js 22+**, ESM. CI covers Node.js 22/24, Redis 7, the MCP TypeScript SDK v2 path, Cloudflare local/workerd integration, Firestore Emulator integration, package tarballs, and clean-consumer imports.
-
-## Core lifecycle
-
-```text
-principal -> policy -> quote -> atomic reserve -> mark liable -> execute -> settle
-                                      ^                           |
-                                      |---------- renew ----------|
-```
-
-A reservation begins `pending`. Immediately before work may incur metered cost, it becomes `cost-liable`.
-
-- expired **pending** reservation: capacity can be released;
-- expired **cost-liable** reservation: full reserved usage is retained conservatively when actual usage is unknown.
-
-A process crash after execution may have started therefore cannot become an automatic refund.
-
-## Why this is not a normal rate limiter
-
-If one unit remains and two requests both perform:
-
-```text
-check remaining -> execute paid work -> increment counter
-```
-
-both can observe the same remaining unit and both begin work.
-
-This project instead makes admission and reservation one authoritative store transition. For multi-budget policies, **all budgets reserve or none do**.
-
-## Packages
-
-| Package | Purpose |
+| Your product needs | What you get |
 | --- | --- |
-| `mcp-usage-control` | Core policy/store contract, leases, settlement, observability, Memory reference store, Store conformance runner |
-| `mcp-usage-control-mcp` | MCP TypeScript SDK v2 tool wrappers, multi-round accounting, flow-store conformance runner |
-| `mcp-usage-control-redis` | Redis `UsageStore` plus shared Redis MCP flow store |
-| `mcp-usage-control-cloudflare` | Cloudflare Durable Objects + SQLite store, local and authenticated remote paths |
-| `mcp-usage-control-firestore` | Server-side Firestore transactional store |
+| Free/Plus plans and metered tools | Application-defined credit costs and budget limits |
+| User, tenant, daily, and monthly limits | Reserve across all participating budgets, or none |
+| Concurrent requests and retries | Atomic admission and scoped operation replay protection |
+| Long-running or interrupted work | Renewable leases and conservative crash recovery |
+| Your existing infrastructure | Memory, Redis, Cloudflare Durable Objects, or Firestore |
 
-Think of the packages as three layers:
+The core is independent of MCP and can also serve custom integrations. Authentication, subscription billing, invoicing, and business-side-effect replay belong to your application. For requests-per-minute throttling alone, a simple rate limiter is usually enough.
 
-```text
-mcp-usage-control
-= the usage-control engine
+## Quick start
 
-mcp-usage-control-mcp
-= the MCP integration kit around that engine
+**Node.js 22+ · ESM**
 
-redis / cloudflare / firestore
-= interchangeable authoritative state backends
+```sh
+npm install mcp-usage-control
 ```
 
-Typical combinations:
+Save this as `demo.mjs` and run `node demo.mjs`. No database or API key needed.
 
-| You are building | Start with |
-| --- | --- |
-| A normal MCP TypeScript server | core + MCP adapter + one production Store |
-| A custom integration that owns the lifecycle directly | core + one production Store |
-| A local test or short-lived single-process prototype | core only with `MemoryUsageStore` |
+```js
+import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
 
-You do **not** install all five packages for a normal application. Pick the integration layer you need and one Store backend that matches the deployment.
-
-All five package manifests are aligned at `1.0.0`, and all five packages are published on npm. **v1.0.0 is the current stable GitHub/source and npm baseline.**
-
-
-## v1 status
-
-`v1.0.0` is the feature-free stable promotion of the frozen accounting lifecycle and Store contract hardened through v0.13. No new accounting model, Store contract, or billing authority was introduced by the stable promotion.
-
-Core lifecycle, Redis / Cloudflare / Firestore Stores, single-round `protectTool()`, and current multi-round accounting are covered by the v1 stable evidence. First-class MCP Tasks runtime support remains dependent on upstream stabilization. Billing, financial-ledger, gateway, and workflow-replay responsibilities remain out of scope.
-
-For the detailed release boundary and evidence, see **[v1.0 readiness review](docs/v1-readiness.md)** and **[Roadmap](docs/roadmap.md)**.
-
-## Multi-budget admission
-
-One invocation may consume the same quoted units from several budgets atomically:
-
-```ts
-import { MemoryUsageStore, UsageControl, type UsagePolicy } from 'mcp-usage-control';
-
-const policy: UsagePolicy = {
-  quote(request) {
-    const tenant = request.principal.tenantId ?? 'personal';
-    return {
-      decision: 'allow',
-      units: request.tool === 'full_export' ? 5 : 1,
-      budgets: [
-        { key: `day:user:${request.principal.id}:2026-08-13`, limit: 20 },
-        { key: `month:user:${request.principal.id}:2026-08`, limit: 100 },
-        { key: `month:tenant:${tenant}:2026-08`, limit: 2_000 },
-      ],
-    };
-  },
-};
-
-const control = new UsageControl(new MemoryUsageStore(), policy);
-```
-
-If one participating budget cannot admit the units, no participating budget is partially reserved.
-
-## Logical-operation replay scope
-
-Replay protection is scoped by:
-
-```text
-(tenantId, principal.id, tool, operationId)
-```
-
-Use the same stable `operationId` when retrying one logical invocation. `operationId` is an idempotency input, **not** authentication or authorization proof.
-
-## Direct core example
-
-```ts
-const admission = await control.reserve({
-  operationId: 'logical-request-123',
-  principal: { id: 'user-42', tenantId: 'org-7' },
-  tool: 'search',
-  args: { query: 'example' },
+const control = new UsageControl(new MemoryUsageStore(), {
+  quote: ({ principal }) => ({
+    decision: 'allow',
+    units: 10,
+    budget: { key: `demo:${principal.id}`, limit: 10 },
+  }),
 });
 
-if (!admission.allowed) {
-  throw new Error(`usage denied: ${admission.reason}`);
-}
-
-await admission.lease.markLiable();
-
-try {
-  const result = await performMeteredWork();
-  await admission.lease.settle(1, 'success');
-  return result;
-} catch (error) {
-  await admission.lease.settle(admission.lease.reservedUnits, 'error');
-  throw error;
-}
-```
-
-Long-running direct-core work must renew the lease while authoritative execution remains active.
-
-Successful admission also exposes authoritative `remainingByBudget`; do not recompute remaining capacity from configured limits in another layer.
-
-Budget window and lifetime semantics are application-owned. The same `budget.key` names the same accounting bucket; changing the key creates a different bucket. Core and Store implementations do not infer daily/monthly reset boundaries or automatically reset a non-zero budget.
-
-`MemoryUsageStore.stats()` reports retained accounting/replay state, not consumed quota. In particular, `retainedOperations` includes active reservations and settled replay tombstones and must not be interpreted as `consumedUnits`.
-
-### Long-running Memory store use
-
-`MemoryUsageStore` is process-local, but controlled single-process deployments can bound retained operation/tombstone and non-zero budget-key state. Capacity exhaustion fails closed rather than evicting authoritative accounting state. `stats()` exposes retention counters, and completed time-window budget keys can be removed explicitly with `retireBudgetKey()` once the application knows that accounting window is permanently over.
-
-See [Memory store operations](docs/memory-store.md) before keeping the in-memory store alive for long periods. Horizontal or restart-durable deployments should use a shared provider-backed Store.
-
-## MCP TypeScript SDK v2
-
-### Single-round tools
-
-```ts
-import { protectTool } from 'mcp-usage-control-mcp';
-
-server.registerTool(
-  'search',
-  { /* schema and metadata */ },
-  protectTool(
-    {
-      control,
-      tool: 'search',
-      principal: ctx => ({ id: ctx.http.authInfo.subject }),
-      operationId: (_args, ctx) => String(ctx.mcpReq.id),
-    },
-    async (args, ctx) => search(args, ctx),
-  ),
+const results = await Promise.all(
+  ['report-a', 'report-b'].map(operationId => control.reserve({
+    operationId,
+    principal: { id: 'user-42' },
+    tool: 'report',
+    args: {},
+  })),
 );
+
+console.log(results.map(result => result.allowed)); // [true, false]
+
+for (const result of results) {
+  if (result.allowed) {
+    // No paid work ran in this demo: release the reservation.
+    await result.lease.settle(0, 'success');
+  }
+}
 ```
 
-`protectTool()` reserves before execution, marks liability immediately before handler entry, renews active leases by default, distinguishes normal success / MCP `{ isError: true }` / thrown exceptions, settles classifier failure conservatively, and does not blindly retry ambiguous settlement failures.
+This demonstrates admission only. For metered work, call `markLiable()` immediately before execution and settle actual usage afterward. Long-running custom integrations must renew active leases; the MCP wrapper handles renewal by default.
 
-### Multi-round `input_required`
+`MemoryUsageStore` is process-local and loses state on restart. Use a shared provider-backed store for durable or multi-instance enforcement. Budget windows are application-defined; a new window needs its own budget key.
 
-Use `protectMultiRoundTool()` for logical operations that continue across fresh MCP requests.
+**Next:** [Build your first integration](docs/getting-started.md) or [wrap an MCP tool with `protectTool()`](docs/mcp-integration.md).
 
-The wrapper:
+### Run the Free / Plus example
 
-- reserves once on the first round;
-- stores the resumable lease server-side;
-- requires integrity-verified request state;
-- binds resume to trusted principal / optional tenant / tool / original args hash;
-- atomically consumes a matching resume flow once;
-- resumes the existing lease rather than reserving again;
-- fails closed on replay, mismatch, expiry, corruption, or ambiguous consume failure.
+A self-verifying example races two reports for the last 10 Free credits, then checks duplicate-operation protection:
 
-`MemoryMcpUsageFlowStore` is for tests/single-process servers. Horizontal scale needs a shared/durable flow store such as `RedisMcpUsageFlowStore`.
-
-**Sticky MCP sessions are not required for accounting.** Fresh requests may hit different server instances when `UsageStore` and flow state are shared where required.
-
-Business side-effect idempotency/result replay remains application-owned. A consumed usage-flow token is not permission to blindly replay a destructive operation.
-
-See [MCP integration](docs/mcp-integration.md) and [MCP protocol conformance](docs/mcp-conformance.md).
-
-## MCP Tasks accounting
-
-Long-running Tasks use a separate protocol/business state machine, but the accounting rules are already defined:
-
-- one reservation per logical operation, independent of task ID;
-- `working` does not automatically mean cost-liable;
-- mark liability immediately before metered work;
-- renew server-side while authoritative work remains active or intentionally waits for input;
-- a `tasks/cancel` acknowledgement does **not** prove zero cost or authorize a refund;
-- pre-liability cancellation may settle zero when proved;
-- liable crash/unknown usage remains conservative;
-- business task creation/result replay stays outside `UsageStore`.
-
-The upstream Tasks TypeScript integration surface is still experimental, so this project does **not** currently claim a stable first-class Tasks adapter. See [MCP Tasks accounting](docs/mcp-tasks-accounting.md).
-
-## Production Stores
-
-### Redis
-
-```ts
-import { createClient } from 'redis';
-import { RedisUsageStore } from 'mcp-usage-control-redis';
-
-const redis = createClient({ url: process.env.REDIS_URL });
-await redis.connect();
-const store = new RedisUsageStore(redis);
+```sh
+git clone https://github.com/git-ksk/mcp-usage-control.git
+cd mcp-usage-control
+pnpm install --frozen-lockfile
+pnpm example:free-plus
 ```
 
-Redis uses Lua for atomic transitions and Redis server `TIME` for lease/tombstone decisions. Redis atomicity is **not** financial-ledger durability; configure persistence/HA to match your enforcement risk tolerance.
+Requires pnpm 10.15.0, as pinned in the repository.
 
-### Cloudflare Durable Objects
-
-The Cloudflare adapter uses a Durable Object + SQLite transaction domain. Remote applications use an explicitly authenticated HTTPS gateway. Network/timeout ambiguity is surfaced, not blindly retried.
-
-Real deployed dogfood has validated the main accounting path and a zero-downtime credential rotation, including overlap acceptance, real caller cutover, and rejection of the rotated-out credential. The Durable Object/accounting identity remained unchanged. A genuine Workers Free-plan exhaustion/platform-overload event has not been observed naturally, so do not interpret the adapter as proven under every Cloudflare platform-limit condition.
-
-The optional `mcp-usage-control-cloudflare/auth` helper supports a current and previous Bearer token to make controlled credential rotation possible without weakening the application-defined authorization boundary.
-
-### Firestore
-
-The Firestore adapter is server-side only and uses Firestore transactions for admission, settlement, and expiry recovery. Its supported recovery profile assumes bounded/synchronized host clocks with `expiryGraceMs` sized to cover maximum expected positive clock lead plus margin; strongly shared budget documents can become contention hotspots.
-
-See [Redis](docs/redis.md), [Cloudflare](docs/cloudflare.md), and [Firestore](docs/firestore.md) before production deployment.
-
-## Third-party Store compatibility
-
-Implementing the `UsageStore` methods is not enough to call a Store safe.
-
-Use the normative **[Store implementation contract](docs/store-contract.md)** and the reusable runners:
-
-```ts
-import { assertUsageStoreConformance } from 'mcp-usage-control/conformance';
-import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
+```text
+PASS: Free plan stopped concurrent overspend at 50/50 credits.
+PASS: duplicate logical operation was rejected instead of charging another 10 credits.
+The same policy can quote Plus users at 500 credits/month.
 ```
 
-Portable conformance proves behavioral state-machine compatibility. Persistence, failover, authoritative time, and lost-ACK behavior still require backend-specific evidence.
+[Explore the example →](examples/free-plus-credits/README.md)
 
-## Observability
+## How it works
 
-`UsageObserver` receives structured lifecycle events outside the enforcement transaction. Observer failure cannot turn denial/error into allow or alter settlement.
+```mermaid
+flowchart LR
+    A[Policy quotes usage] --> B[Atomically reserve]
+    B --> C[Mark cost-liable]
+    C --> D[Execute tool]
+    D --> E[Settle actual usage]
+```
 
-Tool arguments and raw exception messages are not captured automatically. Unique principal/operation/reservation/budget IDs should not be promoted to metric labels. `projectUsageEvent()` provides a low-cardinality projection for operational logging.
+A reservation starts **pending**. Immediately before work may incur cost, it becomes **cost-liable**. Expired pending reservations can release capacity; expired cost-liable reservations retain the full reserved amount when actual usage is unknown.
 
-v0.10 adds explicit provider-neutral operational helpers under `mcp-usage-control/operational`, canonical settlement vocabulary/diagnostics under `mcp-usage-control/settlement-outcomes`, and pure scoped threshold helpers under `mcp-usage-control/thresholds`. These remain non-authoritative and do not create a second accounting ledger.
+- **All-or-nothing budgets:** one exhausted budget prevents the entire reservation.
+- **Stable retry identity:** reuse `operationId` for the same logical operation. Replay scope is `(tenantId, principal.id, tool, operationId)`; identity must come from trusted authentication context.
+- **Conservative failures:** storage errors do not become allow decisions, and ambiguous writes are not blindly retried.
+- **Multi-round MCP:** `protectMultiRoundTool()` resumes the existing lease using integrity-verified, one-time flow state.
 
-Observability is not a durable billing ledger.
+See the [architecture](docs/architecture.md) and [Store contract](docs/store-contract.md) for the full accounting rules. Usage enforcement is not a financial ledger or a guarantee of exactly-once business execution.
 
-See [Observability](docs/observability.md) and [Operational usability](docs/operational-usability.md).
+## Choose your packages
 
-## Safety invariants
+Install **core + the integration you need + one store**. Start with core alone for the local demo.
 
-1. Admission comparison and reservation are one authoritative Store operation.
-2. Every participating budget reserves atomically or none does.
-3. Replay identity is `(tenantId, principal.id, tool, operationId)`.
-4. Metered execution is preceded by `markLiable()`.
-5. Pending expiry may release capacity; liable expiry conservatively retains the reservation.
-6. Active long-running leases are renewable.
-7. `actualUnits` cannot exceed `reservedUnits` in the scalar model.
-8. Identical settlement replay is idempotent during retention; conflicting settlement fails.
-9. Storage failures do not become allow decisions.
-10. Ambiguous state-changing outcomes are not blindly retried.
-11. MCP multi-round resume is integrity-verified, binding-aware, and one-time.
-12. Resume does not create a second usage reservation.
-13. Client liveness/cancellation ACK alone never proves a refund is safe.
-14. Observability cannot change enforcement state.
-15. Business-operation replay is separate from usage accounting.
+| Package | Role | Guide |
+| --- | --- | --- |
+| [`mcp-usage-control`](https://www.npmjs.com/package/mcp-usage-control) | Core engine, policies, leases, Memory store | [API](docs/api-reference.md) |
+| [`mcp-usage-control-mcp`](https://www.npmjs.com/package/mcp-usage-control-mcp) | MCP TypeScript SDK v2 tool wrappers | [MCP integration](docs/mcp-integration.md) |
+| [`mcp-usage-control-redis`](https://www.npmjs.com/package/mcp-usage-control-redis) | Shared Redis store and MCP flow store | [Redis](docs/redis.md) |
+| [`mcp-usage-control-cloudflare`](https://www.npmjs.com/package/mcp-usage-control-cloudflare) | Durable Objects + SQLite | [Cloudflare](docs/cloudflare.md) |
+| [`mcp-usage-control-firestore`](https://www.npmjs.com/package/mcp-usage-control-firestore) | Server-side Firestore transactions | [Firestore](docs/firestore.md) |
 
-## Documentation
+For example, an MCP server backed by Redis:
 
-- [Getting started](docs/getting-started.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Use from source / local tarballs](docs/using-from-source.md)
-- [MCP integration](docs/mcp-integration.md)
-- [Subscription-style MCP credits](docs/subscription-credits.md)
-- [MCP protocol conformance](docs/mcp-conformance.md)
-- [Cross-capability safety regression matrix](docs/safety-regression-matrix.md)
-- [MCP Tasks accounting](docs/mcp-tasks-accounting.md)
-- [Architecture](docs/architecture.md)
-- [Memory store operations](docs/memory-store.md)
-- [Store implementation contract](docs/store-contract.md)
-- [Operation reconciliation/status](docs/operation-reconciliation.md)
-- [Redis](docs/redis.md)
-- [Cloudflare](docs/cloudflare.md)
-- [Firestore](docs/firestore.md)
-- [Observability](docs/observability.md)
-- [Operational usability](docs/operational-usability.md)
-- [API reference](docs/api-reference.md)
-- [Project positioning](docs/positioning.md)
-- [Roadmap](docs/roadmap.md)
-- [v1.0 readiness review](docs/v1-readiness.md)
-- [Release policy](docs/releasing.md)
+```sh
+npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
+```
 
-Project policies: [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Support](SUPPORT.md) · [Code of Conduct](CODE_OF_CONDUCT.md)
+Provider guides cover persistence, deployment, clock, and contention requirements. For repository or release-tarball installs, see [Use from source](docs/using-from-source.md).
 
-## Release boundary
+## Explore the docs
 
-`v1.0.0` is the current stable released source baseline. The v1-blocker closure tranche remains complete and the stable promotion introduced no new accounting model. Issue #6 remains a separate explicitly authorized npm-publication gate.
+| I want to… | Start here |
+| --- | --- |
+| Add usage limits to a tool | [Getting started](docs/getting-started.md) · [MCP integration](docs/mcp-integration.md) |
+| Implement Free/Plus monthly credits | [Subscription credits](docs/subscription-credits.md) · [Window keys](docs/accounting-window-keys.md) |
+| Meter growing or mixed-unit workloads | [Progressive usage](docs/progressive-mcp-integration.md) · [Usage vectors](docs/vector-usage.md) |
+| Diagnose usage and failures | [Troubleshooting](docs/troubleshooting.md) · [Observability](docs/observability.md) · [Reconciliation](docs/operation-reconciliation.md) |
+| Build a storage adapter | [Store contract and conformance](docs/store-contract.md) |
+| Review support and release evidence | [v1 readiness](docs/v1-readiness.md) · [Changelog](CHANGELOG.md) · [Roadmap](docs/roadmap.md) |
 
-**npm publication remains a separate explicitly authorized operation and has not been completed.**
+[Browse all documentation →](docs/README.md)
 
-## License
+## Project status
 
-Apache-2.0
+The five packages use the **v1.0.0 stable baseline**. CI covers Node.js 22/24, Redis, MCP SDK v2 integration, Cloudflare local/workerd, Firestore Emulator, and package-consumer checks. See [release evidence](docs/v1-readiness.md) for the scope of validation.
+
+Single-round and multi-round MCP accounting are supported. A stable first-class MCP Tasks adapter remains deferred; see [Tasks accounting](docs/mcp-tasks-accounting.md) for the defined lifecycle boundary.
+
+## Contribute and get help
+
+Bug reports, documentation improvements, examples, and focused pull requests are welcome. Start with the [contributing guide](CONTRIBUTING.md) for local setup and verification.
+
+- **Bug or feature idea:** [Open an issue](https://github.com/git-ksk/mcp-usage-control/issues/new/choose).
+- **Usage and support:** read the [support guide](SUPPORT.md).
+- **Security vulnerability:** follow the private reporting process in [SECURITY.md](SECURITY.md).
+
+Participation follows our [Code of Conduct](CODE_OF_CONDUCT.md). Licensed under [Apache-2.0](LICENSE).

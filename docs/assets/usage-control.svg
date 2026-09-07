@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="340" viewBox="0 0 960 340" role="img" aria-labelledby="title desc">
+  <title id="title">Reserve before you run</title>
+  <desc id="desc">Two reports each need 10 credits. With 10 credits remaining, an atomic reservation allows one report and denies the other before execution.</desc>
+  <rect width="960" height="340" rx="20" fill="#0f172a"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <text x="40" y="43" fill="#5eead4" font-size="12" font-weight="700" letter-spacing="2">MCP USAGE CONTROL</text>
+    <text x="40" y="83" fill="#f8fafc" font-size="30" font-weight="700">One budget. Every request accounted for.</text>
+    <text x="40" y="112" fill="#cbd5e1" font-size="15">10 credits left. Two reports arrive together. Only one starts.</text>
+    <g fill="none" stroke="#64748b" stroke-width="2">
+      <path d="M270 190H325V222H365"/><path d="M270 264H325V222"/>
+      <path d="M595 222H637V190H690"/><path d="M637 222V264H690"/>
+    </g>
+    <g fill="#1e293b" stroke="#475569">
+      <rect x="40" y="160" width="230" height="60" rx="10"/>
+      <rect x="40" y="234" width="230" height="60" rx="10"/>
+    </g>
+    <g fill="#f1f5f9" font-size="16" font-weight="600">
+      <text x="60" y="196">Report A <tspan fill="#94a3b8" font-weight="400">/ 10 credits</tspan></text>
+      <text x="60" y="270">Report B <tspan fill="#94a3b8" font-weight="400">/ 10 credits</tspan></text>
+    </g>
+    <rect x="365" y="174" width="230" height="96" rx="12" fill="#134e4a" stroke="#2dd4bf"/>
+    <text x="480" y="213" text-anchor="middle" fill="#f0fdfa" font-size="19" font-weight="700">Atomic reservation</text>
+    <text x="480" y="242" text-anchor="middle" fill="#99f6e4" font-size="14">Reserve first. Execute second.</text>
+    <rect x="690" y="160" width="230" height="60" rx="10" fill="#134e4a"/>
+    <rect x="690" y="234" width="230" height="60" rx="10" fill="#1e293b" stroke="#64748b"/>
+    <text x="710" y="196" fill="#99f6e4" font-size="17" font-weight="600">Allowed → execute</text>
+    <text x="710" y="270" fill="#cbd5e1" font-size="17" font-weight="600">Denied → no work</text>
+  </g>
+</svg>

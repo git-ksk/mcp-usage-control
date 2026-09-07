@@ -4,6 +4,9 @@
 
 User-facing documentation for `mcp-usage-control`.
 
+
+> **Try it first:** the [README quick start](../README.md#quick-start) needs no database. The [Free / Plus example](../examples/free-plus-credits/README.md) checks concurrent admission and duplicate-operation protection.
+
 ## Start here
 
 If this is your first visit, read these in order:
