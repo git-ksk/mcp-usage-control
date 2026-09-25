@@ -6,7 +6,9 @@
 
 ## [Unreleased]
 
-現在entryはありません。
+### Added
+
+- optionalな `mcp-usage-control-cloudflare/exact-retry` を追加し、retry可能なtransport failure後にscalar `markLiable()` / `renew()` / `settle()` のexact replayだけをboundedに実行できるようにしました。initial reserve、growth、vector transitionはsingle-attemptのままです (#232)。
 
 ## [1.0.0] - 2026-09-04
 
