@@ -28,6 +28,11 @@
       "import": "./dist/reconciliation.js",
       "default": "./dist/reconciliation.js"
     },
+    "./exact-retry": {
+      "types": "./dist/exact-retry.d.ts",
+      "import": "./dist/exact-retry.js",
+      "default": "./dist/exact-retry.js"
+    },
     "./maintenance": {
       "types": "./dist/maintenance.d.ts",
       "import": "./dist/maintenance.js",
@@ -59,6 +64,10 @@
     "dist/reconciliation.js.map",
     "dist/reconciliation.d.ts",
     "dist/reconciliation.d.ts.map",
+    "dist/exact-retry.js",
+    "dist/exact-retry.js.map",
+    "dist/exact-retry.d.ts",
+    "dist/exact-retry.d.ts.map",
     "dist/reconciliation-protocol.js",
     "dist/reconciliation-protocol.js.map",
     "dist/reconciliation-protocol.d.ts",

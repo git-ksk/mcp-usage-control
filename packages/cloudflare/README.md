@@ -40,6 +40,8 @@ For zero-downtime rotation, first copy the current token into the previous-token
 
 For applications that need to recover an ambiguous `reserve()` after a timeout/network failure, the optional `mcp-usage-control-cloudflare/reconciliation` subpath provides an authenticated read-only lookup. Use `createReconciliableCloudflareUsageStoreGateway()` and the v0.8 `reconcileRemoteCloudflareOperation()` entry point explicitly; `reconcileRemoteCloudflareReserve()` remains as a v0.7-compatible alias. Do not hide ambiguous reserve results behind generic retry middleware.
 
+For scalar post-reserve transitions only, `mcp-usage-control-cloudflare/exact-retry` provides an explicit bounded wrapper that may exact-replay `markLiable()`, `renew()`, or `settle()` after timeout/network/408/429/5xx transport failures. Initial reserve, growth, vector reserve, and vector settlement remain single-attempt.
+
 Historical window cleanup is also explicit. The optional `mcp-usage-control-cloudflare/maintenance` subpath exposes a separate authenticated endpoint that prunes only application-selected historical budget keys in bounded batches. Protected/current keys and budgets referenced by active reservations are not deleted.
 
 ### Cost behavior
@@ -49,6 +51,7 @@ The adapter does not schedule alarms or intentionally keep a Durable Object acti
 - [Cloudflare adapter guide](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare.md)
 - [Deployed E2E / credential rotation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-deployed-e2e.md)
 - [Reserve ACK reconciliation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-reserve-reconciliation.md)
+- [Exact post-reserve retry](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-exact-retry.md)
 - [Historical budget pruning](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-budget-pruning.md)
 - [SQLite schema migrations](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-schema-migrations.md)
 - [Observability](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/observability.md)
@@ -91,6 +94,8 @@ const authorize = createCloudflareBearerTokenAuthorizer({
 
 `reserve()` のtimeout / network failure後にambiguous resultを復元する必要があるapplication向けに、optionalな `mcp-usage-control-cloudflare/reconciliation` subpathがauthenticated read-only lookupを提供します。`createReconciliableCloudflareUsageStoreGateway()` とv0.8の `reconcileRemoteCloudflareOperation()` を明示的に利用してください。`reconcileRemoteCloudflareReserve()` はv0.7互換aliasとして維持します。ambiguous reserveをgeneric retry middlewareで隠さないでください。
 
+scalar post-reserve transitionに限り、`mcp-usage-control-cloudflare/exact-retry` はtimeout / network / 408 / 429 / 5xx transport failure後に `markLiable()` / `renew()` / `settle()` のexact replayだけをboundedに行うexplicit wrapperを提供します。initial reserve、growth、vector reserve、vector settlementはsingle-attemptのままです。
+
 historical window cleanupも明示操作です。optionalな `mcp-usage-control-cloudflare/maintenance` subpathは、applicationがhistoricalとして選択したbudget keyだけをbounded batchでpruneする別authenticated endpointを提供します。protected/current keyとactive reservationが参照中のbudgetは削除しません。
 
 ### Cost behavior
@@ -100,6 +105,7 @@ adapterはalarmをscheduleせず、Durable Objectを意図的に常駐させま�
 - [Cloudflare adapter guide](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare.ja.md)
 - [実環境E2E / credential rotation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-deployed-e2e.ja.md)
 - [Reserve ACK reconciliation](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-reserve-reconciliation.ja.md)
+- [Exact post-reserve retry](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-exact-retry.ja.md)
 - [Historical budget pruning](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-budget-pruning.ja.md)
 - [SQLite schema migration](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/cloudflare-schema-migrations.ja.md)
 - [Observability](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/observability.ja.md)

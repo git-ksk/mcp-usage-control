@@ -26,6 +26,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
  -> v0.13 v1-blocker closure [RELEASED]
  -> v1.0 feature-free stable promotion [RELEASED]
+ -> v1.1 post-v1 integration ergonomics [IN PROGRESS]
 ```
 
 ## 今後も崩さないsafety boundary
@@ -55,6 +56,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.11.0** | pre-v1 accounting/runtime/storage/API freeze、aggregate release-safety gate、real Cloudflare rotation evidence | Release済み / Complete |
 | **v0.12.0** | product/operations hardening: release provenance/artifact、supply-chain maintenance、incident runbook、競合判断、quota-window projection、provider benchmark | Release済み / Complete |
 | **v0.13.0** | final v1-blocker closure: authoritative clock、renew uncertainty、安全なhistorical cleanup、vector reconciliation、bounded input、shipped docs、Node/peer CI | Release済み / Complete |
+| **v1.1.0** | additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232)、MCP read-only operationId design / ergonomics (#233) | In progress |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -139,7 +141,7 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0.13 final blocker-closure** tranche (#191〜#198) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。v0.13.0でstable promotionに必要なfinal correctness / operations / distribution / runtime / peer-compatibility evidenceが揃っています。
 
-**v1.0.0はrelease済みのfeature-free stable-promotion milestoneであり、5 packageのnpm baselineでもあります。** 初回npm publication gate #6は `v1.0.0` について完了済みです。今後のregistry releaseも独立してauthorizeし、manual OIDC Trusted Publishing workflowを使います。source-release progressがregistry publicationをauthorizeすることはありません。
+**v1.0.0はrelease済みのfeature-free stable-promotion milestoneであり、5 packageのnpm baselineでもあります。** 次のbounded development lineは **v1.1.0 post-v1 integration ergonomics** とし、#232を先に、その後#233を進めます。additiveな変更に限定し、frozen v1 accounting / replay boundaryを弱めません。初回npm publication gate #6は `v1.0.0` について完了済みです。今後のregistry releaseも独立してauthorizeし、manual OIDC Trusted Publishing workflowを使います。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
@@ -186,6 +188,8 @@ v1.0前に:
 | #184 provider benchmark / cost-profile harness | v0.12 | **Completed; non-blocking performance evidence** |
 | #191〜#198 final v1 blocker closure | v0.13 | **Completed / Release済み; 新billing modelなし** |
 | #6 first npm publication | separate v0.13/v1 distribution gate | **Completed / Closed; v1.0.0 publish・verification完了** |
+| #232 Cloudflare bounded exact post-reserve retry | v1.1 | **Adopt; initial reserveをretryしないexplicit opt-in Cloudflare helperとして実装** |
+| #233 MCP read-only operationId ergonomics | v1.1 | **次に設計; logical-operation identity / cross-session isolationを維持** |
 
 ## Release policy
 

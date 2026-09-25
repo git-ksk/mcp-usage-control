@@ -263,6 +263,8 @@ jobs:
           grep -qx 'package/dist/versioned-worker.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/reconciliation.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/reconciliation.d.ts' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/exact-retry.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/exact-retry.d.ts' <<<"$cloudflare_listing"
           grep -qx 'package/dist/reconciliation-protocol.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance.d.ts' <<<"$cloudflare_listing"
@@ -326,6 +328,9 @@ jobs:
             createCloudflareBudgetMaintenanceGateway,
             pruneRemoteCloudflareHistoricalBudgets,
           } from 'mcp-usage-control-cloudflare/maintenance';
+          import {
+            createExactRetryingRemoteCloudflareUsageStore,
+          } from 'mcp-usage-control-cloudflare/exact-retry';
           if (![
             MemoryUsageStore,
             UsageControl,
@@ -347,6 +352,7 @@ jobs:
             RedisMcpUsageFlowStore,
             CloudflareUsageStore,
             RemoteCloudflareUsageStore,
+            createExactRetryingRemoteCloudflareUsageStore,
             createReconciliableCloudflareUsageStoreGateway,
             reconcileRemoteCloudflareOperation,
             reconcileRemoteCloudflareReserve,

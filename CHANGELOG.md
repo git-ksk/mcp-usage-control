@@ -6,7 +6,9 @@ All notable project changes are recorded here.
 
 ## [Unreleased]
 
-No entries yet.
+### Added
+
+- Added optional `mcp-usage-control-cloudflare/exact-retry` support for bounded exact replay of scalar `markLiable()`, `renew()`, and `settle()` after retryable transport failures, while initial reserve, growth, and vector transitions remain single-attempt (#232).
 
 ## [1.0.0] - 2026-09-04
 
