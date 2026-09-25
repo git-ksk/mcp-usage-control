@@ -6,6 +6,8 @@
 
 It does not change the base `RemoteCloudflareUsageStore` behavior. The base client still performs one network attempt per method call.
 
+This helper stays in the Cloudflare package rather than the provider-neutral core because retry eligibility depends on `CloudflareUsageTransportError` and HTTP status classes. The core `UsageStore` contract remains transport-agnostic.
+
 ## Safety boundary
 
 The wrapper retries only:

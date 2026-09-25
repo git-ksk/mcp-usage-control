@@ -6,6 +6,8 @@
 
 baseの `RemoteCloudflareUsageStore` の挙動自体は変更しません。base clientは従来どおり、1 method callにつきnetwork attemptを1回だけ実行します。
 
+このhelperはprovider-neutral coreではなくCloudflare packageに置きます。retry可否が `CloudflareUsageTransportError` とHTTP statusというprovider-specific transport semanticsに依存し、core `UsageStore` にtransport分類を持ち込まないためです。
+
 ## Safety boundary
 
 retry対象は次だけです。
