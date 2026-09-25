@@ -3,7 +3,10 @@ import {
   CloudflareUsageTransportError,
   RemoteCloudflareUsageStore,
 } from './index.js';
-import { createExactRetryingRemoteCloudflareUsageStore } from './exact-retry.js';
+import {
+  createExactRetryingRemoteCloudflareUsageStore,
+  type RemoteCloudflareExactRetryEvent,
+} from './exact-retry.js';
 
 const reservationId = `cf1.${'a'.repeat(64)}`;
 const request = {
@@ -262,6 +265,192 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
     expect(Date.now()).toBe(0);
   });
 
+  it('emits privacy-bounded scheduled and recovered telemetry', async () => {
+    const events: RemoteCloudflareExactRetryEvent[] = [];
+    let calls = 0;
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('ack lost after commit');
+        return jsonResponse({ expiresAt: 5_000 });
+      },
+    });
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+      ...fastBackoff,
+      observer: { onEvent(event) { events.push(event); } },
+    });
+
+    await expect(retrying.markLiable({ reservationId })).resolves.toMatchObject({ reservationId });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      type: 'retry.scheduled',
+      phase: 'mark_liable',
+      attempt: 2,
+      maxAttempts: 2,
+      transportClass: 'network',
+      delayMs: 1,
+    });
+    expect(events[1]).toMatchObject({
+      type: 'retry.recovered',
+      phase: 'mark_liable',
+      attempts: 2,
+    });
+    for (const event of events) {
+      expect(Object.keys(event).sort()).toEqual(
+        event.type === 'retry.scheduled'
+          ? ['attempt', 'delayMs', 'maxAttempts', 'phase', 'timestamp', 'transportClass', 'type'].sort()
+          : ['attempts', 'phase', 'timestamp', 'type'].sort(),
+      );
+      expect(JSON.stringify(event)).not.toContain(reservationId);
+      expect(JSON.stringify(event)).not.toContain(request.operationId);
+      expect(JSON.stringify(event)).not.toContain(request.principal.id);
+      expect(JSON.stringify(event)).not.toContain('budget-a');
+      expect(JSON.stringify(event)).not.toContain('usage.example.test');
+      expect(JSON.stringify(event)).not.toContain('ack lost after commit');
+    }
+  });
+
+  it.each([
+    [408, 'http_408'],
+    [429, 'http_429'],
+    [503, 'http_5xx'],
+  ] as const)('uses bounded transport telemetry for HTTP %i', async (status, transportClass) => {
+    const events: RemoteCloudflareExactRetryEvent[] = [];
+    let calls = 0;
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) return new Response('', { status });
+        return jsonResponse({ expiresAt: 5_000 });
+      },
+    });
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+      ...fastBackoff,
+      observer: { onEvent(event) { events.push(event); } },
+    });
+
+    await retrying.markLiable({ reservationId });
+    expect(events[0]).toMatchObject({ type: 'retry.scheduled', transportClass });
+  });
+
+  it('emits exhausted telemetry only after a retry sequence has started', async () => {
+    const events: RemoteCloudflareExactRetryEvent[] = [];
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => {
+        throw new Error('still ambiguous');
+      },
+    });
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+      maxAttempts: 3,
+      ...fastBackoff,
+      observer: { onEvent(event) { events.push(event); } },
+    });
+
+    await expect(retrying.renew({ reservationId, ttlMs: 1_000 })).rejects.toMatchObject({
+      code: 'network',
+    });
+    expect(events.map(event => event.type)).toEqual([
+      'retry.scheduled',
+      'retry.scheduled',
+      'retry.failed',
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: 'retry.failed',
+      phase: 'renew',
+      attempts: 3,
+      reason: 'attempts_exhausted',
+      transportClass: 'network',
+    });
+  });
+
+  it('reports a non-retryable terminal failure after retry without exposing the error', async () => {
+    const events: RemoteCloudflareExactRetryEvent[] = [];
+    let calls = 0;
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error('first ambiguous failure');
+        return new Response('PRIVATE BODY', { status: 409 });
+      },
+    });
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+      maxAttempts: 4,
+      ...fastBackoff,
+      observer: { onEvent(event) { events.push(event); } },
+    });
+
+    await expect(retrying.settle({ reservationId, actualUnits: 1, outcome: 'success' })).rejects
+      .toBeInstanceOf(CloudflareUsageTransportError);
+    expect(events.at(-1)).toEqual(expect.objectContaining({
+      type: 'retry.failed',
+      phase: 'settle',
+      attempts: 2,
+      reason: 'non_retryable_after_retry',
+    }));
+    expect(events.at(-1)).not.toHaveProperty('transportClass');
+    expect(JSON.stringify(events)).not.toContain('PRIVATE BODY');
+    expect(JSON.stringify(events)).not.toContain(reservationId);
+  });
+
+  it.each(['sync', 'async'] as const)(
+    'swallows %s observer failure without changing retry recovery',
+    async mode => {
+      let calls = 0;
+      const store = new RemoteCloudflareUsageStore({
+        endpoint: 'https://usage.example.test/v1/usage-store',
+        fetch: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error('retryable transport');
+          return jsonResponse({ expiresAt: 5_000 });
+        },
+      });
+      const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+        ...fastBackoff,
+        observer: {
+          onEvent() {
+            if (mode === 'sync') throw new Error('observer failed');
+            return Promise.reject(new Error('observer failed'));
+          },
+        },
+      });
+
+      await expect(retrying.markLiable({ reservationId })).resolves.toMatchObject({ reservationId });
+      expect(calls).toBe(2);
+      await Promise.resolve();
+    },
+  );
+
+  it('does not emit retry telemetry for calls that never enter retry', async () => {
+    const events: RemoteCloudflareExactRetryEvent[] = [];
+    const observer = { onEvent(event: RemoteCloudflareExactRetryEvent) { events.push(event); } };
+    const reserveStore = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => { throw new Error('reserve ambiguity'); },
+    });
+    const retryingReserve = createExactRetryingRemoteCloudflareUsageStore(reserveStore, {
+      ...fastBackoff, observer,
+    });
+    await expect(retryingReserve.reserve({
+      request, units: 1, budgets: [{ key: 'budget-a', limit: 10 }], ttlMs: 1_000,
+    })).rejects.toMatchObject({ code: 'network' });
+
+    const clientErrorStore = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => new Response('', { status: 400 }),
+    });
+    const retryingClientError = createExactRetryingRemoteCloudflareUsageStore(clientErrorStore, {
+      ...fastBackoff, observer,
+    });
+    await expect(retryingClientError.markLiable({ reservationId })).rejects
+      .toBeInstanceOf(CloudflareUsageTransportError);
+    expect(events).toEqual([]);
+  });
+
   it('honors explicit maxAttempts bounds', async () => {
     let calls = 0;
     const store = new RemoteCloudflareUsageStore({
@@ -342,7 +531,8 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
           outcome: 'success',
         }),
     },
-  ])('keeps $name single-attempt', async ({ invoke }) => {
+  ])('keeps $name single-attempt without retry telemetry', async ({ invoke }) => {
+    const events: RemoteCloudflareExactRetryEvent[] = [];
     let calls = 0;
     const store = new RemoteCloudflareUsageStore({
       endpoint: 'https://usage.example.test/v1/usage-store',
@@ -351,9 +541,13 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         throw new Error('ambiguous');
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+      ...fastBackoff,
+      observer: { onEvent(event) { events.push(event); } },
+    });
 
     await expect(invoke(retrying)).rejects.toMatchObject({ code: 'network' });
     expect(calls).toBe(1);
+    expect(events).toEqual([]);
   });
 });

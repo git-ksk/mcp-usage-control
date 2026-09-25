@@ -184,6 +184,14 @@ Apply replay deduplication where needed. Do not use these counters as the transa
 
 `CloudflareUsageStore` / `RemoteCloudflareUsageStore` can emit `reservation.recovered` with `store: 'cloudflare'`. Lazy cleanup emits aggregate counts/units; directly addressed expiry can include only the opaque hashed reservation ID. Raw principal, tenant, tool, operation, budget, and tool-argument values are not persisted by the Cloudflare backend solely for recovery telemetry.
 
+## Cloudflare exact-retry telemetry
+
+The optional `mcp-usage-control-cloudflare/exact-retry` wrapper has a separate privacy-bounded observer for transport retry operations. It is intentionally not added to core `UsageEvent`, because retry eligibility and HTTP transport classes are provider-specific.
+
+Use `RemoteCloudflareExactRetryObserver` to record `retry.scheduled`, `retry.recovered`, and `retry.failed`. The event model contains no raw usage identities, endpoint/auth data, or error text. Observer delivery follows the same best-effort principle as core observability: synchronous throws and asynchronous rejections are swallowed and never change accounting results.
+
+See [Cloudflare exact post-reserve retry](cloudflare-exact-retry.md) for the event fields and integration example.
+
 ## Vendor adapters
 
 The core runtime does not depend on OpenTelemetry, OpenMeter, Datadog, Cloud Monitoring, GA4, or any billing provider. Add those integrations in application code or future optional adapters.

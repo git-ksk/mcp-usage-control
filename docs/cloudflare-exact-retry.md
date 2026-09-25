@@ -41,6 +41,7 @@ Authentication failures, ordinary `4xx`, protocol validation failures, Store con
 import { RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
 import {
   createExactRetryingRemoteCloudflareUsageStore,
+  type RemoteCloudflareExactRetryObserver,
 } from 'mcp-usage-control-cloudflare/exact-retry';
 
 const remote = new RemoteCloudflareUsageStore({
@@ -50,12 +51,19 @@ const remote = new RemoteCloudflareUsageStore({
   }),
 });
 
+const retryObserver: RemoteCloudflareExactRetryObserver = {
+  onEvent(event) {
+    console.info(JSON.stringify(event));
+  },
+};
+
 const store = createExactRetryingRemoteCloudflareUsageStore(remote, {
   // Total calls including the initial attempt. Default: 2. Allowed: 1..4.
   maxAttempts: 2,
   // Equal-jitter exponential backoff. Defaults: 100ms base, 1000ms cap.
   initialBackoffMs: 100,
   maxBackoffMs: 1_000,
+  observer: retryObserver,
 });
 ```
 
@@ -66,6 +74,22 @@ For eligible methods, the helper snapshots the scalar input before the first att
 Backoff is applied only after a transport failure has already been classified retryable and only when another attempt remains. Authentication failures, protocol errors, conflicts, ordinary 4xx responses, and every single-attempt method return without retry delay.
 
 `renew()` TTL is relative to the Store clock. If the first renewal committed but its acknowledgement was lost, an exact replay can move `expiresAt` forward again. This is conservative for quota capacity (it may retain capacity longer) and does not create another reservation or increase reserved units.
+
+## Operational retry telemetry
+
+The optional retry observer is separate from provider-neutral core `UsageObserver` because retry eligibility and transport classification are Cloudflare/HTTP-specific. It emits only bounded fields:
+
+- `retry.scheduled`: phase, next attempt, max attempts, bounded transport class, selected backoff delay;
+- `retry.recovered`: phase and total attempts after a retry succeeds;
+- `retry.failed`: phase, total attempts, and a bounded terminal reason; an exhausted retryable transport may also include its bounded transport class.
+
+Transport classes are limited to `timeout`, `network`, `http_408`, `http_429`, and `http_5xx`. Events never include reservation/operation/principal/tenant/budget identifiers, tool arguments, endpoint URLs, auth material, raw error objects/messages, response bodies, or arbitrary HTTP metadata.
+
+Delivery is best-effort and outside accounting/enforcement. `onEvent()` is invoked inline, returned promises are not awaited, and synchronous throws or asynchronous rejections are swallowed. Keep synchronous observer work lightweight and offload network/durable I/O yourself.
+
+No retry telemetry is emitted for initial reserve, vector/growth paths, or a failure that is rejected before any retry is scheduled.
+
+Suitable bounded metric dimensions include event type, phase, transport class, and terminal reason. Treat attempts and delay as numeric values rather than introducing raw identifiers into labels.
 
 ## What this does not prove
 

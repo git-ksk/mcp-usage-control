@@ -56,7 +56,7 @@ Across every remaining release:
 | **v0.11.0** | Pre-v1 accounting/runtime/storage/API freeze, aggregate release-safety gate, real Cloudflare rotation evidence | Released / complete |
 | **v0.12.0** | Product/operations hardening: release provenance/artifacts, supply-chain maintenance, incident runbook, competitor decisions, quota-window projection, provider benchmarks | Released / complete |
 | **v0.13.0** | Final v1-blocker closure: authoritative clocks, renewal uncertainty, safe historical cleanup, vector reconciliation, bounded inputs, shipped docs, Node/peer CI | Released / complete |
-| **v1.1.0** | Additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232), explicit single-round read operation-identity guidance without weak transport-ID dedup (#233), release/backoff/test-tool hardening (#237) | Implemented / unreleased |
+| **v1.1.0** | Additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232), explicit single-round read operation-identity guidance without weak transport-ID dedup (#233), release/backoff/test-tool hardening (#237), privacy-safe exact-retry operational telemetry (#239) | Implemented / unreleased |
 
 Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
@@ -141,7 +141,7 @@ No genuine Workers Free-plan exhaustion/platform-overload event occurred natural
 
 The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.13 final blocker-closure** tranche (#191-#198) are complete without redefining the frozen accounting lifecycle or persisted Store contract. v0.13.0 carries the final correctness, operations, distribution, runtime, and peer-compatibility evidence required for stable promotion.
 
-**v1.0.0 is the released feature-free stable-promotion milestone and the five-package npm baseline.** The bounded **v1.1.0 post-v1 integration ergonomics** implementation is complete but unreleased: #232 adds opt-in Cloudflare exact post-reserve retry, and #233 records the no-weak-dedup MCP operation-identity decision. Both remain additive and preserve the frozen v1 accounting/replay boundary. The first npm publication gate #6 is complete for `v1.0.0`. Future registry releases remain independently authorized and use the manual OIDC Trusted Publishing workflow; source-release progress does not authorize registry publication.
+**v1.0.0 is the released feature-free stable-promotion milestone and the five-package npm baseline.** The bounded **v1.1.0 post-v1 integration ergonomics** implementation is complete but unreleased: #232 adds opt-in Cloudflare exact post-reserve retry, and #233 records the no-weak-dedup MCP operation-identity decision. #237 hardens release/backoff/tooling, and #239 adds privacy-safe retry operations telemetry. All remain additive and preserve the frozen v1 accounting/replay boundary. The first npm publication gate #6 is complete for `v1.0.0`. Future registry releases remain independently authorized and use the manual OIDC Trusted Publishing workflow; source-release progress does not authorize registry publication.
 
 ## v1 completion definition
 
@@ -191,6 +191,7 @@ Before v1.0:
 | #232 Cloudflare bounded exact post-reserve retry | v1.1 | **Completed; explicit opt-in Cloudflare helper, initial reserve never retried** |
 | #233 MCP read-only operationId ergonomics | v1.1 | **Complete; no new API. Choose fresh-per-dispatch or an explicit retry-stable token; never dedup from weak transport identity** |
 | #237 v1.1 release/backoff/test-tool hardening | v1.1 | **Completed; exact-subpath release smoke, equal-jitter retry backoff, patched Vitest with source-only discovery** |
+| #239 exact-retry operational telemetry | v1.1 | **Completed; privacy-bounded scheduled/recovered/failed events, best-effort delivery, no raw identifiers/errors** |
 
 ## Release policy
 

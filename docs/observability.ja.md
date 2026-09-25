@@ -184,6 +184,14 @@ raw event streamまたはsafe projectionから、例えば次のbounded operatio
 
 `CloudflareUsageStore` / `RemoteCloudflareUsageStore` は `store: 'cloudflare'` の `reservation.recovered` を発火できます。lazy cleanupはaggregate count / units、直接指定されたexpiryではopaque hashed reservation IDだけを含められます。recovery telemetryのためだけにraw principal / tenant / tool / operation / budget / tool-argument値をCloudflare backendへ永続化しません。
 
+## Cloudflare exact-retry telemetry
+
+optionalな `mcp-usage-control-cloudflare/exact-retry` wrapperは、transport retry運用向けにprivacy-boundedな専用observerを持ちます。retry eligibility / HTTP transport classはprovider固有なので、core `UsageEvent` へは追加しません。
+
+`RemoteCloudflareExactRetryObserver` で `retry.scheduled`、`retry.recovered`、`retry.failed` を記録できます。event modelにはraw usage identity、endpoint / auth data、error textを含めません。observer deliveryもcore observabilityと同じbest-effort原則で、同期throw / async rejectionは握りつぶし、accounting resultを変更しません。
+
+event fieldとintegration exampleは [Cloudflare exact post-reserve retry](cloudflare-exact-retry.ja.md) を参照してください。
+
 ## Vendor adapter
 
 core runtimeはOpenTelemetry、OpenMeter、Datadog、Cloud Monitoring、GA4、billing providerへ依存しません。必要な連携はapplication codeまたは将来のoptional adapterで追加します。

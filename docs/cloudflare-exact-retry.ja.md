@@ -41,6 +41,7 @@ authentication failure、通常の `4xx`、protocol validation failure、Store c
 import { RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
 import {
   createExactRetryingRemoteCloudflareUsageStore,
+  type RemoteCloudflareExactRetryObserver,
 } from 'mcp-usage-control-cloudflare/exact-retry';
 
 const remote = new RemoteCloudflareUsageStore({
@@ -50,12 +51,19 @@ const remote = new RemoteCloudflareUsageStore({
   }),
 });
 
+const retryObserver: RemoteCloudflareExactRetryObserver = {
+  onEvent(event) {
+    console.info(JSON.stringify(event));
+  },
+};
+
 const store = createExactRetryingRemoteCloudflareUsageStore(remote, {
   // initial attemptを含む総call数。default: 2、許容範囲: 1..4。
   maxAttempts: 2,
   // equal-jitter exponential backoff。default: base 100ms、cap 1000ms。
   initialBackoffMs: 100,
   maxBackoffMs: 1_000,
+  observer: retryObserver,
 });
 ```
 
@@ -66,6 +74,22 @@ const store = createExactRetryingRemoteCloudflareUsageStore(remote, {
 backoffはtransport failureがretryableと判定済みで、かつ次attemptが残っている場合だけ適用します。authentication failure、protocol error、conflict、通常の4xx、single-attempt methodにはretry delayを入れません。
 
 `renew()` のTTLはStore clock基準のrelative値です。最初のrenewalがcommit済みでACKだけ失われた場合、exact replayで `expiresAt` がさらに先へ進むことがあります。quota capacityを長めに保持し得るconservativeな挙動であり、新しいreservation作成やreserved units増加は行いません。
+
+## Operational retry telemetry
+
+optional retry observerはprovider-neutral core `UsageObserver` とは分離しています。retry eligibility / transport classificationがCloudflare / HTTP固有だからです。eventはbounded fieldだけを出します。
+
+- `retry.scheduled`: phase、次attempt、max attempts、bounded transport class、選択されたbackoff delay
+- `retry.recovered`: retry成功時のphaseとtotal attempts
+- `retry.failed`: phase、total attempts、bounded terminal reason。retryable transportを使い切った場合はbounded transport classも含められます
+
+transport classは `timeout`、`network`、`http_408`、`http_429`、`http_5xx` のみに限定します。reservation / operation / principal / tenant / budget identifier、tool args、endpoint URL、auth情報、raw error object/message、response body、任意HTTP metadataはeventへ含めません。
+
+deliveryはbest-effortでaccounting / enforcementの外側です。`onEvent()` はinlineで呼ばれますが、返されたPromiseはawaitせず、同期throw / async rejectionは握りつぶします。同期observer処理は軽量にし、network / durable I/Oはapplication側へoffloadしてください。
+
+initial reserve、vector / growth path、retryを1回もscheduleせずrejectしたfailureではretry telemetryを出しません。
+
+metric dimensionにはevent type、phase、transport class、terminal reasonのようなbounded fieldを使えます。attempt / delayは数値として扱い、raw identifierをlabelへ持ち込まないでください。
 
 ## このhelperが証明しないこと
 

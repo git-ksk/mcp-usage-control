@@ -8,6 +8,7 @@ All notable project changes are recorded here.
 
 ### Added
 
+- Added privacy-bounded, best-effort operational telemetry for Cloudflare exact retries (`retry.scheduled`, `retry.recovered`, `retry.failed`) without exposing usage identities, endpoints, or raw errors (#239).
 - Added optional `mcp-usage-control-cloudflare/exact-retry` support for bounded exact replay of scalar `markLiable()`, `renew()`, and `settle()` after retryable transport failures, while initial reserve, growth, and vector transitions remain single-attempt (#232).
 
 ### Changed
