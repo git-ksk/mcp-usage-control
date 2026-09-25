@@ -143,7 +143,7 @@ npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
 
 | やりたいこと | 読むページ |
 | --- | --- |
-| ツールに利用上限を付ける | [はじめに](docs/getting-started.ja.md) · [MCP連携](docs/mcp-integration.ja.md) |
+| ツールに利用上限を付ける | [はじめに](docs/getting-started.ja.md) · [MCP連携](docs/mcp-integration.ja.md) · [Operation identity](docs/mcp-operation-identity.ja.md) |
 | Free/Plusの月次クレジットを作る | [サブスク型クレジット](docs/subscription-credits.ja.md) · [集計期間のキー](docs/accounting-window-keys.ja.md) |
 | 途中で増える消費量や異なる単位を扱う | [段階的な予約拡張](docs/progressive-mcp-integration.ja.md) · [利用量ベクトル](docs/vector-usage.ja.md) |
 | 利用状況や障害を調べる | [トラブルシューティング](docs/troubleshooting.ja.md) · [可観測性](docs/observability.ja.md) · [状態の照合](docs/operation-reconciliation.ja.md) |

@@ -10,6 +10,7 @@
 | --- | --- | --- |
 | パッケージ・実行環境のエラー | Node.js、ESM設定、導入パッケージと依存関係 | [はじめに](getting-started.ja.md) |
 | `duplicate_operation` | 既存の操作を再試行していないか | [操作状態の照合](operation-reconciliation.ja.md) |
+| single-round readのretryが二重meterまたはduplicate拒否になる | stableなlogical-action tokenがあるか | [MCP logical operation identity](mcp-operation-identity.ja.md) |
 | `quota_exceeded` | 表示中の予算だけでなく、見積もりに含まれる全予算 | [集計期間のキー](accounting-window-keys.ja.md) |
 | 処理中にリースが切れる | 更新処理、プロセス停止、ストアへの接続 | [MCP連携](mcp-integration.ja.md) |
 | 再起動で利用量が消える | `MemoryUsageStore` を使用していないか | [ストア選択](getting-started.ja.md#本番ではどのstoreを選ぶ) |
@@ -28,6 +29,12 @@ Node.js 22以上とESMを使用します。ファイルを `.mjs` にするか�
 再実行防止情報の保持期間中は、意図した動作です。同じ処理には同じ `operationId` を使いますが、重複予約の拒否によって業務結果が再返却されるわけではありません。判定範囲は `(tenantId, principal.id, tool, operationId)` です。
 
 応答が失われた場合は、対応するストアの [状態照合手順](operation-reconciliation.ja.md) に従います。拒否を回避するためだけに新しいIDを発行しないでください。業務結果の復元と副作用の重複実行防止はアプリ側の責務です。
+
+## single-round readのretry identityが決められない
+
+1 logical user actionに対してstableなapplication / client tokenが無い場合、MCP adapterはtransport retryとintentional repeated readを区別できません。session identity + `ctx.mcpReq.id` やheuristicなTTL dedup cacheで解決しないでください。
+
+dispatchごとにfreshな `operationId` を使ってretry時の再meter可能性を受け入れるか、explicitなretry-stable logical-action tokenを提供するかを選びます。詳しくは [MCP logical operation identity](mcp-operation-identity.ja.md) を参照してください。
 
 ## 残量が表示されているのに `quota_exceeded` になる
 

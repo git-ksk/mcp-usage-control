@@ -143,7 +143,7 @@ Provider guides cover persistence, deployment, clock, and contention requirement
 
 | I want to… | Start here |
 | --- | --- |
-| Add usage limits to a tool | [Getting started](docs/getting-started.md) · [MCP integration](docs/mcp-integration.md) |
+| Add usage limits to a tool | [Getting started](docs/getting-started.md) · [MCP integration](docs/mcp-integration.md) · [Operation identity](docs/mcp-operation-identity.md) |
 | Implement Free/Plus monthly credits | [Subscription credits](docs/subscription-credits.md) · [Window keys](docs/accounting-window-keys.md) |
 | Meter growing or mixed-unit workloads | [Progressive usage](docs/progressive-mcp-integration.md) · [Usage vectors](docs/vector-usage.md) |
 | Diagnose usage and failures | [Troubleshooting](docs/troubleshooting.md) · [Observability](docs/observability.md) · [Reconciliation](docs/operation-reconciliation.md) |
