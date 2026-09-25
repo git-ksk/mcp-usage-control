@@ -131,7 +131,7 @@ v1前のdurable provider互換境界をfreezeしました。
 
 ### #24 Cloudflare real operational evidence — complete
 
-real Monokura dogfood deploymentでdocument済みzero-downtime credential rotationを完了しました。overlap windowではnew / old credentialを両方acceptし、Cloud Run callerを新Secret Manager versionへ切替、新revision上のreal `list_boards` callが成功し、retire後はrotated-out credentialをrejectしました。既存Durable Object / accounting identityは維持し、Firestore fallbackも有効化していません。
+real production dogfood deploymentでdocument済みzero-downtime credential rotationを完了しました。overlap windowではnew / old credentialを両方acceptし、Cloud Run callerを新Secret Manager versionへ切替、新revision上のreal `list_boards` callが成功し、retire後はrotated-out credentialをrejectしました。既存Durable Object / accounting identityは維持し、Firestore fallbackも有効化していません。
 
 genuine Workers Free-plan exhaustion / platform overloadは自然発生していません。shared quotaを意図的に消費して再現せず、v1 Cloudflare claimは実際にobservedしたdeployed behavior + 既存local/workerd synthetic 429/503 fail-closed evidenceの範囲へ限定します。
 

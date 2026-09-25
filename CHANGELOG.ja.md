@@ -96,7 +96,7 @@ v0.12後の最終v1 auditで見つかったcorrectness / operations / distributi
 ### Release safety / real Cloudflare evidence
 
 - protected `test (22)` を、supported Node / Redis / package / tarball / clean-consumer evidenceとapplicableなCloudflare workerd / Firestore Emulator integrationを束ねるaggregate release-safety gateにしました (#160)。
-- real `monokura-mcp-usage-control` に対してMonokuraのzero-downtime credential rotationを完了。overlapでnew / old credentialが両方accepted、Cloud Run callerを新Secret Manager versionへ切替、real `list_boards` caller成功、retire後のold credential rejectionまで確認しました (#24)。
+- real deployed usage-control gatewayに対してproduction dogfoodのzero-downtime credential rotationを完了。overlapでnew / old credentialが両方accepted、Cloud Run callerを新Secret Manager versionへ切替、real `list_boards` caller成功、retire後のold credential rejectionまで確認しました (#24)。
 - rotation中も既存Durable Object / accounting identityを維持し、fresh ledger / accounting domainを作らず、Firestore fallbackも有効化していません。
 - validation中にgenuine Workers Free-plan exhaustion / platform overloadは自然発生していません。shared quotaを意図的に消費して再現せず、production claimはobserved deployed behavior + 既存local/workerd synthetic 429/503 fail-closed evidenceの範囲へ明示的に限定します。
 
@@ -404,7 +404,7 @@ v0.12後の最終v1 auditで見つかったcorrectness / operations / distributi
 - 通常usage credentialへdelete authorityを自動付与しない独立authenticated maintenance endpoint。
 - Cloudflare concurrency、multi-budget atomicity、replay、expiry、renewal、lost ACK、reconciliation、maintenance、authentication、observer isolationをlocal workerdで検証するintegration coverage。
 - dedicated Workers Free-plan Worker + Durable Object namespace向けrepeatable deployed-Cloudflare dogfood手順。
-- MonokuraのGCP `RemoteCloudflareUsageStore` -> 実Cloudflare Durable Objects経路でreserve / markLiable / renew / settle、parallel contention、retry、lost ACK、conservative settlement、fail-closeを実dogfood。
+- production dogfoodのGCP `RemoteCloudflareUsageStore` -> 実Cloudflare Durable Objects経路でreserve / markLiable / renew / settle、parallel contention、retry、lost ACK、conservative settlement、fail-closeを実dogfood。
 - Cloudflare Free-plan backend-operation / capacity guidanceとbusiness `quota_exceeded` / platform-store failureの明確な分離。
 - 実Redis 7 concurrency / crash / ACK-loss / recovery-observability integration test。
 - 公式MCP SDK v2 `Client + createMcpHandler` protocol integration test。

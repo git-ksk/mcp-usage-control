@@ -68,7 +68,7 @@ import { createCloudflareUsageStoreGateway } from 'mcp-usage-control-cloudflare'
 
 const usageHandler = createCloudflareUsageStoreGateway({
   namespace: env.USAGE_CONTROL,
-  domainName: 'monokura-dogfood',
+  domainName: 'production-dogfood',
   authorize: request => {
     return request.headers.get('authorization') === `Bearer ${env.USAGE_GATEWAY_TOKEN}`;
   },

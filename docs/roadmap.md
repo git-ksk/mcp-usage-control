@@ -131,7 +131,7 @@ This closes the earlier governance gap without requiring an administrative branc
 
 ### #24 Cloudflare real operational evidence — complete
 
-The real Monokura dogfood deployment completed the documented zero-downtime credential rotation. The overlap window accepted both credentials, the Cloud Run caller moved to the new Secret Manager version, a real `list_boards` call succeeded on the new revision, and the rotated-out credential was rejected after retirement. The existing Durable Object/accounting identity remained unchanged and no Firestore fallback was enabled.
+The real production dogfood deployment completed the documented zero-downtime credential rotation. The overlap window accepted both credentials, the Cloud Run caller moved to the new Secret Manager version, a real `list_boards` call succeeded on the new revision, and the rotated-out credential was rejected after retirement. The existing Durable Object/accounting identity remained unchanged and no Firestore fallback was enabled.
 
 No genuine Workers Free-plan exhaustion/platform-overload event occurred naturally. Shared quota was not intentionally burned to manufacture one, so the v1 Cloudflare claim stays limited to the deployed behavior actually observed plus the existing local/workerd synthetic 429/503 fail-closed evidence.
 

@@ -96,7 +96,7 @@ Eleventh GitHub/source release and final pre-v1 completion freeze. npm publicati
 ### Release safety and real Cloudflare evidence
 
 - Made the protected `test (22)` context the aggregate release-safety gate over supported Node/Redis/package/tarball/clean-consumer evidence plus applicable Cloudflare workerd and Firestore Emulator integration (#160).
-- Completed a real zero-downtime Monokura credential rotation against `monokura-mcp-usage-control`: overlap accepted new and old credentials, the Cloud Run caller moved to the new Secret Manager version, the real `list_boards` caller succeeded, and the rotated-out credential was rejected after retirement (#24).
+- Completed a real zero-downtime production-dogfood credential rotation against a deployed usage-control gateway: overlap accepted new and old credentials, the Cloud Run caller moved to the new Secret Manager version, the real `list_boards` caller succeeded, and the rotated-out credential was rejected after retirement (#24).
 - Preserved the existing Durable Object/accounting identity during rotation; no fresh ledger/accounting domain was created and no Firestore fallback was enabled.
 - No genuine Workers Free-plan exhaustion/platform-overload event occurred naturally during validation. Shared quota was not intentionally burned to manufacture one, so the production claim remains explicitly limited to observed deployed behavior plus existing local/workerd synthetic 429/503 fail-closed evidence.
 
@@ -404,7 +404,7 @@ Initial GitHub/source release. npm registry publication is intentionally deferre
 - Separate authenticated Cloudflare maintenance endpoint so routine usage credentials do not automatically imply deletion authority.
 - Real local workerd integration coverage for Cloudflare concurrency, multi-budget atomicity, replay, expiry, renewal, lost acknowledgements, reconciliation, maintenance, authentication, and observer isolation.
 - Repeatable deployed-Cloudflare dogfood procedure for a dedicated Workers Free-plan Worker + Durable Object namespace.
-- Real Monokura dogfood coverage through GCP `RemoteCloudflareUsageStore` -> deployed Cloudflare Durable Objects for reserve / markLiable / renew / settle, parallel contention, retry, lost ACK, conservative settlement, and fail-close behavior.
+- Real production dogfood coverage through GCP `RemoteCloudflareUsageStore` -> deployed Cloudflare Durable Objects for reserve / markLiable / renew / settle, parallel contention, retry, lost ACK, conservative settlement, and fail-close behavior.
 - Cloudflare Free-plan backend-operation/capacity guidance and explicit separation of business `quota_exceeded` from platform/store unavailability.
 - Real Redis 7 concurrency/crash/ACK-loss/recovery-observability integration tests.
 - Official MCP SDK v2 `Client + createMcpHandler` protocol integration tests.
