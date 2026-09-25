@@ -6,6 +6,12 @@
 
 ## [Unreleased]
 
+現在entryはありません。
+
+## [1.1.0] - 2026-09-26
+
+post-v1 integration / operations releaseです。v1.1.0ではCloudflare retry ergonomicsとMCP operation-identity guidanceを限定的に追加し、freeze済みaccounting lifecycle / persisted Store contractは変更しません。
+
 ### Added
 
 - Cloudflare exact retryへprivacy-bounded / best-effortな運用telemetry（`retry.scheduled` / `retry.recovered` / `retry.failed`）を追加し、usage identity・endpoint・raw errorをeventへ出さない設計にしました (#239)。
@@ -13,8 +19,15 @@
 
 ### Changed
 
-- Cloudflare exact-retry helperへbounded exponential equal-jitter backoffを追加し、GitHub Releaseのpacked-byte smokeでexact subpathを直接検証し、development test runnerをpatched Vitest lineへ更新しました (#237)。
+- Cloudflare exact-retry helperへbounded exponential equal-jitter backoffを追加し、GitHub Releaseのpacked-byte smokeでexact subpathを直接検証し、development test runnerをpatched Vitest 4.1.11 + source-only test discoveryへ更新しました (#237)。
 - MCP single-round readのoperation identity方針を確定しました。weakなJSON-RPC / session由来dedup helperは追加せず、retry-stable logical keyがないapplicationはdispatchごとにfresh server-side IDを使い、retry-stable meteringが必要なproductはexplicitにvalidated logical action IDを用意します (#233)。
+
+### Release boundary
+
+- v1のreserve -> liability -> grow -> renew -> settle accounting model、replay scope、provider storage contract、Node.js 22+ runtime floorは変更しません。
+- ambiguousなinitial Cloudflare reserveの回復はread-only reconciliationでexplicitに扱い、v1.1.0でもblind reserve retryは導入しません。
+- 5 public package manifestを `1.1.0` に揃え、release evidenceはNode.js 22/24 + aggregate `test (22)` gateを維持します。
+- このGitHub/source release自体はnpm publishを行いません。registry publicationはexact validated GitHub Release tarballを使うmanual Trusted Publishing workflowとして別途明示authorizeします。
 
 ## [1.0.0] - 2026-09-04
 

@@ -8,9 +8,9 @@
 
 ## 現在のstatus
 
-**v1.0.0がcurrent stable GitHub/source release baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22以上をrequireします。
+**v1.1.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `1.1.0` に揃い、Node.js 22以上をrequireします。以下のv1.0 readiness evidenceは、このadditiveなpost-v1 releaseでもcompatibility / safety foundationとして維持します。
 
-5 packageすべてを2026-09-04にnpmへ `1.0.0` として初回公開済みです。#6のseparate publication gateを明示authorizeして実行し、公開後にregistry metadata / integrity / signed provenance / clean-consumer installを検証しました。
+npm registry baselineは、2026-09-04にseparate authorizationされた#6 gateで初回公開した `1.0.0` のままです。v1.1.0 registry publicationは完了・verifyするまで別のmanual Trusted Publishing操作です。
 
 v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / governance trancheを解消しました。
 
@@ -131,9 +131,9 @@ v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177�
 
 ## npm distribution boundary
 
-stableなsource/npm baselineは `v1.0.0` です。5 packageすべてを2026-09-04に、separate authorizationされた#6 gate経由で初回公開し、package ownership / availability、provenance、registry metadata、package content、clean-consumer installをverify済みです。
+current source baselineは `v1.1.0`、npm baselineはseparate authorizationされたv1.1.0 publication workflowが完了するまで `v1.0.0` です。初回1.0.0 publicationではpackage ownership / availability、provenance、registry metadata、package content、clean-consumer installをverify済みです。
 
-#6は完了・close済みです。今後のnpm publicationも独立した操作として、manual OIDC Trusted Publishing workflowで明示authorizeして実行します。
+#6は完了・close済みです。v1.1.0以降のnpm publicationも独立した操作として、manual OIDC Trusted Publishing workflowで明示authorizeして実行します。
 
 source releaseがregistry publicationを暗黙authorizeすることはありません。
 

@@ -12,9 +12,9 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.0.0がcurrent stable GitHub/source / npm baselineです。** publish可能な5 package manifestは `1.0.0` に揃い、Node.js 22+をrequireし、2026-09-04にnpmへ公開済みです。
+**v1.1.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `1.1.0` に揃い、Node.js 22+をrequireします。npm registry baselineは、separate authorizationされたv1.1.0 publication workflowが完了するまで `1.0.0` のままです。
 
-separate authorizationで実行した初回npm publication gate #6は完了・close済みです。今後のregistry publicationも引き続き独立してauthorizeし、source-release progressがregistry publicationを意味することはありません。
+初回publication gate #6は完了・close済みです。以後のregistry publicationもmanual Trusted Publishingによるseparate authorization対象で、source-release progressがregistry publicationを意味することはありません。
 
 ```text
 v0.6 progressive growth [RELEASED]
@@ -26,7 +26,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.12 product/operations hardening [RELEASED]
  -> v0.13 v1-blocker closure [RELEASED]
  -> v1.0 feature-free stable promotion [RELEASED]
- -> v1.1 post-v1 integration ergonomics [IMPLEMENTED / UNRELEASED]
+ -> v1.1 post-v1 integration ergonomics [RELEASED]
 ```
 
 ## 今後も崩さないsafety boundary
@@ -56,7 +56,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.11.0** | pre-v1 accounting/runtime/storage/API freeze、aggregate release-safety gate、real Cloudflare rotation evidence | Release済み / Complete |
 | **v0.12.0** | product/operations hardening: release provenance/artifact、supply-chain maintenance、incident runbook、競合判断、quota-window projection、provider benchmark | Release済み / Complete |
 | **v0.13.0** | final v1-blocker closure: authoritative clock、renew uncertainty、安全なhistorical cleanup、vector reconciliation、bounded input、shipped docs、Node/peer CI | Release済み / Complete |
-| **v1.1.0** | additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232)、weak transport-ID dedupを追加しないsingle-round read operation-identity guidance (#233)、release / backoff / test-tool hardening (#237)、privacy-safe exact-retry operational telemetry (#239) | Implemented / unreleased |
+| **v1.1.0** | additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232)、weak transport-ID dedupを追加しないsingle-round read operation-identity guidance (#233)、release / backoff / test-tool hardening (#237)、privacy-safe exact-retry operational telemetry (#239) | Release済み / Complete |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -141,7 +141,7 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0.13 final blocker-closure** tranche (#191〜#198) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。v0.13.0でstable promotionに必要なfinal correctness / operations / distribution / runtime / peer-compatibility evidenceが揃っています。
 
-**v1.0.0はrelease済みのfeature-free stable-promotion milestoneであり、5 packageのnpm baselineでもあります。** boundedな **v1.1.0 post-v1 integration ergonomics** の実装は完了・未releaseです。#232でopt-in Cloudflare exact post-reserve retryを追加し、#233でweak dedupを追加しないMCP operation-identity方針を確定しました。#237でrelease / backoff / toolingをhardeningし、#239でprivacy-safeなretry運用telemetryを追加しました。すべてadditiveで、frozen v1 accounting / replay boundaryを維持します。初回npm publication gate #6は `v1.0.0` について完了済みです。今後のregistry releaseも独立してauthorizeし、manual OIDC Trusted Publishing workflowを使います。source-release progressがregistry publicationをauthorizeすることはありません。
+**v1.1.0はrelease済みのpost-v1 integration-ergonomics source lineです。** #232でopt-in Cloudflare exact post-reserve retry、#233でweak dedupを追加しないMCP operation-identity方針、#237でrelease / backoff / tooling hardening、#239でprivacy-safeなretry運用telemetryを追加しました。すべてadditiveで、frozen v1 accounting / replay boundaryを維持します。npm registryは、separate authorizationされたv1.1.0 Trusted Publishing workflowが成功するまで `v1.0.0` のままです。source-release progressがregistry publicationをauthorizeすることはありません。
 
 ## 「v1 complete」の定義
 
