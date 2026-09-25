@@ -8,9 +8,9 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v1.1.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `1.1.0` and require Node.js 22 or later. The v1.0 readiness evidence below remains the compatibility/safety foundation for this additive post-v1 release.
+**v1.1.0 is the current stable GitHub/source and npm baseline.** All five publishable manifests are aligned at `1.1.0` and require Node.js 22 or later. The v1.0 readiness evidence below remains the compatibility/safety foundation for this additive post-v1 release.
 
-The npm registry baseline remains `1.0.0`, first published on 2026-09-04 through the separately authorized #6 gate. v1.1.0 registry publication remains a separate manual Trusted Publishing operation until it is completed and verified.
+All five v1.1.0 packages were published to npm on 2026-09-26 through the separately authorized manual Trusted Publishing workflow. Registry provenance is present for all five packages, downloaded registry tarballs were verified SHA-256 byte-identical to the GitHub Release assets, and a clean Node 22 registry install/import smoke passed.
 
 The v0.11 freeze line has now resolved the accounting/reliability/runtime/storage/API/governance tranche:
 
@@ -131,9 +131,9 @@ v0.11 established the accounting/runtime/storage/API freeze, v0.12 completed the
 
 ## npm distribution boundary
 
-The current source baseline is `v1.1.0`; the npm baseline remains `v1.0.0` until the separately authorized v1.1.0 publication workflow completes. The original 1.0.0 publication was verified for package ownership/availability, provenance, registry metadata, package contents, and clean-consumer installation.
+The current stable source/npm baseline is `v1.1.0`. Its five registry tarballs were published from the exact validated GitHub Release artifacts and independently verified for provenance, registry metadata, byte identity, package contents, and clean Node 22 consumer installation.
 
-Issue #6 remains completed and closed. v1.1.0 and future npm publications are independent operations and require explicit authorization through the manual OIDC Trusted Publishing workflow.
+Issue #6 remains completed and closed. v1.1.0 publication was separately authorized and completed through the manual OIDC Trusted Publishing workflow; future npm publications remain independent operations requiring the same explicit authorization.
 
 A source release never implicitly authorizes registry publication.
 

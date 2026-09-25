@@ -12,9 +12,9 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.1.0がcurrent GitHub/source release baselineです。** publish可能な5 package manifestは `1.1.0` に揃い、Node.js 22+をrequireします。npm registry baselineは、separate authorizationされたv1.1.0 publication workflowが完了するまで `1.0.0` のままです。
+**v1.1.0がcurrent stable GitHub/source / npm baselineです。** publish可能な5 package manifestは `1.1.0` に揃い、Node.js 22+をrequireし、2026-09-26にvalidated GitHub Release tarballと同一byteでnpmへ公開済みです。
 
-初回publication gate #6は完了・close済みです。以後のregistry publicationもmanual Trusted Publishingによるseparate authorization対象で、source-release progressがregistry publicationを意味することはありません。
+初回publication gate #6は完了・close済みです。v1.1.0もseparate authorizationされたmanual Trusted Publishing pathを使い、registry provenanceとGitHub Release assetとのbyte identityを独立verifyしました。今後のregistry publicationも引き続き独立authorize対象です。
 
 ```text
 v0.6 progressive growth [RELEASED]
@@ -141,7 +141,7 @@ genuine Workers Free-plan exhaustion / platform overloadは自然発生してい
 
 boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0.13 final blocker-closure** tranche (#191〜#198) は、frozen accounting lifecycle / persisted Store contractを再定義せず完了しました。v0.13.0でstable promotionに必要なfinal correctness / operations / distribution / runtime / peer-compatibility evidenceが揃っています。
 
-**v1.1.0はrelease済みのpost-v1 integration-ergonomics source lineです。** #232でopt-in Cloudflare exact post-reserve retry、#233でweak dedupを追加しないMCP operation-identity方針、#237でrelease / backoff / tooling hardening、#239でprivacy-safeなretry運用telemetryを追加しました。すべてadditiveで、frozen v1 accounting / replay boundaryを維持します。npm registryは、separate authorizationされたv1.1.0 Trusted Publishing workflowが成功するまで `v1.0.0` のままです。source-release progressがregistry publicationをauthorizeすることはありません。
+**v1.1.0はrelease済みのpost-v1 integration-ergonomics source / npm lineです。** #232でopt-in Cloudflare exact post-reserve retry、#233でweak dedupを追加しないMCP operation-identity方針、#237でrelease / backoff / tooling hardening、#239でprivacy-safeなretry運用telemetryを追加しました。すべてadditiveで、frozen v1 accounting / replay boundaryを維持します。separate authorizationされたv1.1.0 Trusted Publishing workflowは成功し、registry tarballもGitHub Release assetとbyte-identicalであることをverify済みです。
 
 ## 「v1 complete」の定義
 
@@ -192,6 +192,7 @@ v1.0前に:
 | #233 MCP read-only operationId ergonomics | v1.1 | **Complete; 新APIなし。fresh-per-dispatchまたはexplicit retry-stable tokenを選択し、weak transport identityでdedupしない** |
 | #237 v1.1 release / backoff / test-tool hardening | v1.1 | **Completed; exact-subpath release smoke、equal-jitter retry backoff、patched Vitest + source-only discovery** |
 | #239 exact-retry operational telemetry | v1.1 | **Completed; privacy-bounded scheduled / recovered / failed event、best-effort delivery、raw identifier / errorなし** |
+| #241 v1.1.0 release / npm verification | v1.1 | **Completed; tagged source release、immutable validated asset、Trusted Publishing、provenance、byte identity、clean Node 22 registry install** |
 
 ## Release policy
 

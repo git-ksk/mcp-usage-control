@@ -2,7 +2,7 @@
 
 MCP TypeScript SDK v2 adapter for `mcp-usage-control`.
 
-> **Current distribution status:** `mcp-usage-control-mcp` v1.0.0 is published to npm. Repository checkouts/local tarballs remain supported for development; see [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md) / [日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md).
+> **Current distribution status:** `mcp-usage-control-mcp` v1.1.0 is published to npm. Repository checkouts/local tarballs remain supported for development; see [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md) / [日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md).
 
 ## English
 

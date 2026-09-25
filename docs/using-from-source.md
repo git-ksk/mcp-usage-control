@@ -2,7 +2,7 @@
 
 [English](using-from-source.md) | [日本語](using-from-source.ja.md)
 
-> **Current distribution status:** all five packages are published to npm at `1.0.0`. This page remains the source/local-tarball path for contributors, unreleased commits, local patches, and pre-release dogfooding.
+> **Current distribution status:** all five packages are published to npm at `1.1.0`. This page remains the source/local-tarball path for contributors, unreleased commits, local patches, and pre-release dogfooding.
 
 ## GitHub Release artifacts
 
