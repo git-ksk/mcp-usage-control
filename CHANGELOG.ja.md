@@ -8,6 +8,7 @@
 
 ### Added
 
+- Cloudflare exact retryへprivacy-bounded / best-effortな運用telemetry（`retry.scheduled` / `retry.recovered` / `retry.failed`）を追加し、usage identity・endpoint・raw errorをeventへ出さない設計にしました (#239)。
 - optionalな `mcp-usage-control-cloudflare/exact-retry` を追加し、retry可能なtransport failure後にscalar `markLiable()` / `renew()` / `settle()` のexact replayだけをboundedに実行できるようにしました。initial reserve、growth、vector transitionはsingle-attemptのままです (#232)。
 
 ### Changed

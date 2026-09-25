@@ -10,6 +10,44 @@ const DEFAULT_INITIAL_BACKOFF_MS = 100;
 const DEFAULT_MAX_BACKOFF_MS = 1_000;
 const MAX_CONFIGURED_BACKOFF_MS = 60_000;
 
+export type RemoteCloudflareExactRetryPhase = 'mark_liable' | 'renew' | 'settle';
+
+export type RemoteCloudflareExactRetryTransportClass =
+  | 'timeout'
+  | 'network'
+  | 'http_408'
+  | 'http_429'
+  | 'http_5xx';
+
+export type RemoteCloudflareExactRetryEvent =
+  | {
+      type: 'retry.scheduled';
+      timestamp: number;
+      phase: RemoteCloudflareExactRetryPhase;
+      attempt: number;
+      maxAttempts: number;
+      transportClass: RemoteCloudflareExactRetryTransportClass;
+      delayMs: number;
+    }
+  | {
+      type: 'retry.recovered';
+      timestamp: number;
+      phase: RemoteCloudflareExactRetryPhase;
+      attempts: number;
+    }
+  | {
+      type: 'retry.failed';
+      timestamp: number;
+      phase: RemoteCloudflareExactRetryPhase;
+      attempts: number;
+      reason: 'attempts_exhausted' | 'non_retryable_after_retry';
+      transportClass?: RemoteCloudflareExactRetryTransportClass;
+    };
+
+export interface RemoteCloudflareExactRetryObserver {
+  onEvent(event: RemoteCloudflareExactRetryEvent): void | Promise<void>;
+}
+
 export interface RemoteCloudflareExactRetryOptions {
   /**
    * Total attempts for eligible exact post-reserve replays, including the initial call.
@@ -20,6 +58,8 @@ export interface RemoteCloudflareExactRetryOptions {
   initialBackoffMs?: number;
   /** Cap for exponential retry delay. Defaults to 1000ms. */
   maxBackoffMs?: number;
+  /** Optional best-effort, privacy-bounded retry lifecycle observer. */
+  observer?: RemoteCloudflareExactRetryObserver;
 }
 
 /**
@@ -44,12 +84,24 @@ export function createExactRetryingRemoteCloudflareUsageStore(
 
     markLiable: input => {
       const exactInput = { reservationId: input.reservationId };
-      return runExactPostReserveReplay(() => store.markLiable(exactInput), maxAttempts, backoff);
+      return runExactPostReserveReplay(
+        'mark_liable',
+        () => store.markLiable(exactInput),
+        maxAttempts,
+        backoff,
+        options.observer,
+      );
     },
 
     renew: input => {
       const exactInput = { reservationId: input.reservationId, ttlMs: input.ttlMs };
-      return runExactPostReserveReplay(() => store.renew(exactInput), maxAttempts, backoff);
+      return runExactPostReserveReplay(
+        'renew',
+        () => store.renew(exactInput),
+        maxAttempts,
+        backoff,
+        options.observer,
+      );
     },
 
     settle: input => {
@@ -58,7 +110,13 @@ export function createExactRetryingRemoteCloudflareUsageStore(
         actualUnits: input.actualUnits,
         outcome: input.outcome,
       };
-      return runExactPostReserveReplay(() => store.settle(exactInput), maxAttempts, backoff);
+      return runExactPostReserveReplay(
+        'settle',
+        () => store.settle(exactInput),
+        maxAttempts,
+        backoff,
+        options.observer,
+      );
     },
   };
 }
@@ -69,34 +127,75 @@ interface ExactRetryBackoff {
 }
 
 async function runExactPostReserveReplay<T>(
+  phase: RemoteCloudflareExactRetryPhase,
   operation: () => Promise<T>,
   maxAttempts: number,
   backoff: ExactRetryBackoff,
+  observer: RemoteCloudflareExactRetryObserver | undefined,
 ): Promise<T> {
+  let retryStarted = false;
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return await operation();
+      const result = await operation();
+      if (retryStarted) {
+        emitExactRetryEvent(observer, {
+          type: 'retry.recovered',
+          timestamp: Date.now(),
+          phase,
+          attempts: attempt,
+        });
+      }
+      return result;
     } catch (error) {
-      if (attempt >= maxAttempts || !isRetryableExactReplayTransportError(error)) {
+      const transportClass = classifyRetryableExactReplayTransportError(error);
+      const retryable = transportClass !== undefined;
+      if (attempt >= maxAttempts || !retryable) {
+        if (retryStarted) {
+          emitExactRetryEvent(observer, {
+            type: 'retry.failed',
+            timestamp: Date.now(),
+            phase,
+            attempts: attempt,
+            reason: retryable ? 'attempts_exhausted' : 'non_retryable_after_retry',
+            ...(transportClass === undefined ? {} : { transportClass }),
+          });
+        }
         throw error;
       }
-      await delay(equalJitterBackoffMs(attempt, backoff));
+
+      const delayMs = equalJitterBackoffMs(attempt, backoff);
+      emitExactRetryEvent(observer, {
+        type: 'retry.scheduled',
+        timestamp: Date.now(),
+        phase,
+        attempt: attempt + 1,
+        maxAttempts,
+        transportClass,
+        delayMs,
+      });
+      retryStarted = true;
+      await delay(delayMs);
     }
   }
 }
 
-function isRetryableExactReplayTransportError(error: unknown): boolean {
-  if (!(error instanceof CloudflareUsageTransportError)) return false;
+function classifyRetryableExactReplayTransportError(
+  error: unknown,
+): RemoteCloudflareExactRetryTransportClass | undefined {
+  if (!(error instanceof CloudflareUsageTransportError)) return undefined;
 
   if (error.code === 'timeout' || error.code === 'network') {
-    return true;
+    return error.code;
   }
 
   if (error.code !== 'remote' || error.status === undefined) {
-    return false;
+    return undefined;
   }
 
-  return error.status === 408 || error.status === 429 || (error.status >= 500 && error.status <= 599);
+  if (error.status === 408) return 'http_408';
+  if (error.status === 429) return 'http_429';
+  if (error.status >= 500 && error.status <= 599) return 'http_5xx';
+  return undefined;
 }
 
 function normalizeMaxAttempts(value: number | undefined): number {
@@ -132,4 +231,19 @@ function equalJitterBackoffMs(failedAttempt: number, backoff: ExactRetryBackoff)
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function emitExactRetryEvent(
+  observer: RemoteCloudflareExactRetryObserver | undefined,
+  event: RemoteCloudflareExactRetryEvent,
+): void {
+  if (!observer) return;
+  try {
+    const result = observer.onEvent(event);
+    if (result && typeof (result as Promise<void>).catch === 'function') {
+      void (result as Promise<void>).catch(() => undefined);
+    }
+  } catch {
+    // Retry telemetry is best-effort and never part of accounting/enforcement.
+  }
 }
