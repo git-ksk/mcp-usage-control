@@ -53,12 +53,17 @@ const remote = new RemoteCloudflareUsageStore({
 const store = createExactRetryingRemoteCloudflareUsageStore(remote, {
   // Total calls including the initial attempt. Default: 2. Allowed: 1..4.
   maxAttempts: 2,
+  // Equal-jitter exponential backoff. Defaults: 100ms base, 1000ms cap.
+  initialBackoffMs: 100,
+  maxBackoffMs: 1_000,
 });
 ```
 
-`maxAttempts: 2` means at most one exact replay. `maxAttempts: 1` disables retry without changing the wrapper shape.
+`maxAttempts: 2` means at most one exact replay. `maxAttempts: 1` disables retry without changing the wrapper shape. Before each eligible retry, the helper waits using bounded exponential **equal jitter**: the first retry uses 50-100% of `initialBackoffMs`, later retries double the base until `maxBackoffMs`. Defaults are 100ms and 1000ms. Both delay values are bounded to 1..60000ms.
 
 For eligible methods, the helper snapshots the scalar input before the first attempt and reuses that snapshot. It never changes the reservation ID, TTL, actual units, or settlement outcome between attempts.
+
+Backoff is applied only after a transport failure has already been classified retryable and only when another attempt remains. Authentication failures, protocol errors, conflicts, ordinary 4xx responses, and every single-attempt method return without retry delay.
 
 `renew()` TTL is relative to the Store clock. If the first renewal committed but its acknowledgement was lost, an exact replay can move `expiresAt` forward again. This is conservative for quota capacity (it may retain capacity longer) and does not create another reservation or increase reserved units.
 

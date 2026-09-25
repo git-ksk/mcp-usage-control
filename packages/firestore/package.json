@@ -48,7 +48,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run src",
     "test:emulator": "node test/emulator.mjs && node test/growth-concurrency-stress.mjs",
     "prepack": "node ../../scripts/pack-workspace-deps.mjs prepare",
     "postpack": "node ../../scripts/pack-workspace-deps.mjs restore"

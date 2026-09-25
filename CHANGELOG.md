@@ -12,6 +12,7 @@ All notable project changes are recorded here.
 
 ### Changed
 
+- Hardened the Cloudflare exact-retry helper with bounded exponential equal-jitter backoff between eligible attempts, added exact-subpath checks to the GitHub Release packed-byte smoke, and moved the development test runner to a patched Vitest line (#237).
 - Recorded the MCP single-round read operation-identity decision: no weak JSON-RPC/session-derived dedup helper is added; applications without a retry-stable logical key should use a fresh server-side ID per dispatch, while products that need retry-stable metering must provide an explicit validated logical action ID (#233).
 
 ## [1.0.0] - 2026-09-04

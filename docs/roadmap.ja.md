@@ -56,7 +56,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.11.0** | pre-v1 accounting/runtime/storage/API freeze、aggregate release-safety gate、real Cloudflare rotation evidence | Release済み / Complete |
 | **v0.12.0** | product/operations hardening: release provenance/artifact、supply-chain maintenance、incident runbook、競合判断、quota-window projection、provider benchmark | Release済み / Complete |
 | **v0.13.0** | final v1-blocker closure: authoritative clock、renew uncertainty、安全なhistorical cleanup、vector reconciliation、bounded input、shipped docs、Node/peer CI | Release済み / Complete |
-| **v1.1.0** | additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232)、weak transport-ID dedupを追加しないsingle-round read operation-identity guidance (#233) | Implemented / unreleased |
+| **v1.1.0** | additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232)、weak transport-ID dedupを追加しないsingle-round read operation-identity guidance (#233)、release / backoff / test-tool hardening (#237) | Implemented / unreleased |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -190,6 +190,7 @@ v1.0前に:
 | #6 first npm publication | separate v0.13/v1 distribution gate | **Completed / Closed; v1.0.0 publish・verification完了** |
 | #232 Cloudflare bounded exact post-reserve retry | v1.1 | **Completed; initial reserveをretryしないexplicit opt-in Cloudflare helper** |
 | #233 MCP read-only operationId ergonomics | v1.1 | **Complete; 新APIなし。fresh-per-dispatchまたはexplicit retry-stable tokenを選択し、weak transport identityでdedupしない** |
+| #237 v1.1 release / backoff / test-tool hardening | v1.1 | **Completed; exact-subpath release smoke、equal-jitter retry backoff、patched Vitest + source-only discovery** |
 
 ## Release policy
 

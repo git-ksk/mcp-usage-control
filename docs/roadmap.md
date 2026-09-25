@@ -56,7 +56,7 @@ Across every remaining release:
 | **v0.11.0** | Pre-v1 accounting/runtime/storage/API freeze, aggregate release-safety gate, real Cloudflare rotation evidence | Released / complete |
 | **v0.12.0** | Product/operations hardening: release provenance/artifacts, supply-chain maintenance, incident runbook, competitor decisions, quota-window projection, provider benchmarks | Released / complete |
 | **v0.13.0** | Final v1-blocker closure: authoritative clocks, renewal uncertainty, safe historical cleanup, vector reconciliation, bounded inputs, shipped docs, Node/peer CI | Released / complete |
-| **v1.1.0** | Additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232), explicit single-round read operation-identity guidance without weak transport-ID dedup (#233) | Implemented / unreleased |
+| **v1.1.0** | Additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232), explicit single-round read operation-identity guidance without weak transport-ID dedup (#233), release/backoff/test-tool hardening (#237) | Implemented / unreleased |
 
 Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
@@ -190,6 +190,7 @@ Before v1.0:
 | #6 first npm publication | separate v0.13/v1 distribution gate | **Completed / closed; v1.0.0 published and verified** |
 | #232 Cloudflare bounded exact post-reserve retry | v1.1 | **Completed; explicit opt-in Cloudflare helper, initial reserve never retried** |
 | #233 MCP read-only operationId ergonomics | v1.1 | **Complete; no new API. Choose fresh-per-dispatch or an explicit retry-stable token; never dedup from weak transport identity** |
+| #237 v1.1 release/backoff/test-tool hardening | v1.1 | **Completed; exact-subpath release smoke, equal-jitter retry backoff, patched Vitest with source-only discovery** |
 
 ## Release policy
 

@@ -142,6 +142,9 @@ jobs:
           grep -qx 'package/dist/settlement-outcomes.d.ts' <<<"$core_listing"
           grep -qx 'package/dist/thresholds.js' <<<"$core_listing"
           grep -qx 'package/dist/thresholds.d.ts' <<<"$core_listing"
+          cloudflare_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-cloudflare-${version}.tgz")"
+          grep -qx 'package/dist/exact-retry.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/exact-retry.d.ts' <<<"$cloudflare_listing"
 
       - name: Install the exact packed bytes in a clean consumer
         shell: bash
@@ -167,6 +170,7 @@ jobs:
           import { protectTool } from 'mcp-usage-control-mcp';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
           import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
+          import { createExactRetryingRemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare/exact-retry';
           if (![
             MemoryUsageStore,
             UsageControl,
@@ -178,7 +182,15 @@ jobs:
             RedisUsageStore,
             CloudflareUsageStore,
             RemoteCloudflareUsageStore,
+            createExactRetryingRemoteCloudflareUsageStore,
           ].every(Boolean)) throw new Error('release artifact import smoke test failed');
+          const exactRetrySmoke = createExactRetryingRemoteCloudflareUsageStore(
+            new RemoteCloudflareUsageStore({ endpoint: 'http://127.0.0.1:8799/v1/usage-store' }),
+            { maxAttempts: 1 },
+          );
+          if (typeof exactRetrySmoke.markLiable !== 'function') {
+            throw new Error('release exact-retry wrapper smoke test failed');
+          }
           NODE
 
       - name: Generate release checksums

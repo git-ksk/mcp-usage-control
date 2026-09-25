@@ -107,7 +107,7 @@ For settlement, identical replay is idempotent while its tombstone is retained. 
 
 Do not hide ambiguous failures behind generic automatic retry middleware.
 
-For the narrower scalar post-reserve case, the optional `mcp-usage-control-cloudflare/exact-retry` wrapper may replay only the exact same `markLiable()`, `renew()`, or `settle()` input after timeout/network/408/429/5xx transport failures. It never retries initial reserve, growth, vector reserve, or vector settlement. See [Cloudflare exact post-reserve retry](cloudflare-exact-retry.md).
+For the narrower scalar post-reserve case, the optional `mcp-usage-control-cloudflare/exact-retry` wrapper may replay only the exact same `markLiable()`, `renew()`, or `settle()` input after timeout/network/408/429/5xx transport failures. Eligible retries wait with bounded exponential equal-jitter backoff rather than retrying immediately. It never retries initial reserve, growth, vector reserve, or vector settlement. See [Cloudflare exact post-reserve retry](cloudflare-exact-retry.md).
 
 ## Privacy boundary
 
