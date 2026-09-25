@@ -2,7 +2,7 @@
 
 [English](using-from-source.md) | [日本語](using-from-source.ja.md)
 
-> **現在の配布状況:** 5 packageすべてnpmへ `1.0.0` として公開済みです。このページはcontributor、未release commit、local patch、pre-release dogfooding向けのsource / local tarball手順として残します。
+> **現在の配布状況:** 5 packageすべてnpmへ `1.1.0` として公開済みです。このページはcontributor、未release commit、local patch、pre-release dogfooding向けのsource / local tarball手順として残します。
 
 ## GitHub Release artifact
 

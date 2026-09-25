@@ -12,9 +12,9 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v1.1.0 is the current GitHub/source release baseline.** All five publishable manifests are aligned at `1.1.0` and require Node.js 22+. The npm registry baseline remains `1.0.0` until the separately authorized v1.1.0 publication workflow completes.
+**v1.1.0 is the current stable GitHub/source and npm baseline.** All five publishable manifests are aligned at `1.1.0`, require Node.js 22+, and were published to npm on 2026-09-26 from the exact validated GitHub Release tarballs.
 
-The first-publication gate #6 remains complete and closed. Each later registry publication is still a separately authorized manual Trusted Publishing operation; source-release progress never implies registry publication.
+The first-publication gate #6 remains complete and closed. v1.1.0 used the same separately authorized manual Trusted Publishing path, with registry provenance and byte identity against GitHub Release assets independently verified. Future registry publications remain separately authorized operations; source-release progress never implies registry publication.
 
 ```text
 v0.6 progressive growth [RELEASED]
@@ -141,7 +141,7 @@ No genuine Workers Free-plan exhaustion/platform-overload event occurred natural
 
 The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.13 final blocker-closure** tranche (#191-#198) are complete without redefining the frozen accounting lifecycle or persisted Store contract. v0.13.0 carries the final correctness, operations, distribution, runtime, and peer-compatibility evidence required for stable promotion.
 
-**v1.1.0 is the released post-v1 integration-ergonomics source line.** #232 adds opt-in Cloudflare exact post-reserve retry, #233 records the no-weak-dedup MCP operation-identity decision, #237 hardens release/backoff/tooling, and #239 adds privacy-safe retry operations telemetry. All are additive and preserve the frozen v1 accounting/replay boundary. The npm registry remains at `v1.0.0` until the separately authorized v1.1.0 Trusted Publishing workflow succeeds; source-release progress does not authorize registry publication.
+**v1.1.0 is the released post-v1 integration-ergonomics source/npm line.** #232 adds opt-in Cloudflare exact post-reserve retry, #233 records the no-weak-dedup MCP operation-identity decision, #237 hardens release/backoff/tooling, and #239 adds privacy-safe retry operations telemetry. All are additive and preserve the frozen v1 accounting/replay boundary. The separately authorized v1.1.0 Trusted Publishing workflow completed successfully, and registry tarballs were verified byte-identical to the GitHub Release assets.
 
 ## v1 completion definition
 
@@ -192,6 +192,7 @@ Before v1.0:
 | #233 MCP read-only operationId ergonomics | v1.1 | **Complete; no new API. Choose fresh-per-dispatch or an explicit retry-stable token; never dedup from weak transport identity** |
 | #237 v1.1 release/backoff/test-tool hardening | v1.1 | **Completed; exact-subpath release smoke, equal-jitter retry backoff, patched Vitest with source-only discovery** |
 | #239 exact-retry operational telemetry | v1.1 | **Completed; privacy-bounded scheduled/recovered/failed events, best-effort delivery, no raw identifiers/errors** |
+| #241 v1.1.0 release / npm verification | v1.1 | **Completed; tagged source release, immutable validated assets, Trusted Publishing, provenance, byte-identity, clean Node 22 registry install** |
 
 ## Release policy
 
