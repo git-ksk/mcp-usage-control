@@ -39,6 +39,8 @@ Replay protection is scoped by:
 
 Use one stable `operationId` for retries of one logical invocation. It is an idempotency input, not identity proof.
 
+For single-round reads without an existing stable token, see [MCP logical operation identity](mcp-operation-identity.md) for the fresh-per-dispatch versus retry-stable-token decision.
+
 ### `Budget`
 
 ```ts
@@ -466,6 +468,8 @@ interface ProtectToolOptions<TArgs, TResult> {
 ```
 
 For tools with no input schema, use `noInput: true`.
+
+`operationId()` returns application-defined logical operation identity. It is not transport/request identity or authentication. If no retry-stable logical key exists for a single-round read, use a fresh ID per received dispatch rather than deriving one from `ctx.mcpReq.id`; see [MCP logical operation identity](mcp-operation-identity.md).
 
 ### `protectTool(options, handler)`
 

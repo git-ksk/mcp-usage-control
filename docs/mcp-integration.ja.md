@@ -344,13 +344,17 @@ coreのreplay protectionは次の組み合わせを単位にしています。
 (tenantId, principal.id, tool, operationId)
 ```
 
-single-roundではapplication側がstableなIDを返してください。
+single-roundでは、同じlogical executionのretryでstable、intentional new executionでは別になるIDをapplication側が返します。`operationId` はidempotencyのための識別子であり、認証情報ではありません。
 
-multi-roundでは `operationId()` は初回だけ評価され、以後は保存済みflowのIDを引き継ぎます。
+`ctx.mcpReq.id` はtransport request identityにすぎません。session IDと組み合わせても1 logical user actionの証拠にはなりません。retryでrequest IDが変わることがあり、completed response後に同じIDが再利用されることもあります。
 
-各roundの新しいJSON-RPC request IDを、そのままlogical operation IDとして使わないでください。
+ordinary readでapplication-levelのretry-stable keyがない場合は、received dispatchごとにfresh server-side IDを使います。例: `operationId: () => crypto.randomUUID()`。intentional repeated readを誤ってdedupしない代わりに、fresh transport retryではquotaを再消費する可能性を受け入れます。
 
-`operationId` はidempotencyのための識別子であり、認証情報ではありません。
+retryを跨いで1 accounting operationにしたいproductは、validated application-level action / idempotency IDを定義し、intentional new actionごとにnew valueを作り、同じactionのretry時だけreuseしてください。stable usage IDは2個目のindependent reservationを防ぎますが、lost business responseをcache / replayしません。
+
+adapterはlogical intentやID provenanceを推測できないため、JSON-RPC request-ID helper、weak read-only dedup window、「stable ID」を断定するobserver diagnosticを意図的に追加しません。design decisionとcanonical exampleは [MCP logical operation identity](mcp-operation-identity.ja.md) を参照してください。
+
+multi-roundでは `operationId()` は初回だけ評価され、以後は保存済みflowのIDを引き継ぎます。各roundのfresh JSON-RPC request IDからlogical operation IDを作り直しません。
 
 ## Principalは信頼できるserver-side情報から作る
 

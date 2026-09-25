@@ -32,6 +32,7 @@ If you are implementing a custom store, read the **[Store implementation contrac
 - [Project positioning](positioning.md) — the failure-safe transactional enforcement focus, competitive boundary, and what intentionally stays outside core.
 - [Architecture](architecture.md) — reserve/liability/settlement, multi-budget atomicity, and crash/retry safety.
 - [MCP protocol conformance](mcp-conformance.md) — the current protocol/SDK baseline, fresh-request multi-round proof, and horizontal-scale/session-affinity assumptions.
+- [MCP logical operation identity](mcp-operation-identity.md) — v1.1 decision for single-round reads without a caller idempotency key: fresh-per-dispatch fallback versus explicit retry-stable application action IDs.
 - [Progressive MCP growth](progressive-mcp-integration.md) — safe small-reserve/top-up/stop pattern for incrementally metered MCP work.
 - [Atomic heterogeneous usage vectors](vector-usage.md) — v0.7 contract for atomically reserving, growing, and settling unlike units in one logical operation.
 - [Cost-bearing operations](cost-bearing-operations.md) — v0.11 mapping for bounded provider cost, shared accounting scopes, billable retries, conservative ambiguity, and proven-no-effect release.

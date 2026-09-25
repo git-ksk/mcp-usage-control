@@ -222,7 +222,15 @@ Core replay protection is scoped to:
 
 For single-round tools, `operationId` should be stable across retries of the same logical execution and different for intentional new executions. It is non-secret idempotency identity, not authorization proof.
 
-`ctx.mcpReq.id` is useful for request-scoped cases and tests, but applications should not assume a client/host will preserve the same JSON-RPC request ID across logical retries. For `protectMultiRoundTool()`, only the first round calls the application `operationId()` callback; resumed rounds reuse the trusted original identity.
+`ctx.mcpReq.id` is transport request identity only. Do not combine it with a session ID and assume that pair proves one logical user action: request IDs can change on retry and can be reused after a completed response.
+
+For an ordinary read with no application-level retry-stable key, use a fresh server-side ID for every received dispatch, for example `operationId: () => crypto.randomUUID()`. This avoids false deduplication of intentional repeated reads, while accepting that a fresh transport retry can consume quota again.
+
+If the product needs one accounting operation across retries, define a validated application-level action/idempotency ID, create a new value for each intentional action, and reuse it only for retries of that same action. A stable usage ID prevents a second independent reservation; it does not cache/replay a lost business response.
+
+The adapter intentionally does not expose a JSON-RPC request-ID helper, weak read-only dedup window, or “stable ID” observer diagnostic because it cannot infer logical intent or ID provenance. See [MCP logical operation identity](mcp-operation-identity.md) for the design decision and canonical examples.
+
+For `protectMultiRoundTool()`, only the first round calls the application `operationId()` callback; resumed rounds reuse the trusted original identity.
 
 ## Lease heartbeat
 

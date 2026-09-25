@@ -10,6 +10,7 @@ Start with the symptom below. Preserve the original operation identity and error
 | --- | --- | --- |
 | Package or runtime error | Node.js version, ESM mode, installed packages and peers | [Getting started](getting-started.md) |
 | `duplicate_operation` | Whether this is a retry of an existing operation | [Operation reconciliation](operation-reconciliation.md) |
+| Single-round read retries are double-metered or rejected as duplicates | Whether a stable logical-action token exists | [MCP logical operation identity](mcp-operation-identity.md) |
 | `quota_exceeded` | All budgets in the quote, not only the displayed user budget | [Budget windows](accounting-window-keys.md) |
 | Lease expires during work | Renewal, process pauses, and store connectivity | [MCP integration](mcp-integration.md) |
 | Quota resets after restart | Whether `MemoryUsageStore` is in use | [Choose a store](getting-started.md#choosing-a-production-store) |
@@ -28,6 +29,12 @@ For local archives, use [Source / local tarballs](using-from-source.md). Do not 
 This denial is intentional during replay retention. Reuse the same `operationId` for the same logical operation, but do not expect duplicate admission to replay the business result. The replay scope is `(tenantId, principal.id, tool, operationId)`.
 
 If an acknowledgement was lost, follow the selected store's [reconciliation path](operation-reconciliation.md) where supported. Do not generate a fresh ID merely to bypass the guard. Business-result recovery and side-effect idempotency are application responsibilities.
+
+## Single-round read retry identity is unclear
+
+Without an application/client token that is stable for one logical user action, the MCP adapter cannot tell a transport retry from an intentional repeated read. Do not solve this by combining session identity with `ctx.mcpReq.id` or by adding a heuristic TTL dedup cache.
+
+Choose either a fresh `operationId` per dispatch and accept possible retry double-metering, or supply an explicit retry-stable logical-action token. See [MCP logical operation identity](mcp-operation-identity.md).
 
 ## `quota_exceeded` despite a visible remaining balance
 

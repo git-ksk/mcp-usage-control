@@ -2,7 +2,7 @@
 
 MCP TypeScript SDK v2 adapter for `mcp-usage-control`.
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or locally packed `mcp-usage-control` + `mcp-usage-control-mcp` tarballs. See [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md) / [日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md).
+> **Current distribution status:** `mcp-usage-control-mcp` v1.0.0 is published to npm. Repository checkouts/local tarballs remain supported for development; see [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md) / [日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md).
 
 ## English
 
@@ -13,6 +13,14 @@ MCP TypeScript SDK v2 adapter for `mcp-usage-control`.
 For a tool with no input schema, set `noInput: true`. For input-schema tools, omit it. The adapter normalizes the SDK no-input callback/runtime shape without guessing whether `{}` is real input.
 
 It distinguishes normal success, `{ isError: true }`, and thrown errors. Invalid/throwing cost classifiers cause the full reservation to be settled before `UsageClassificationError` is surfaced. Ambiguous settlement failures are surfaced as `UsageSettlementError` and are not blindly retried.
+
+### Single-round operation identity
+
+For `protectTool()`, `operationId` means **logical operation identity**, not JSON-RPC request identity. Do not derive it from `ctx.mcpReq.id` or session + request ID and assume that makes retries stable.
+
+If the application has no retry-stable logical key for an ordinary read, the canonical conservative fallback is `operationId: () => crypto.randomUUID()`: each received dispatch is metered separately, so a fresh transport retry may consume quota again. If the product needs one accounting operation across retries, supply a validated application-level action/idempotency ID and reuse it only for retries of that same action.
+
+The adapter intentionally provides no weak request-ID dedup helper and no read-only dedup cache because it cannot distinguish a transport retry from an intentional repeated read. See [MCP logical operation identity](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-operation-identity.md).
 
 ### Returning a bounded remaining value
 
@@ -62,6 +70,7 @@ Resume tokens are one-time. A concurrent or repeated resume after one caller has
 
 - [Current source/tarball usage](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md)
 - [MCP integration](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-integration.md)
+- [MCP logical operation identity](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-operation-identity.md)
 - [API reference](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/api-reference.md)
 - [Architecture](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/architecture.md)
 
@@ -76,6 +85,14 @@ The application remains responsible for trusted principal/tenant derivation, aut
 input schemaがないtoolでは `noInput: true` を指定し、input schemaありでは省略します。SDKのno-input callback / runtime shapeをnormalizeしますが、`{}` がreal inputかどうかを推測しません。
 
 normal success、`{ isError: true }`、thrown errorを区別します。classifierがthrow / invalid unitsを返した場合はfull reservationをsettleしてから `UsageClassificationError` を表面化します。ambiguous settlement failureは `UsageSettlementError` として表面化しblind retryしません。
+
+### Single-round operation identity
+
+`protectTool()` の `operationId` は **logical operation identity** であり、JSON-RPC request identityではありません。`ctx.mcpReq.id` や session + request ID から導出してretry-stableだと扱わないでください。
+
+ordinary readでapplication側にretry-stableなlogical keyがない場合、canonical conservative fallbackは `operationId: () => crypto.randomUUID()` です。received dispatchごとに別meteringになるためfresh transport retryではquotaを再消費する可能性があります。retryを跨いで1 accounting operationにしたいproductは、validated application-level action / idempotency IDを用意し、同じactionのretry時だけreuseしてください。
+
+adapterはtransport retryとintentional repeated readを区別できないため、weak request-ID dedup helperやread-only dedup cacheを意図的に提供しません。詳しくは [MCP logical operation identity](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-operation-identity.ja.md) を参照してください。
 
 ### boundedなremaining値を返す
 
@@ -125,6 +142,7 @@ resume tokenはone-timeです。同じtokenのconcurrent/repeated resumeは1 cal
 
 - [現在のsource / tarball利用手順](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md)
 - [MCP integration](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-integration.ja.md)
+- [MCP logical operation identity](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/mcp-operation-identity.ja.md)
 - [API reference](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/api-reference.ja.md)
 - [Architecture](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/architecture.ja.md)
 

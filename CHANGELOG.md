@@ -10,6 +10,10 @@ All notable project changes are recorded here.
 
 - Added optional `mcp-usage-control-cloudflare/exact-retry` support for bounded exact replay of scalar `markLiable()`, `renew()`, and `settle()` after retryable transport failures, while initial reserve, growth, and vector transitions remain single-attempt (#232).
 
+### Changed
+
+- Recorded the MCP single-round read operation-identity decision: no weak JSON-RPC/session-derived dedup helper is added; applications without a retry-stable logical key should use a fresh server-side ID per dispatch, while products that need retry-stable metering must provide an explicit validated logical action ID (#233).
+
 ## [1.0.0] - 2026-09-04
 
 First stable GitHub/source release. v1.0.0 is a feature-free promotion of the accounting, recovery, storage, MCP-integration, and release-safety surface hardened through v0.13. npm publication remains separately authorized under #6 and is not part of this source release.

@@ -39,6 +39,8 @@ replay protectionのscope:
 
 同じlogical invocationのretryでは1つのstable `operationId` を使います。identity proofではなくidempotency inputです。
 
+single-round readでstable tokenが無い場合のfresh-per-dispatch / retry-stable tokenの選択は [MCP logical operation identity](mcp-operation-identity.ja.md) を参照してください。
+
 ### `Budget`
 
 ```ts
@@ -461,6 +463,8 @@ interface ProtectToolOptions<TArgs, TResult> {
 ```
 
 input schemaなしtoolは `noInput: true` を指定します。
+
+`operationId()` はapplication-defined logical operation identityを返します。transport/request identityやauthenticationではありません。single-round readにretry-stableなlogical keyがない場合は `ctx.mcpReq.id` から推測せず、received dispatchごとにfresh IDを使います。詳しくは [MCP logical operation identity](mcp-operation-identity.ja.md) を参照してください。
 
 ### `protectTool(options, handler)`
 

@@ -10,6 +10,10 @@
 
 - optionalな `mcp-usage-control-cloudflare/exact-retry` を追加し、retry可能なtransport failure後にscalar `markLiable()` / `renew()` / `settle()` のexact replayだけをboundedに実行できるようにしました。initial reserve、growth、vector transitionはsingle-attemptのままです (#232)。
 
+### Changed
+
+- MCP single-round readのoperation identity方針を確定しました。weakなJSON-RPC / session由来dedup helperは追加せず、retry-stable logical keyがないapplicationはdispatchごとにfresh server-side IDを使い、retry-stable meteringが必要なproductはexplicitにvalidated logical action IDを用意します (#233)。
+
 ## [1.0.0] - 2026-09-04
 
 初のstable GitHub/source releaseです。v1.0.0はv0.13までにhardenしたaccounting / recovery / storage / MCP integration / release-safety surfaceをfeature-freeでstable promotionします。npm publicationは#6のseparate authorization対象のままで、このsource releaseには含めません。

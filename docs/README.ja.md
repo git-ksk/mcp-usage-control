@@ -63,6 +63,7 @@ protectTool()
 - [Project positioning](positioning.ja.md) — failure-safeなtransactional enforcementへ集中する理由、競争上の境界、coreへ入れないもの
 - [Architecture](architecture.ja.md) — reserve、`markLiable()`、settle、retry、crash時の考え方
 - [MCP protocol conformance](mcp-conformance.ja.md) — current protocol / SDK baseline、fresh-request multi-round proof、horizontal scale / session affinityの前提
+- [MCP logical operation identity](mcp-operation-identity.ja.md) — caller idempotency keyがないsingle-round readについて、fresh-per-dispatch fallbackとexplicit retry-stable application action IDを分けるv1.1方針
 - [Progressive MCP growth](progressive-mcp-integration.ja.md) — incrementally metered MCP workでのsmall reserve / top-up / safe stop pattern
 - [Atomic heterogeneous usage vector](vector-usage.ja.md) — 異種unitを1 logical operationでatomicにreserve / grow / settleするv0.7 contract
 - [Cost-bearing operation](cost-bearing-operations.ja.md) — bounded provider cost、shared accounting scope、billable retry、conservative ambiguity、proven-no-effect releaseを既存contractへ安全にmappingするv0.11方針
