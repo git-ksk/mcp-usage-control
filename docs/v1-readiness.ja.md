@@ -21,7 +21,7 @@ v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / g
 - #106でRedis / Firestore / Cloudflare persisted-stateのupgrade、rollback、future-schema fail-closed、fresh-domain reset境界をfreeze
 - #161でv1 package / lifecycle / status / error vocabularyをfreezeし、MCP settlement alias normalizationを明示
 - #160でprotectedな `test (22)` をapplicableなNode / Redis / package / Cloudflare / Firestore evidenceのaggregate release-safety gateへ変更
-- #24でreal Monokura Cloudflare credential rotation、新caller proof、rotated-out credential rejectionを既存accounting identityのまま完了。genuine Workers platform-limit exhaustion / overloadは自然観測しておらず、deployed evidenceとしてclaimしません。
+- #24でreal production-dogfood Cloudflare credential rotation、新caller proof、rotated-out credential rejectionを既存accounting identityのまま完了。genuine Workers platform-limit exhaustion / overloadは自然観測しておらず、deployed evidenceとしてclaimしません。
 
 v0.11 completion trancheはclose済みです。#6のseparate publication gateは `v1.0.0` に対して明示authorizeされ完了しました。今後のregistry releaseもsource releaseから暗黙authorizeせず、manual publication workflowを使います。
 
@@ -119,7 +119,7 @@ Store-facing / direct lease settlement outcomeは意図的にextensible string�
 
 ### Real Cloudflare operational evidence (#24) — complete
 
-document済みzero-downtime rotationをreal Monokura deploymentで実行しました。overlap中はnew / old credentialが両方成功し、Cloud Runを新しいexplicit Secret Manager versionへ切替、新revisionでreal `list_boards` callerが成功し、その後retired credential rejectionも確認しました。Durable Object / accounting identityは維持し、Firestore quota fallbackも有効化していません。
+document済みzero-downtime rotationをreal production dogfood deploymentで実行しました。overlap中はnew / old credentialが両方成功し、Cloud Runを新しいexplicit Secret Manager versionへ切替、新revisionでreal `list_boards` callerが成功し、その後retired credential rejectionも確認しました。Durable Object / accounting identityは維持し、Firestore quota fallbackも有効化していません。
 
 genuine Workers Free-plan exhaustion / platform overloadは自然発生していません。そのため全platform-limit条件のdeployed empirical evidenceまではclaimせず、shared quotaを意図的に燃やして再現しないboundaryを維持します。
 

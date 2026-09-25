@@ -21,7 +21,7 @@ The v0.11 freeze line has now resolved the accounting/reliability/runtime/storag
 - #106 froze Redis/Firestore/Cloudflare persisted-state upgrade, rollback, future-schema fail-closed, and fresh-domain reset boundaries;
 - #161 froze the v1 package/lifecycle/status/error vocabulary and made MCP settlement alias normalization explicit;
 - #160 made the already-protected `test (22)` context an aggregate release-safety gate for applicable Node/Redis/package/Cloudflare/Firestore evidence;
-- #24 completed the real Monokura Cloudflare credential rotation, new-caller proof, and rotated-out credential rejection while preserving the existing accounting identity. Genuine Workers platform-limit exhaustion/overload was not naturally observed and is not claimed as deployed evidence.
+- #24 completed the real production-dogfood Cloudflare credential rotation, new-caller proof, and rotated-out credential rejection while preserving the existing accounting identity. Genuine Workers platform-limit exhaustion/overload was not naturally observed and is not claimed as deployed evidence.
 
 The v0.11 completion tranche is closed. The separate #6 publication gate was explicitly authorized and completed for `v1.0.0`; future registry releases continue to use the manual publication workflow rather than being implied by source releases.
 
@@ -119,7 +119,7 @@ Store-facing/direct lease settlement outcomes intentionally remain extensible st
 
 ### Real Cloudflare operational evidence (#24) — complete
 
-The documented zero-downtime rotation was executed against the real Monokura deployment. New and old credentials both worked during overlap; Cloud Run moved to the new explicit Secret Manager version; a real `list_boards` caller succeeded on the new revision; and the retired credential was rejected afterward. The Durable Object/accounting identity remained unchanged and no Firestore quota fallback was enabled.
+The documented zero-downtime rotation was executed against the real production dogfood deployment. New and old credentials both worked during overlap; Cloud Run moved to the new explicit Secret Manager version; a real `list_boards` caller succeeded on the new revision; and the retired credential was rejected afterward. The Durable Object/accounting identity remained unchanged and no Firestore quota fallback was enabled.
 
 A genuine Workers Free-plan exhaustion/platform-overload event did not occur naturally. The project therefore does not claim deployed empirical evidence for every platform-limit condition; that boundary remains explicit rather than being manufactured by burning shared quota.
 
