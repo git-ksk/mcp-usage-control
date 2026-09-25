@@ -12,6 +12,7 @@
 
 ### Changed
 
+- Cloudflare exact-retry helperへbounded exponential equal-jitter backoffを追加し、GitHub Releaseのpacked-byte smokeでexact subpathを直接検証し、development test runnerをpatched Vitest lineへ更新しました (#237)。
 - MCP single-round readのoperation identity方針を確定しました。weakなJSON-RPC / session由来dedup helperは追加せず、retry-stable logical keyがないapplicationはdispatchごとにfresh server-side IDを使い、retry-stable meteringが必要なproductはexplicitにvalidated logical action IDを用意します (#233)。
 
 ## [1.0.0] - 2026-09-04

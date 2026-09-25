@@ -107,7 +107,7 @@ settlementはtombstone retention中、identical replayがidempotentです。異�
 
 ambiguous failureをgeneric automatic retry middlewareで隠さないでください。
 
-より限定されたscalar post-reserve caseでは、optionalな `mcp-usage-control-cloudflare/exact-retry` wrapperがtimeout / network / 408 / 429 / 5xx transport failure後に、同一 `markLiable()` / `renew()` / `settle()` inputだけをexact replayできます。initial reserve、growth、vector reserve、vector settlementはretryしません。詳しくは [Cloudflare exact post-reserve retry](cloudflare-exact-retry.ja.md) を参照してください。
+より限定されたscalar post-reserve caseでは、optionalな `mcp-usage-control-cloudflare/exact-retry` wrapperがtimeout / network / 408 / 429 / 5xx transport failure後に、同一 `markLiable()` / `renew()` / `settle()` inputだけをexact replayできます。eligible retryは即時再送せず、bounded exponential equal-jitter backoffで待機します。initial reserve、growth、vector reserve、vector settlementはretryしません。詳しくは [Cloudflare exact post-reserve retry](cloudflare-exact-retry.ja.md) を参照してください。
 
 ## Privacy boundary
 

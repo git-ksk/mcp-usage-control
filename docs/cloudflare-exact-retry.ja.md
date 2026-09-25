@@ -53,12 +53,17 @@ const remote = new RemoteCloudflareUsageStore({
 const store = createExactRetryingRemoteCloudflareUsageStore(remote, {
   // initial attemptを含む総call数。default: 2、許容範囲: 1..4。
   maxAttempts: 2,
+  // equal-jitter exponential backoff。default: base 100ms、cap 1000ms。
+  initialBackoffMs: 100,
+  maxBackoffMs: 1_000,
 });
 ```
 
-`maxAttempts: 2` はexact replay最大1回です。`maxAttempts: 1` にするとwrapper shapeを変えずretryを無効化できます。
+`maxAttempts: 2` はexact replay最大1回です。`maxAttempts: 1` にするとwrapper shapeを変えずretryを無効化できます。各retry前にはbounded exponential **equal jitter** で待機します。最初のretryは `initialBackoffMs` の50〜100%、以降はbaseを2倍し `maxBackoffMs` でcapします。defaultは100ms / 1000msで、両delay設定は1〜60000msに制限します。
 
 対象methodでは、最初のattempt前にscalar inputをsnapshotし、retryでも同じsnapshotを使います。reservation ID、TTL、actual units、settlement outcomeをattempt間で変更しません。
+
+backoffはtransport failureがretryableと判定済みで、かつ次attemptが残っている場合だけ適用します。authentication failure、protocol error、conflict、通常の4xx、single-attempt methodにはretry delayを入れません。
 
 `renew()` のTTLはStore clock基準のrelative値です。最初のrenewalがcommit済みでACKだけ失われた場合、exact replayで `expiresAt` がさらに先へ進むことがあります。quota capacityを長めに保持し得るconservativeな挙動であり、新しいreservation作成やreserved units増加は行いません。
 

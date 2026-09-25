@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CloudflareUsageTransportError,
   RemoteCloudflareUsageStore,
@@ -13,6 +13,8 @@ const request = {
   args: {},
 };
 
+const fastBackoff = { initialBackoffMs: 1, maxBackoffMs: 1 } as const;
+
 const recovery = {
   aggregate: { pendingCount: 0, pendingUnits: 0, liableCount: 0, liableUnits: 0 },
 };
@@ -25,6 +27,11 @@ function jsonResponse(result: unknown): Response {
 }
 
 describe('createExactRetryingRemoteCloudflareUsageStore', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it('never retries initial reserve ambiguity', async () => {
     let calls = 0;
     const store = new RemoteCloudflareUsageStore({
@@ -34,7 +41,7 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         throw new Error('lost reserve acknowledgement');
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store);
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
 
     await expect(
       retrying.reserve({
@@ -78,7 +85,7 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         return jsonResponse(success);
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store);
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
 
     await expect(invoke(retrying)).resolves.toBeDefined();
     expect(calls).toBe(2);
@@ -96,7 +103,7 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         return jsonResponse({ expiresAt: 5_000 });
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store);
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
 
     await expect(retrying.markLiable({ reservationId })).resolves.toMatchObject({ reservationId });
     expect(calls).toBe(2);
@@ -114,7 +121,7 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
           return jsonResponse({ expiresAt: 5_000 });
         },
       });
-      const retrying = createExactRetryingRemoteCloudflareUsageStore(store);
+      const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
 
       await expect(retrying.markLiable({ reservationId })).resolves.toMatchObject({ reservationId });
       expect(calls).toBe(2);
@@ -135,7 +142,7 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         return new Response('', { status });
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store);
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
 
     await expect(retrying.markLiable({ reservationId })).rejects.toBeInstanceOf(
       CloudflareUsageTransportError,
@@ -156,12 +163,103 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         );
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store);
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
 
     await expect(
       retrying.settle({ reservationId, actualUnits: 1, outcome: 'success' }),
     ).rejects.toThrow(/already settled/i);
     expect(calls).toBe(2);
+  });
+
+  it('uses bounded exponential equal-jitter backoff between retryable attempts', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const callTimes: number[] = [];
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => {
+        callTimes.push(Date.now());
+        throw new Error('still ambiguous');
+      },
+    });
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+      maxAttempts: 4,
+      initialBackoffMs: 100,
+      maxBackoffMs: 250,
+    });
+
+    const result = expect(retrying.markLiable({ reservationId })).rejects.toMatchObject({ code: 'network' });
+    await vi.runAllTimersAsync();
+    await result;
+
+    // Equal jitter with Math.random() = 0 uses the lower half-bound:
+    // 50ms, 100ms, then the 250ms cap contributes 125ms.
+    expect(callTimes).toEqual([0, 50, 150, 275]);
+  });
+
+  it('keeps equal-jitter delay at or below each exponential cap', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    vi.spyOn(Math, 'random').mockReturnValue(0.999999);
+
+    const callTimes: number[] = [];
+    const store = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => {
+        callTimes.push(Date.now());
+        throw new Error('still ambiguous');
+      },
+    });
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, {
+      maxAttempts: 4,
+      initialBackoffMs: 100,
+      maxBackoffMs: 250,
+    });
+
+    const result = expect(retrying.markLiable({ reservationId })).rejects.toMatchObject({ code: 'network' });
+    await vi.runAllTimersAsync();
+    await result;
+    expect(callTimes).toEqual([0, 100, 300, 550]);
+  });
+
+  it('does not add retry backoff to non-retryable or single-attempt calls', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    const nonRetryable = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => new Response('', { status: 400 }),
+    });
+    const retryingNonRetryable = createExactRetryingRemoteCloudflareUsageStore(nonRetryable, {
+      initialBackoffMs: 500,
+      maxBackoffMs: 1_000,
+    });
+    await expect(retryingNonRetryable.markLiable({ reservationId })).rejects.toBeInstanceOf(
+      CloudflareUsageTransportError,
+    );
+    expect(Date.now()).toBe(0);
+
+    const reserveStore = new RemoteCloudflareUsageStore({
+      endpoint: 'https://usage.example.test/v1/usage-store',
+      fetch: async () => {
+        throw new Error('ambiguous reserve');
+      },
+    });
+    const retryingReserve = createExactRetryingRemoteCloudflareUsageStore(reserveStore, {
+      initialBackoffMs: 500,
+      maxBackoffMs: 1_000,
+    });
+    await expect(
+      retryingReserve.reserve({
+        request,
+        units: 1,
+        budgets: [{ key: 'budget-a', limit: 10 }],
+        ttlMs: 1_000,
+      }),
+    ).rejects.toMatchObject({ code: 'network' });
+    expect(Date.now()).toBe(0);
   });
 
   it('honors explicit maxAttempts bounds', async () => {
@@ -173,7 +271,7 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         throw new Error('still ambiguous');
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, { maxAttempts: 3 });
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, { maxAttempts: 3, ...fastBackoff });
 
     await expect(retrying.markLiable({ reservationId })).rejects.toMatchObject({ code: 'network' });
     expect(calls).toBe(3);
@@ -184,6 +282,18 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
     expect(() => createExactRetryingRemoteCloudflareUsageStore(store, { maxAttempts: 5 })).toThrow(
       /maxAttempts/,
     );
+    expect(() =>
+      createExactRetryingRemoteCloudflareUsageStore(store, { initialBackoffMs: 0 }),
+    ).toThrow(/initialBackoffMs/);
+    expect(() =>
+      createExactRetryingRemoteCloudflareUsageStore(store, { maxBackoffMs: 60_001 }),
+    ).toThrow(/maxBackoffMs/);
+    expect(() =>
+      createExactRetryingRemoteCloudflareUsageStore(store, {
+        initialBackoffMs: 1_000,
+        maxBackoffMs: 500,
+      }),
+    ).toThrow(/maxBackoffMs/);
   });
 
   it.each([
@@ -241,7 +351,7 @@ describe('createExactRetryingRemoteCloudflareUsageStore', () => {
         throw new Error('ambiguous');
       },
     });
-    const retrying = createExactRetryingRemoteCloudflareUsageStore(store);
+    const retrying = createExactRetryingRemoteCloudflareUsageStore(store, fastBackoff);
 
     await expect(invoke(retrying)).rejects.toMatchObject({ code: 'network' });
     expect(calls).toBe(1);
