@@ -6,6 +6,12 @@ All notable project changes are recorded here.
 
 ## [Unreleased]
 
+No entries yet.
+
+## [1.1.0] - 2026-09-26
+
+Post-v1 integration and operations release. v1.1.0 adds narrowly scoped Cloudflare retry ergonomics and MCP operation-identity guidance without changing the frozen accounting lifecycle or persisted Store contracts.
+
 ### Added
 
 - Added privacy-bounded, best-effort operational telemetry for Cloudflare exact retries (`retry.scheduled`, `retry.recovered`, `retry.failed`) without exposing usage identities, endpoints, or raw errors (#239).
@@ -13,8 +19,15 @@ All notable project changes are recorded here.
 
 ### Changed
 
-- Hardened the Cloudflare exact-retry helper with bounded exponential equal-jitter backoff between eligible attempts, added exact-subpath checks to the GitHub Release packed-byte smoke, and moved the development test runner to a patched Vitest line (#237).
+- Hardened the Cloudflare exact-retry helper with bounded exponential equal-jitter backoff between eligible attempts, added exact-subpath checks to the GitHub Release packed-byte smoke, and moved the development test runner to patched Vitest 4.1.11 with source-only test discovery (#237).
 - Recorded the MCP single-round read operation-identity decision: no weak JSON-RPC/session-derived dedup helper is added; applications without a retry-stable logical key should use a fresh server-side ID per dispatch, while products that need retry-stable metering must provide an explicit validated logical action ID (#233).
+
+### Release boundary
+
+- Keeps the v1 reserve -> liability -> grow -> renew -> settle accounting model, replay scope, provider storage contracts, and Node.js 22+ runtime floor unchanged.
+- Keeps ambiguous initial Cloudflare reserve recovery explicit through read-only reconciliation; v1.1.0 does not introduce blind reserve retry.
+- Aligns all five public package manifests at `1.1.0`; supported release evidence remains Node.js 22/24 with the aggregate `test (22)` gate.
+- This GitHub/source release does not itself publish to npm. Registry publication remains a separate manually authorized Trusted Publishing workflow using the exact validated GitHub Release tarballs.
 
 ## [1.0.0] - 2026-09-04
 

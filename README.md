@@ -154,7 +154,7 @@ Provider guides cover persistence, deployment, clock, and contention requirement
 
 ## Project status
 
-The five packages use the **v1.0.0 stable baseline**. CI covers Node.js 22/24, Redis, MCP SDK v2 integration, Cloudflare local/workerd, Firestore Emulator, and package-consumer checks. See [release evidence](docs/v1-readiness.md) for the scope of validation.
+The five packages use the **v1.1.0 GitHub/source release baseline**. The npm registry baseline remains **v1.0.0** until the separately authorized v1.1.0 Trusted Publishing workflow completes. CI covers Node.js 22/24, Redis, MCP SDK v2 integration, Cloudflare local/workerd, Firestore Emulator, and package-consumer checks. See [release evidence](docs/v1-readiness.md) for the scope of validation.
 
 Single-round and multi-round MCP accounting are supported. A stable first-class MCP Tasks adapter remains deferred; see [Tasks accounting](docs/mcp-tasks-accounting.md) for the defined lifecycle boundary.
 
