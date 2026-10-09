@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v1.1.1 is the latest published stable GitHub/npm baseline; main source manifests now stage an unreleased v1.2.0 candidate.** All five published v1.1.1 Node.js 22+ packages were released on 2026-10-09 through separately approved GitHub Release and npm Trusted Publishing workflows. Their npm tarballs are SHA-256 byte-identical to the validated GitHub assets, with registry provenance and clean Node 22 consumer checks.
+**The v1.1.1 release is a historically verified GitHub/npm baseline; v1.2.0 is the source version prepared for the next independently authorized release.** For the currently published version consult [GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases) and the [npm package](https://www.npmjs.com/package/mcp-usage-control). All five published v1.1.1 Node.js 22+ packages were released on 2026-10-09 through separately approved GitHub Release and npm Trusted Publishing workflows. Their npm tarballs are SHA-256 byte-identical to the validated GitHub assets, with registry provenance and clean Node 22 consumer checks.
 
 The first-publication gate #6 remains complete and closed. v1.1.0 used the same separately authorized manual Trusted Publishing path, with registry provenance and byte identity against GitHub Release assets independently verified. Future registry publications remain separately authorized operations; source-release progress never implies registry publication.
 
@@ -144,9 +144,9 @@ The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.
 
 **v1.1.0 is the released post-v1 integration-ergonomics source/npm line.** #232 adds opt-in Cloudflare exact post-reserve retry, #233 records the no-weak-dedup MCP operation-identity decision, #237 hardens release/backoff/tooling, and #239 adds privacy-safe retry operations telemetry. All are additive and preserve the frozen v1 accounting/replay boundary. The separately authorized v1.1.0 Trusted Publishing workflow completed successfully, and registry tarballs were verified byte-identical to the GitHub Release assets.
 
-## v1.1.1 completed; v1.2.0 proposed
+## v1.1.1 completed; v1.2.0 implementation and release criteria
 
-The v1.1.1 maintenance plan below has **shipped** under separately approved source/npm releases (#246, #248). The v1.2.0 developer-experience plan remains a proposal without release authorization or a committed date. The existing v1 public API, Store persistence contracts, and accounting/replay semantics remain the baseline.
+The v1.1.1 maintenance plan below **shipped** under separately approved source/npm releases (#246, #248). The scoped v1.2.0 developer-experience implementation is complete (#253–#256); the pre-release audit is tracked in #263. Source release and npm publication each remain independently authorized operations, and implementation completion does not grant that approval. The frozen v1 public API, Store persistence contracts, and accounting/replay semantics remain the baseline.
 
 ### v1.1.1 — maintenance and security patch (released 2026-10-09)
 
@@ -169,7 +169,7 @@ The v1.1.1 maintenance plan below has **shipped** under separately approved sour
 
 **Goal:** reduce integration mistakes and strengthen reusable verification **without creating a second accounting authority or duplicating shipped helpers**. Select precise issues from demonstrated user/integration gaps before committing implementation.
 
-**Tracked implementation scope:** [#252](https://github.com/git-ksk/mcp-usage-control/issues/252) is the parent; [#253](https://github.com/git-ksk/mcp-usage-control/issues/253) is the P1 runnable official-SDK protected MCP server/client example; [#254](https://github.com/git-ksk/mcp-usage-control/issues/254) is the parallel P1 operator-safe failure/reconciliation playbook; [#255](https://github.com/git-ksk/mcp-usage-control/issues/255) is the P1 official-SDK lifecycle E2E built on #253; and [#256](https://github.com/git-ksk/mcp-usage-control/issues/256) is the P2 version-claim / packed-consumer compatibility follow-up. #253, #254, and #255 have merged to main; #256 is validating exact candidate-tarball compatibility. **No v1.2.0 GitHub Release or npm publication has occurred.** Reuse existing core/Store/flow conformance and peer CI; no new billing/authorization authority or automatic ambiguous-call retry.
+**Tracked implementation scope:** [#252](https://github.com/git-ksk/mcp-usage-control/issues/252) is the parent; [#253](https://github.com/git-ksk/mcp-usage-control/issues/253) is the P1 runnable official-SDK protected MCP server/client example; [#254](https://github.com/git-ksk/mcp-usage-control/issues/254) is the parallel P1 operator-safe failure/reconciliation playbook; [#255](https://github.com/git-ksk/mcp-usage-control/issues/255) is the P1 official-SDK lifecycle E2E built on #253; and [#256](https://github.com/git-ksk/mcp-usage-control/issues/256) is the P2 version-claim / packed-consumer compatibility follow-up. All four implementation issues #253–#256 are merged to main; pre-release audit #263 records the remaining source-release gate. A successful implementation merge is not a GitHub Release or npm publication. Reuse existing core/Store/flow conformance and peer CI; no new billing/authorization authority or automatic ambiguous-call retry.
 
 - **MCP adoption path:** improve an end-to-end, runnable `protectTool()` example covering trusted principal/operation ID, realistic quote/reserve/liability/settlement, denial/error handling, and the Memory-to-production-Store decision. Reuse the existing getting-started guide, `free-plus-credits` example, and MCP integration guidance rather than introducing a competing API.
 - **Operational playbooks:** document safe provider-specific inspection, reconcile/restore decisions, quota-window projections, and incident diagnosis using already shipped `UsageOperationalMonitor`, read-only reconciliation, and threshold/projection helpers. Add a new **read-only, non-authoritative** helper only if a reproducible gap remains after that reuse analysis; never derive billing balances from observer telemetry.
@@ -183,7 +183,7 @@ The v1.1.1 maintenance plan below has **shipped** under separately approved sour
 3. Portable conformance, provider-specific regression evidence, supported-runtime/peer matrix, and the protected aggregate release gate remain green, with bilingual docs and examples kept synchronized.
 4. No embedded authentication, subscription billing, pricing catalog, generic gateway/control plane, authoritative dashboard, or business-side-effect replay is added to the core.
 
-**Execution order:** v1.1.1 security remediation, verification, and separately authorized GitHub/npm releases are complete. Remaining open dependency/Actions proposals require separate compatibility review. Next, select evidence-based v1.2.0 issues and implement narrowly scoped additive changes; v1.2.0 timing and release approval remain unset.
+**Execution order:** v1.1.1 security remediation, verification, and separately authorized GitHub/npm releases are complete. Remaining open dependency/Actions proposals require separate compatibility review. The v1.2.0 implementation issues were selected and completed before the #263 release audit. Tagging and GitHub/npm distribution follow separately approved release gates; an implementation or audit PR is not release authorization.
 
 ## v1 completion definition
 

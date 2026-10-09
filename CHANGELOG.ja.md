@@ -8,9 +8,9 @@
 
 現在entryはありません。
 
-## [1.2.0] - Source candidate / 未公開
+## [1.2.0]
 
-**GitHub Release / npm公開は未承認・未実施です。** v1.2.0のsource候補のみを準備します。
+実行可能なMCP導入サンプルと運用・配布検証を改善する後方互換リリースです。GitHub/source releaseとnpm Trusted Publishingは**別々の承認・実行手順**であり、source releaseだけではnpmへ公開されません。
 
 - 公式MCP SDKによるloopback server/clientの実行可能な`protectTool()`サンプルを追加（#253）。
 - read-only再照合・ACK不明時の安全な運用判断を日英で整理（#254）。

@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.1.1が公開済みのstable GitHub/npm baselineで、mainのsource manifestでは未公開のv1.2.0候補を準備中です。** Node.js 22+対応の公開済みv1.1.1の5パッケージは2026-10-09に、GitHub Releaseとnpm Trusted Publishingを別途承認して公開しました。registry provenance、GitHub assetとのSHA-256 byte identity、クリーンなNode 22利用側テストを確認済みです。
+**v1.1.1は公開・検証済みの過去のGitHub/npm baseline、v1.2.0は次の個別承認リリースに向けて用意したsource versionです。** 現在の公開バージョンは[GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases)と[npm](https://www.npmjs.com/package/mcp-usage-control)で確認してください。 Node.js 22+対応の公開済みv1.1.1の5パッケージは2026-10-09に、GitHub Releaseとnpm Trusted Publishingを別途承認して公開しました。registry provenance、GitHub assetとのSHA-256 byte identity、クリーンなNode 22利用側テストを確認済みです。
 
 初回publication gate #6は完了・close済みです。v1.1.0もseparate authorizationされたmanual Trusted Publishing pathを使い、registry provenanceとGitHub Release assetとのbyte identityを独立verifyしました。今後のregistry publicationも引き続き独立authorize対象です。
 
@@ -144,9 +144,9 @@ boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0
 
 **v1.1.0はrelease済みのpost-v1 integration-ergonomics source / npm lineです。** #232でopt-in Cloudflare exact post-reserve retry、#233でweak dedupを追加しないMCP operation-identity方針、#237でrelease / backoff / tooling hardening、#239でprivacy-safeなretry運用telemetryを追加しました。すべてadditiveで、frozen v1 accounting / replay boundaryを維持します。separate authorizationされたv1.1.0 Trusted Publishing workflowは成功し、registry tarballもGitHub Release assetとbyte-identicalであることをverify済みです。
 
-## v1.1.1完了・v1.2.0提案中
+## v1.1.1完了・v1.2.0実装とリリース条件
 
-v1.1.1の保守計画は、source / npmを別途承認した上で**公開完了**しました（#246、#248）。v1.2.0のDeveloper Experience改善は、公開承認も確定日程もない提案段階です。v1の公開API、Store永続化契約、課金・リプレイの意味は維持します。
+v1.1.1の保守計画は、source / npmを別途承認した上で**公開完了**しました（#246、#248）。v1.2.0のDeveloper Experience実装（#253〜#256）は完了し、公開前監査を#263で管理します。GitHub/source releaseとnpm公開はそれぞれ別の明示承認が必要で、実装の完了は公開承認を意味しません。v1の公開API、Store永続化契約、課金・リプレイの意味は維持します。
 
 ### v1.1.1 — 保守・セキュリティパッチ（2026-10-09公開済み）
 
@@ -169,7 +169,7 @@ v1.1.1の保守計画は、source / npmを別途承認した上で**公開完了
 
 **目的:** 導入ミスを減らして再利用可能な検証を強化します。第二の会計上の正本を作ったり、既存helperを重複実装したりしません。採用する機能は利用者・統合時の実証された課題からIssue単位で選びます。
 
-**Issue化した実装範囲:** 親Issue [#252](https://github.com/git-ksk/mcp-usage-control/issues/252)。P1は、公式SDKで起動・呼出できるMCPサーバーのサンプル [#253](https://github.com/git-ksk/mcp-usage-control/issues/253)、並行して障害・再照合時の安全な判断手順 [#254](https://github.com/git-ksk/mcp-usage-control/issues/254)、#253を利用する公式SDK経由のE2E [#255](https://github.com/git-ksk/mcp-usage-control/issues/255)。P2は、SDK version記載と配布tarball利用側の互換性検証 [#256](https://github.com/git-ksk/mcp-usage-control/issues/256)。実行サンプル#253・#254・#255はmainへマージ済み、#256は候補tarballの配布互換性を検証中です。**v1.2.0そのもののGitHub Release / npm公開は未実施**です。既存のCore/Store/flow conformanceとpeer CIを再利用し、課金・認可の第二の正本やambiguous呼出の自動retryを追加しません。
+**Issue化した実装範囲:** 親Issue [#252](https://github.com/git-ksk/mcp-usage-control/issues/252)。P1は、公式SDKで起動・呼出できるMCPサーバーのサンプル [#253](https://github.com/git-ksk/mcp-usage-control/issues/253)、並行して障害・再照合時の安全な判断手順 [#254](https://github.com/git-ksk/mcp-usage-control/issues/254)、#253を利用する公式SDK経由のE2E [#255](https://github.com/git-ksk/mcp-usage-control/issues/255)。P2は、SDK version記載と配布tarball利用側の互換性検証 [#256](https://github.com/git-ksk/mcp-usage-control/issues/256)。#253〜#256のすべてがmainへマージ済みで、公開前監査#263が残るリリースゲートを追跡します。実装マージはGitHub Releaseやnpm公開を意味しません。既存のCore/Store/flow conformanceとpeer CIを再利用し、課金・認可の第二の正本やambiguous呼出の自動retryを追加しません。
 
 - **MCP導入導線:** trusted principal / operation ID、quote・reserve・liability・settlement、拒否・失敗時の処理、Memoryから本番Storeへの切替を扱う実行可能な`protectTool()`例を改善します。既存getting-started、`free-plus-credits`、MCP integration資料を再利用し、競合する新APIは作りません。
 - **運用playbook:** 既存の`UsageOperationalMonitor`、read-only reconciliation、threshold/projection helperを使い、providerごとの安全な状態確認、復旧判断、quota-window表示、障害診断を整理します。再現可能な不足が残る場合のみ、**read-onlyかつnon-authoritative**なhelper追加を審査し、observer telemetryを請求残高の正本にしません。
@@ -183,7 +183,7 @@ v1.1.1の保守計画は、source / npmを別途承認した上で**公開完了
 3. portable conformance、provider別の回帰証拠、対応runtime/peer matrix、protected aggregate release gateがgreenであり、英日docsと例が一致すること。
 4. 認証、サブスクリプション請求、価格表、汎用gateway/control plane、権威的なdashboard、業務副作用の再実行をcoreへ持ち込まないこと。
 
-**実施順:** v1.1.1の脆弱性修正・検証・個別承認されたGitHub/npm公開は完了しました。未マージのDependabot/Actions PRは引き続き別途互換性を審査します。次は実証に基づくv1.2.0 Issue選定・小規模な後方互換改善で、v1.2.0の公開日程・承認は未確定です。
+**実施順:** v1.1.1の脆弱性修正・検証・個別承認されたGitHub/npm公開は完了しました。未マージのDependabot/Actions PRは引き続き別途互換性を審査します。v1.2.0の実装Issueは選定・完了し、#263で公開前監査を行う順序です。tag・GitHub/npm配布は個別の明示承認を経て行い、実装・監査PRのマージ自体は公開承認にはなりません。
 
 ## 「v1 complete」の定義
 

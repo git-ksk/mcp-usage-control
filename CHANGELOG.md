@@ -8,9 +8,9 @@ All notable project changes are recorded here.
 
 No entries yet.
 
-## [1.2.0] - Source candidate / not released
+## [1.2.0]
 
-**GitHub Release and npm publication have not been authorized or performed.** This entry describes the source candidate, not a shipped release.
+Backward-compatible improvements to runnable MCP onboarding, operator guidance, and packaged compatibility evidence. GitHub/source release and npm Trusted Publishing require **separate approval and execution**; a source release alone does not publish to npm.
 
 - Runnable `protectTool()` server/client example using the official MCP v2 SDK on real loopback HTTP (#253).
 - Bilingual operator-safe lost-ACK and read-only reconciliation playbooks (#254).

@@ -154,7 +154,7 @@ npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
 
 ## プロジェクトの状態
 
-5パッケージは**v1.1.1を2026-10-09にGitHub Releaseとnpmの両方へ公開済み**です。source releaseとnpm Trusted Publishingはそれぞれ別途承認して実行しました。npm tarballとGitHub Release assetのSHA-256 byte identityと5パッケージすべてのregistry provenanceを確認済みです。CIではNode.js 22/24、Redis、MCP SDK v2連携、Cloudflareのローカル/workerd環境、Firestore Emulator、パッケージの利用側での検証を扱います。確認範囲の詳細は [リリース検証結果](docs/v1-readiness.ja.md) を参照してください。
+**v1.1.1（2026-10-09）** は5パッケージをGitHub Releaseとnpmの両方へ公開した履歴で、source releaseとnpm Trusted Publishingを別途承認して実行しました。現在の公開バージョンは上のnpmバッジと[GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases)で確認してください。npm tarballとGitHub Release assetのSHA-256 byte identityと5パッケージすべてのregistry provenanceを確認済みです。CIではNode.js 22/24、Redis、MCP SDK v2連携、Cloudflareのローカル/workerd環境、Firestore Emulator、パッケージの利用側での検証を扱います。確認範囲の詳細は [リリース検証結果](docs/v1-readiness.ja.md) を参照してください。
 
 単一ラウンドと複数ラウンドのMCP利用量管理に対応しています。MCP Tasksの安定版専用アダプターは未提供です。定義済みの処理モデルは [Tasksの利用量管理](docs/mcp-tasks-accounting.ja.md) にまとめています。
 

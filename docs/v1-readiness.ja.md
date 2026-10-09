@@ -8,9 +8,9 @@
 
 ## 現在のstatus
 
-**v1.1.1は公開済みstable GitHub/npm baseline、v1.2.0は未公開のsource候補です。** 5つのsource manifestは1.2.0に揃い、Node.js 22以上をrequireします。v1.2.0のtagやnpm公開は未承認です。以下のv1.0 readiness evidenceは、この後方互換maintenance releaseのcompatibility / safety foundationとして維持します。
+**v1.1.1は過去に公開・検証済みのGitHub/npm baselineです。** 5つのsource manifestは1.2.0に揃い、Node.js 22以上をrequireします。現在の公開状況はmanifestだけでなく[GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases)と[npm](https://www.npmjs.com/package/mcp-usage-control)で確認します。source releaseとnpm公開はそれぞれ別の明示承認が必要です。以下のv1.0 evidenceは、後方互換のv1.2.0改善のcompatibility / safety foundationとして維持します。
 
-v1.1.1の5 packageすべてを2026-10-09に、separate authorizationされたmanual Trusted Publishing workflowからnpmへ公開しました。mainの1.2.0 sourceは未公開候補で、npm公開を意味しません。5 packageすべてにregistry provenanceがあり、registryから再取得したtarballはGitHub Release assetとSHA-256でbyte-identical、clean Node 22 registry install / import smokeもPASS済みです。
+v1.1.1の5 packageすべてを2026-10-09に、separate authorizationされたmanual Trusted Publishing workflowからnpmへ公開しました。source上の1.2.0というversionだけではnpm公開を意味しません。5 packageすべてにregistry provenanceがあり、registryから再取得したtarballはGitHub Release assetとSHA-256でbyte-identical、clean Node 22 registry install / import smokeもPASS済みです。
 
 v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / governance trancheを解消しました。
 
@@ -131,7 +131,7 @@ v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177�
 
 ## npm distribution boundary
 
-current stable source / npm baselineは、2026-10-09に公開済みの `v1.1.1` です。5 registry tarballすべてにprovenanceがあり、GitHub Release assetとのSHA-256 byte identityとclean Node 22 registry install / import smokeを独立verify済みです。
+歴史的な検証済みsource / npm baseline `v1.1.1` は、2026-10-09に公開しました。5 registry tarballすべてにprovenanceがあり、GitHub Release assetとのSHA-256 byte identityとclean Node 22 registry install / import smokeを独立verify済みです。
 
 #6は完了・close済みです。v1.1.0 publicationもmanual OIDC Trusted Publishing workflowでseparate authorizationして完了しました。今後のnpm publicationも独立したexplicit authorization対象です。
 

@@ -198,8 +198,8 @@ jobs:
             mkdir -p "/tmp/muc-readmes/$name"
             tar -xzf "$tgz" -C "/tmp/muc-readmes/$name" package/README.md
           done
-          if rg -n 'Node\.js 20\+|mcp-usage-control-(0\.9\.0|cloudflare-0\.4\.0)\.tgz|\.\./\.\./docs/' /tmp/muc-readmes; then
-            echo 'Shipped README contains stale runtime, tarball, or repository-relative documentation references.' >&2
+          if rg -n 'Node\.js 20\+|mcp-usage-control-(0\.9\.0|cloudflare-0\.4\.0)\.tgz|\.\./\.\./docs/|Current distribution status:.*v[0-9]' /tmp/muc-readmes; then
+            echo 'Shipped README contains a stale runtime, fixed current-version label, tarball, or relative documentation link.' >&2
             exit 1
           fi
           git diff --exit-code -- \
@@ -208,6 +208,24 @@ jobs:
             packages/redis/package.json \
             packages/cloudflare/package.json \
             packages/firestore/package.json
+
+      - name: Verify versioned EN/JA release-note hygiene
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/core/package.json').version")"
+          for changelog in CHANGELOG.md CHANGELOG.ja.md; do
+            notes="$(awk -v version="$version" '
+              index($0, "## [" version "]") == 1 { capture=1; next }
+              capture && /^## / { exit }
+              capture { print }
+            ' "$changelog")"
+            test -n "$notes" || { echo "missing ${version} notes in $changelog" >&2; exit 1; }
+            if grep -Eiq 'not authorized or performed|not released|not yet published|source candidate /|未承認・未実施|未公開のsource' <<<"$notes"; then
+              echo "Versioned $changelog notes would contradict an authorized release." >&2
+              exit 1
+            fi
+          done
 
       - name: Verify package contents
         shell: bash

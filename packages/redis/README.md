@@ -2,7 +2,7 @@
 
 Atomic Redis store for `mcp-usage-control`.
 
-> **Current distribution status:** `mcp-usage-control-redis` v1.1.1 was published to npm on 2026-10-09 with provenance. GitHub release tarballs and source/local-package workflows remain available; see [GitHub Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.1.1) / [Use from source](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md).
+> **Distribution:** Check the current published version on [npm](https://www.npmjs.com/package/mcp-usage-control-redis) and find verified source artifacts on [GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases). For an unreleased source candidate or local tarballs, follow [Use from source](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md).
 
 ## English
 
