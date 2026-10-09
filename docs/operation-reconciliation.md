@@ -8,6 +8,8 @@ Status: **v0.13 contract; scalar and vector read-only reconciliation are adopted
 
 v0.8 introduced the provider-neutral, **read-only** scalar operation-status vocabulary. v0.13 adds the parallel `VectorOperationReconciliationStore` contract for ambiguous initial vector-reserve acknowledgements without changing `UsageStore` or `VectorUsageStore`.
 
+For concrete **phase-by-phase operator decisions**, see the [recovery playbook](operation-recovery-playbook.md); reconciliation is read-only evidence, not replay authorization.
+
 ## Core types
 
 ```ts

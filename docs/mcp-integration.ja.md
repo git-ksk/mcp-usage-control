@@ -120,6 +120,8 @@ server.registerTool(
 
 もっと遅い地点で `markLiable()` したい場合は、core APIを直接使ってください。
 
+reserve / mark-liable / renewal / settlementのACKが不明な場合、無条件の再試行ではなく[運用判断ガイド](operation-recovery-playbook.ja.md)を参照してください。
+
 ## 長時間toolのheartbeat
 
 handlerの実行中は、leaseが途中で期限切れにならないようadapterが定期的に `renew()` します。
