@@ -47,6 +47,8 @@ server.registerTool(
 
 The MCP SDK still performs its normal argument validation before the wrapped application handler runs.
 
+**Public error boundary:** The official SDK may surface a thrown server-side `Error.message` as client-visible MCP error text. The adapter preserves local `UsageDeniedError`, `UsageClassificationError` and `UsageSettlementError` for correct server-side handling; it does **not** automatically redact arbitrary backend exceptions. At the server registration boundary, catch wrapper exceptions and return an application-authored, non-sensitive MCP `{ isError: true, content: [...] }` result. Do not expose raw Store errors, cost/tenant information or credentials to untrusted MCP clients. See the [runnable example and leak regression test](../examples/mcp-protect-tool/README.md) for an actual official-SDK implementation. Do not replace the underlying accounting error or retry the paid handler to implement this UI-level sanitization.
+
 ## Tools without an input schema
 
 Set `noInput: true` explicitly:
