@@ -6,7 +6,7 @@ This document records the protocol-level proof for the current MCP adapter bound
 
 ## Verified baseline
 
-The repository currently locks `@modelcontextprotocol/client` and `@modelcontextprotocol/server` at `2.0.0` for tests. The current conformance integration test explicitly pins the client to MCP protocol revision `2026-07-28` rather than relying on legacy fallback.
+The public MCP adapter declares a `@modelcontextprotocol/server` peer range of `^2.0.0`. Repository development ranges are `@modelcontextprotocol/client@^2.3.1` and `@modelcontextprotocol/server@^2.0.0`, currently resolved in `pnpm-lock.yaml` to client **2.3.1** and server **2.0.0** respectively. CI independently checks the minimum server peer **2.0.0**, a current compatible peer, and Node **22/24**; these are different evidence sets. The **MCP protocol revision** is not the SDK package version: the current conformance integration test explicitly pins revision `2026-07-28` instead of relying on legacy fallback.
 
 The proof uses the official SDK path:
 

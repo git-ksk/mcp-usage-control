@@ -6,7 +6,7 @@
 
 ## 検証するbaseline
 
-repositoryのtestでは現在、`@modelcontextprotocol/client` と `@modelcontextprotocol/server` を `2.0.0` にlockしています。current conformance integration testではlegacy fallbackへ依存せず、MCP protocol revision `2026-07-28` を明示的にpinします。
+公開MCP adapterのpeer下限は`@modelcontextprotocol/server@^2.0.0`です。repositoryのdev依存ではclient `^2.3.1`、server `^2.0.0`を宣言し、現行`pnpm-lock.yaml`はそれぞれclient `2.3.1`、server `2.0.0`を解決しています。CIは宣言されたserver peer範囲の**minimum `2.0.0`**と**current compatible version**を別々にテストし、Node 22/24も検証します。SDKのバージョンとMCP protocol revisionは別概念で、current conformance integration testではlegacy fallbackへ依存せずprotocol revision `2026-07-28` を明示的にpinします。
 
 検証経路はofficial SDKそのものです。
 

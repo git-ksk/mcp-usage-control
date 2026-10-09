@@ -8,6 +8,16 @@
 
 現在entryはありません。
 
+## [1.2.0] - Source candidate / 未公開
+
+**GitHub Release / npm公開は未承認・未実施です。** v1.2.0のsource候補のみを準備します。
+
+- 公式MCP SDKによるloopback server/clientの実行可能な`protectTool()`サンプルを追加（#253）。
+- read-only再照合・ACK不明時の安全な運用判断を日英で整理（#254）。
+- SDK経由の同時実行、失敗系、保守的課金、内部エラーのクライアント側露出防止を検証（#255）。
+- MCP SDK peerの表記を実際のlockfile/CIに合わせ、v1.2.0候補tarballのクリーン利用側テストを強化（#256）。
+- 既存API・会計ライフサイクル・永続化Store schemaの意図的な変更はありません。
+
 ## [1.1.1] - 2026-10-09
 
 v1.1.1はセキュリティ・テスト安定性のpatch releaseです。GitHub Releaseとnpm Trusted Publishingは2026-10-09にそれぞれ別途承認して公開完了しました。5 tarballのbyte identity・provenance・clean Node 22 consumer testを確認済みです。
