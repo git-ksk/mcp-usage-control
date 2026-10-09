@@ -6,7 +6,12 @@
 
 ## [Unreleased]
 
-現在entryはありません。
+### セキュリティ・互換性（v1.1.1候補）
+
+- 問題のある `brace-expansion`、`@grpc/grpc-js`、`source-map-js` の推移的依存解決を限定的に修正し、開発専用MCP client SDKを修正版へ更新して、現時点で報告されたlockfile脆弱性を解消しました。公開MCP server peerの最小条件 `^2.0.0` は維持します。
+- Cloudflareローカルworkerd統合CIで毎回独立した状態領域を使い、過去のテストbudgetの残存による誤ったconformance拒否を防ぎます。
+- accounting lifecycle、永続Store schema、公開runtime依存、公開APIの意味は意図的に変更しません。リリース検証と公開承認は別工程です (#246)。
+
 
 ## [1.1.0] - 2026-09-26
 

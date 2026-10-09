@@ -399,11 +399,15 @@ jobs:
           MCP_USAGE_CLOUDFLARE_OLD_TOKEN: rotated-out-local-token
         run: |
           set -euo pipefail
+          # Each run must use a fresh accounting domain. Reusing Wrangler's default
+          # .wrangler/state can leave old budgets and make conformance fail spuriously.
+          WORKERD_STATE_DIR="$(mktemp -d)"
           pnpm dlx wrangler@4.114.0 dev --local \
+            --persist-to "$WORKERD_STATE_DIR" \
             --config packages/cloudflare/wrangler.test.jsonc \
             --port 8799 >/tmp/muc-cloudflare-wrangler.log 2>&1 &
           WRANGLER_PID=$!
-          trap 'kill "$WRANGLER_PID" 2>/dev/null || true; cat /tmp/muc-cloudflare-wrangler.log || true' EXIT
+          trap 'kill "$WRANGLER_PID" 2>/dev/null || true; cat /tmp/muc-cloudflare-wrangler.log || true; rm -rf "$WORKERD_STATE_DIR"' EXIT
 
           ready=0
           for _ in $(seq 1 60); do
