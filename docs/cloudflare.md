@@ -37,6 +37,12 @@ One configured `domainName` maps to one Durable Object instance. Every budget in
 
 This deliberately mirrors the Redis adapter's single transaction-domain rule. It prioritizes correctness over horizontal write distribution. A very hot global domain can become a scalability bottleneck; applications may partition independent usage domains only when no atomic reservation spans those partitions.
 
+## Node.js compatibility in Workers
+
+The shared Core currently imports `node:crypto` for internal operation IDs. Configure your **Worker** to support Node.js built-ins before importing the Core in a Worker-local integration. Per [Cloudflare's compatibility policy](https://developers.cloudflare.com/workers/runtime-apis/nodejs/crypto/), compatibility dates **2026-08-04 or later** enable Node compatibility by default. For an existing Worker pinned to an **earlier date**, explicitly set `"compatibility_flags": ["nodejs_compat"]` in your Wrangler configuration and verify behavior against that deployment's actual date and flags. The local workerd test intentionally retains `compatibility_date: 2026-07-29` and adds the required flag to exercise that older-date support path.
+
+Remote HTTP clients hosted on Node.js do not need Worker compatibility flags themselves; they still require a correctly configured Worker gateway / Durable Object backend. Avoid updating a production compatibility date without reviewing the other Cloudflare runtime behavior changes that date enables.
+
 ## Worker-local setup
 
 Export the Durable Object class from your Worker entry point:

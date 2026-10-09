@@ -37,6 +37,12 @@ coreはCloudflareへ依存しません。
 
 Redis adapterのsingle transaction-domain ruleと同じ考え方です。horizontal write distributionよりcorrectnessを優先します。global domainが非常にhotになるとbottleneckになり得るため、atomic reservationがpartitionをまたがない場合だけ独立usage domainへ分割してください。
 
+## WorkersでのNode.js互換性
+
+共通Coreは内部の操作ID生成に`node:crypto`をimportします。Worker内でCoreを利用する構成では、**Worker側**でNode.js built-in APIの互換性を有効にしてください。[Cloudflare公式の互換性仕様](https://developers.cloudflare.com/workers/runtime-apis/nodejs/crypto/)によると、`compatibility_date`が**2026-08-04以降**ならNode.js互換機能は標準で有効になります。**それより前の日付に固定しているWorker**ではWrangler設定に`"compatibility_flags": ["nodejs_compat"]`を明示し、実際のデプロイ環境の日付・フラグで動作を検証してください。ローカルworkerdテストでは`2026-07-29`のまま明示フラグを付与し、旧日付の構成を検証します。
+
+Node.js側のRemote HTTP client自体にはWorkerの互換フラグは不要ですが、接続先のWorker gateway / Durable Objectは適切な設定が必要です。本番Workerの`compatibility_date`を変更する際は、他のRuntime動作変更も確認してください。
+
 ## Worker-local setup
 
 Worker entry pointからDurable Object classをexportします。
