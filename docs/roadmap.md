@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**The v1.1.1 release is a historically verified GitHub/npm baseline; v1.2.0 is the source version prepared for the next independently authorized release.** For the currently published version consult [GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases) and the [npm package](https://www.npmjs.com/package/mcp-usage-control). All five published v1.1.1 Node.js 22+ packages were released on 2026-10-09 through separately approved GitHub Release and npm Trusted Publishing workflows. Their npm tarballs are SHA-256 byte-identical to the validated GitHub assets, with registry provenance and clean Node 22 consumer checks.
+**v1.2.0 is the current released GitHub/npm stable baseline (2026-10-10 JST).** All five Node.js 22+ packages—Core, MCP, Redis, Cloudflare and Firestore—were published with independently authorized GitHub Release and npm Trusted Publishing, with SHA-256 byte-identical registry/Release tarballs, verified registry provenance/signatures, and a clean external consumer import check. [GitHub v1.2.0 Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0) · [npm Core](https://www.npmjs.com/package/mcp-usage-control) · [release issue #252](https://github.com/git-ksk/mcp-usage-control/issues/252). The first npm run encountered registry replication lag; its safe rerun passed without publishing duplicate versions. [#267](https://github.com/git-ksk/mcp-usage-control/issues/267) tracks future CI hardening, not an unresolved v1.2 publication.
 
 The first-publication gate #6 remains complete and closed. v1.1.0 used the same separately authorized manual Trusted Publishing path, with registry provenance and byte identity against GitHub Release assets independently verified. Future registry publications remain separately authorized operations; source-release progress never implies registry publication.
 
@@ -27,6 +27,7 @@ v0.6 progressive growth [RELEASED]
  -> v0.13 v1-blocker closure [RELEASED]
  -> v1.0 feature-free stable promotion [RELEASED]
  -> v1.1 post-v1 integration ergonomics [RELEASED]
+ -> v1.2 runnable official-SDK MCP example / operator evidence [RELEASED]
 ```
 
 ## Safety boundary that must not regress
@@ -58,6 +59,7 @@ Across every remaining release:
 | **v0.13.0** | Final v1-blocker closure: authoritative clocks, renewal uncertainty, safe historical cleanup, vector reconciliation, bounded inputs, shipped docs, Node/peer CI | Released / complete |
 | **v1.1.0** | Additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232), explicit single-round read operation-identity guidance without weak transport-ID dedup (#233), release/backoff/test-tool hardening (#237), privacy-safe exact-retry operational telemetry (#239) | Released / complete |
 | **v1.1.1** | Security advisory remediation, Cloudflare local test-state isolation, contract-preserving package and release verification (#246, #248) | GitHub + npm released / complete |
+| **v1.2.0** | Runnable official MCP server/client example, operator-safe ACK/reconciliation playbook, SDK E2E, packaged consumer and release audit (#252–#256, #263, #265) | GitHub + npm released / complete |
 
 Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
@@ -144,9 +146,9 @@ The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.
 
 **v1.1.0 is the released post-v1 integration-ergonomics source/npm line.** #232 adds opt-in Cloudflare exact post-reserve retry, #233 records the no-weak-dedup MCP operation-identity decision, #237 hardens release/backoff/tooling, and #239 adds privacy-safe retry operations telemetry. All are additive and preserve the frozen v1 accounting/replay boundary. The separately authorized v1.1.0 Trusted Publishing workflow completed successfully, and registry tarballs were verified byte-identical to the GitHub Release assets.
 
-## v1.1.1 completed; v1.2.0 implementation and release criteria
+## v1.1.1 and v1.2.0 completed: historical release criteria
 
-The v1.1.1 maintenance plan below **shipped** under separately approved source/npm releases (#246, #248). The scoped v1.2.0 developer-experience implementation is complete (#253–#256); the pre-release audit is tracked in #263. Source release and npm publication each remain independently authorized operations, and implementation completion does not grant that approval. The frozen v1 public API, Store persistence contracts, and accounting/replay semantics remain the baseline.
+The v1.1.1 maintenance plan **shipped** under separately approved source/npm releases (#246, #248). The v1.2.0 developer-experience tranche (#253–#256) and its audits (#263, #265) **shipped to both GitHub and npm** under separately approved workflows; parent #252 is closed. The following historical scope/gates remain as evidence, not a pending release instruction. The frozen v1 public API, Store persistence contracts, and accounting/replay semantics remain the baseline.
 
 ### v1.1.1 — maintenance and security patch (released 2026-10-09)
 
@@ -165,11 +167,11 @@ The v1.1.1 maintenance plan below **shipped** under separately approved source/n
 4. Release archives, exported entry points, and a clean Node 22 consumer smoke remain compatible; no unsupported public API, storage-format, or quota-accounting change is slipped into a patch.
 5. English/Japanese release and operator documentation agree with actual tested behavior. GitHub/source release and npm Trusted Publishing each require **separate explicit authorization**; completing this roadmap does not authorize either action.
 
-### Candidate v1.2.0 — additive developer experience (after v1.1.1)
+### v1.2.0 — released additive developer experience
 
 **Goal:** reduce integration mistakes and strengthen reusable verification **without creating a second accounting authority or duplicating shipped helpers**. Select precise issues from demonstrated user/integration gaps before committing implementation.
 
-**Tracked implementation scope:** [#252](https://github.com/git-ksk/mcp-usage-control/issues/252) is the parent; [#253](https://github.com/git-ksk/mcp-usage-control/issues/253) is the P1 runnable official-SDK protected MCP server/client example; [#254](https://github.com/git-ksk/mcp-usage-control/issues/254) is the parallel P1 operator-safe failure/reconciliation playbook; [#255](https://github.com/git-ksk/mcp-usage-control/issues/255) is the P1 official-SDK lifecycle E2E built on #253; and [#256](https://github.com/git-ksk/mcp-usage-control/issues/256) is the P2 version-claim / packed-consumer compatibility follow-up. All four implementation issues #253–#256 are merged to main; pre-release audit #263 records the remaining source-release gate. A successful implementation merge is not a GitHub Release or npm publication. Reuse existing core/Store/flow conformance and peer CI; no new billing/authorization authority or automatic ambiguous-call retry.
+**Tracked implementation scope:** [#252](https://github.com/git-ksk/mcp-usage-control/issues/252) is the parent; [#253](https://github.com/git-ksk/mcp-usage-control/issues/253) is the P1 runnable official-SDK protected MCP server/client example; [#254](https://github.com/git-ksk/mcp-usage-control/issues/254) is the parallel P1 operator-safe failure/reconciliation playbook; [#255](https://github.com/git-ksk/mcp-usage-control/issues/255) is the P1 official-SDK lifecycle E2E built on #253; and [#256](https://github.com/git-ksk/mcp-usage-control/issues/256) is the P2 version-claim / packed-consumer compatibility follow-up. All four implementation issues #253–#256, audits #263/#265, and separate GitHub/npm publication have completed. Source/npm release evidence is recorded in the closed parent #252. Reuse existing core/Store/flow conformance and peer CI; no new billing/authorization authority or automatic ambiguous-call retry.
 
 - **MCP adoption path:** improve an end-to-end, runnable `protectTool()` example covering trusted principal/operation ID, realistic quote/reserve/liability/settlement, denial/error handling, and the Memory-to-production-Store decision. Reuse the existing getting-started guide, `free-plus-credits` example, and MCP integration guidance rather than introducing a competing API.
 - **Operational playbooks:** document safe provider-specific inspection, reconcile/restore decisions, quota-window projections, and incident diagnosis using already shipped `UsageOperationalMonitor`, read-only reconciliation, and threshold/projection helpers. Add a new **read-only, non-authoritative** helper only if a reproducible gap remains after that reuse analysis; never derive billing balances from observer telemetry.
@@ -183,7 +185,30 @@ The v1.1.1 maintenance plan below **shipped** under separately approved source/n
 3. Portable conformance, provider-specific regression evidence, supported-runtime/peer matrix, and the protected aggregate release gate remain green, with bilingual docs and examples kept synchronized.
 4. No embedded authentication, subscription billing, pricing catalog, generic gateway/control plane, authoritative dashboard, or business-side-effect replay is added to the core.
 
-**Execution order:** v1.1.1 security remediation, verification, and separately authorized GitHub/npm releases are complete. Remaining open dependency/Actions proposals require separate compatibility review. The v1.2.0 implementation issues were selected and completed before the #263 release audit. Tagging and GitHub/npm distribution follow separately approved release gates; an implementation or audit PR is not release authorization.
+**Historical execution:** v1.1.1 and v1.2.0 security/implementation/audit work and separately approved GitHub/npm publishing are complete. Outstanding Dependabot/Actions proposals still require individual compatibility review. For next work see the live v1.3.0/v1.4.0 planning sections below.
+
+## v1.3.0 plan — durable MCP multi-round provider parity
+
+**Status: scoped and tracked, not implemented, not tagged or released.** [Parent #268](https://github.com/git-ksk/mcp-usage-control/issues/268). A substantive **MCP-native integration** release focused on making the same safe `input_required` suspend/resume workflow practical beyond Redis. The accounting core and v1 Store schemas remain frozen. Exact dates and publication are not authorized by planning.
+
+| Priority / order | Issue | Decision and release claim |
+| --- | --- | --- |
+| **P1, parallel** | [#269 Cloudflare DO Flow Store](https://github.com/git-ksk/mcp-usage-control/issues/269) | Opt-in atomic suspend + one-time compare/consume; workerd clock/DO routing, lost ACK and HA bounds must be demonstrated |
+| **P1, parallel** | [#270 Firestore Flow Store](https://github.com/git-ksk/mcp-usage-control/issues/270) | Transactional one-winner resume across replicas; host-clock/TTL/transaction ambiguity documented and tested |
+| **P1, after #269/#270** | [#271 official SDK multi-round E2E](https://github.com/git-ksk/mcp-usage-control/issues/271) | Real `input_required` lifecycle on Redis, Cloudflare and Firestore, signed requestState, no second reservation or double handler entry |
+| **P1, parallel discovery** | [#272 MCP Tasks interop gate](https://github.com/git-ksk/mcp-usage-control/issues/272) | Verify current official extension's **server receiver** behavior; record adopt/experimental/defer decision, do not falsely advertise Tasks support |
+| **P2, after E2E** | [#274 durable onboarding](https://github.com/git-ksk/mcp-usage-control/issues/274) | Runnable/packaged, bilingual provider-backed examples, reliable identity, clocks, failures and operational limits |
+| **P1 maintenance (independent)** | [#267 npm registry propagation CI](https://github.com/git-ksk/mcp-usage-control/issues/267) | Idempotent publishing verification with a realistic bounded propagation window; not a runtime feature blocker |
+
+**Release gate:** portable `McpUsageFlowStore` conformance under real workerd and Firestore Emulator; duplicate-suspend, mismatch, 16-way consume race, expiry/clock-skew, suspended-flow ACK loss and corruption must fail closed. Official SDK single-/multi-round integration and Redis regression, Node 22/24, MCP/Redis minimum/current peers, exact published package exports, packaged external consumer, dependency audit, and protected `test (22)` remain green on the final release SHA. Preserve provider-specific durability guarantees rather than asserting false parity. Changes that require a breaking public API or accounting schema need a separately scoped decision.
+
+**Outside scope:** authentication/entitlements, billing ledgers, pricing catalog, gateway/router, task scheduling, business-result replay, globally eventually consistent overspend mode, and generic automatic retries of ambiguous writes. Authenticated principal, action identity, signed requestState, durable provider/accounting identity and business-side effects remain application-owned.
+
+## v1.4.0 candidate — conditional protocol enhancements
+
+- [#275 Tasks receiver accounting adapter](https://github.com/git-ksk/mcp-usage-control/issues/275) **only if #272 confirms actual official 2026-07-28 Tasks *server-side receiver* interoperability** (not just a stable schema). The current official `@modelcontextprotocol/ext-tasks` release provides a stable schema snapshot, requester/client APIs, and legacy 2025-11-25 receiver support; it does **not** by itself prove stable 2026-07-28 server adapter availability. A blocked/deferred outcome is acceptable.
+- [#273 Cloudflare remote vector reserve reconciliation](https://github.com/git-ksk/mcp-usage-control/issues/273) **feasibility first**; the remote scalar read-only reconciliation path exists today, but remote **vector initial-reserve ACK** remains explicitly unsupported/fail-closed. Never claim vector parity without exact trusted binding, transaction/transport and rollback proof.
+- Neither conditional feature blocks v1.3.0. Version allocations are provisional until proven compatible; issue creation is not publication authorization.
 
 ## v1 completion definition
 

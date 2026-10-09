@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v1.1.1は過去に公開・検証済みのGitHub/npm baselineです。** 5つのsource manifestは1.2.0に揃い、Node.js 22以上をrequireします。現在の公開状況はmanifestだけでなく[GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases)と[npm](https://www.npmjs.com/package/mcp-usage-control)で確認します。source releaseとnpm公開はそれぞれ別の明示承認が必要です。以下のv1.0 evidenceは、後方互換のv1.2.0改善のcompatibility / safety foundationとして維持します。
+**現在のGitHub/npm公開済みstable baselineはv1.2.0（2026-10-10 JST）です。** 5つのsource manifestは1.2.0、Node.js 22以上対応で、[GitHub Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0)とnpm Trusted Publishingは個別に承認・完了しています。5件のtarballはbyte-identicalで、npm署名・provenanceとclean consumerのESM importもPASS済み。以下のv1.0 evidenceは過去の互換性検証であり、新しい公開を指示するものではありません。次期計画は[親#268](https://github.com/git-ksk/mcp-usage-control/issues/268)で管理します。
 
 v1.1.1の5 packageすべてを2026-10-09に、separate authorizationされたmanual Trusted Publishing workflowからnpmへ公開しました。source上の1.2.0というversionだけではnpm公開を意味しません。5 packageすべてにregistry provenanceがあり、registryから再取得したtarballはGitHub Release assetとSHA-256でbyte-identical、clean Node 22 registry install / import smokeもPASS済みです。
 

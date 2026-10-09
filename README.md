@@ -154,7 +154,7 @@ Provider guides cover persistence, deployment, clock, and contention requirement
 
 ## Project status
 
-The **v1.1.1** release (2026-10-09) completed separately authorized GitHub source and npm publishing for all five packages. For the current release version, check the npm badge above and [GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases). The downloaded npm tarballs were verified SHA-256 byte-identical to the GitHub Release assets, with registry provenance for all five packages. CI covers Node.js 22/24, Redis, MCP SDK v2 integration, Cloudflare local/workerd, Firestore Emulator, and package-consumer checks. See [release evidence](docs/v1-readiness.md) for the scope of validation.
+**v1.2.0 (2026-10-10 JST)** is published on [GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0) and npm for all five packages under separate approvals. The registry tarballs were verified SHA-256 byte-identical to the release assets, with npm provenance/signatures for all five and a clean registry-installed consumer check. Next work is tracked in the [v1.3 / v1.4 roadmap](docs/roadmap.md). CI covers Node.js 22/24, Redis, MCP SDK v2 integration, Cloudflare local/workerd, Firestore Emulator, and package-consumer checks. See [release evidence](docs/v1-readiness.md) for the scope of validation.
 
 Single-round and multi-round MCP accounting are supported. A stable first-class MCP Tasks adapter remains deferred; see [Tasks accounting](docs/mcp-tasks-accounting.md) for the defined lifecycle boundary.
 

@@ -14,17 +14,18 @@ The MCP task state machine and the usage-accounting state machine are related, b
 
 ## Protocol baseline and support boundary
 
-As of 2026-08-13, the repository targets the MCP `2026-07-28` protocol line and tests the TypeScript client/server SDK at `2.0.0`.
+Reviewed 2026-10-10: the repository targets the stable MCP `2026-07-28` protocol and tests the official TypeScript SDK v2 **minimum/current compatible peer matrix** (not a claim that the client and server are both pinned to SDK 2.0.0).
 
-The current MCP Tasks design is carried as the `io.modelcontextprotocol/tasks` extension. Its draft defines task-backed `tools/call`, `tasks/get`, `tasks/update`, and `tasks/cancel`, with task statuses `working`, `input_required`, `completed`, `failed`, and `cancelled`.
+The Tasks feature is provided as the `io.modelcontextprotocol/tasks` extension. Its **2026-07-28 schema snapshot is marked Stable** (separate from the independently evolving Draft), defining task-backed `tools/call`, `tasks/get`, `tasks/update`, and `tasks/cancel`, with `working`, `input_required`, `completed`, `failed`, and `cancelled` statuses.
 
-The TypeScript SDK v2 core no longer treats the legacy `tasks/*` vocabulary as part of the modern core protocol. The extension implementation/specification is maintained separately and is still explicitly experimental. For that reason this project defines and proves the **accounting semantics now**, but does not claim a stable first-class TypeScript Tasks adapter yet.
+The TypeScript SDK v2 core no longer treats the old 2025-11-25 `tasks/*` vocabulary as modern core protocol. As of the reviewed upstream `@modelcontextprotocol/ext-tasks@0.2.2`, the extension package documents **requester/client lifecycle APIs** and a **2025-11-25 Tasks receiver**; stable 2026-07-28 **server/receiver** support cannot be inferred from schema maturity. This project defines and proves **accounting semantics**, but does **not** advertise a first-class official Tasks server adapter. [#272](https://github.com/git-ksk/mcp-usage-control/issues/272) requires a live official-SDK/extension interop spike; [#275](https://github.com/git-ksk/mcp-usage-control/issues/275) is gated on its outcome.
 
 Primary references used for this decision:
 
 - MCP `2026-07-28` release notes: <https://blog.modelcontextprotocol.io/posts/2026-07-28/>
 - TypeScript SDK `2026-07-28` support notes: <https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/support-2026-07-28.md>
-- Tasks extension repository/specification: <https://github.com/modelcontextprotocol/ext-tasks>
+- Tasks extension repository/specification (stable 2026-07-28 snapshot): <https://github.com/modelcontextprotocol/ext-tasks>
+- Official current TypeScript extension package scope: <https://modelcontextprotocol.github.io/ext-tasks/typescript/>
 
 This is a compatibility boundary, not an accounting limitation. The existing core lease primitives are sufficient to enforce the state machine below.
 
@@ -189,8 +190,8 @@ A sticky MCP session is not required for accounting. A task router may use proto
 
 `packages/core/src/task-accounting-proof.test.ts` exercises the existing primitives against the safety-critical Task cases: renewal through long-running/input wait, pre-liability cancellation, cancellation after liability, pending/liable worker crash expiry, and idempotent/conflicting terminal settlement.
 
-**First-class MCP Tasks adapter: deferred/experimental.**
+**First-class MCP Tasks server-side adapter: deferred until the official receiver interoperability gate #272 passes; #275 is conditional.**
 
-No new runtime API is required to express the accounting lifecycle today. A stable adapter should be added only when the MCP Tasks extension and the TypeScript implementation surface are stable enough to integrate without pinning this package to an experimental wire/runtime contract.
+No new Core runtime API is required to express the accounting lifecycle today. A stable optional Tasks adapter should be added only after testing the official 2026-07-28 **receiver** SDK/extension surface, not by inferring server support from the stable schema alone. Maintain existing accounting semantics, request-state integrity, application-owned task result storage, cancellation/fencing boundaries, and supported Node/peer constraints.
 
-This is not a v1 accounting blocker as long as the project does not advertise first-class Tasks protocol support. It is a post-v1 integration candidate unless the upstream extension stabilizes before the v1 release decision.
+This is not a current accounting feature blocker. [#272](https://github.com/git-ksk/mcp-usage-control/issues/272) records the v1.3 compatibility decision; [#275](https://github.com/git-ksk/mcp-usage-control/issues/275) remains a conditional v1.4 candidate. If upstream receiver interoperability is missing, defer implementation and do **not** advertise first-class Tasks server support.

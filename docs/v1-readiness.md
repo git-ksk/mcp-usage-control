@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**The v1.1.1 release is the verified historical GitHub/npm baseline.** All five source manifests stage 1.2.0 and require Node.js 22 or later. Current publication status is determined from [GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases) and [npm](https://www.npmjs.com/package/mcp-usage-control), not from the manifest alone. Source release and registry publication each require separate explicit authorization. The v1.0 evidence below remains the compatibility/safety foundation for the backward-compatible v1.2.0 work.
+**Current published source/npm baseline is v1.2.0 (2026-10-10 JST).** All five source manifests are 1.2.0 and require Node.js 22+. The separately authorized [GitHub Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0) and npm Trusted Publishing completed, with five registry tarballs byte-identical to the GitHub assets, verified npm signatures/provenance, and clean consumer ESM checks. This older v1.0 readiness document remains historical compatibility evidence, not a release authorization. Next work is under [parent #268](https://github.com/git-ksk/mcp-usage-control/issues/268).
 
 All five v1.1.1 packages were published to npm on 2026-10-09 through the separately authorized manual Trusted Publishing workflow. Registry provenance is present for all five packages, downloaded registry tarballs were verified SHA-256 byte-identical to the GitHub Release assets, and a clean Node 22 registry install/import smoke passed. A source version number alone never implies the corresponding npm package has been published.
 
