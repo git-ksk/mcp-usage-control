@@ -158,6 +158,8 @@ pnpm example:free-plus
 
 The [Free/Plus example](../examples/free-plus-credits/README.md) verifies that exactly one of two reports can reserve the final 10 credits and that a duplicate operation cannot reserve again.
 
+- Recover safely from lost ACK or Store outage: [operator recovery playbook](operation-recovery-playbook.md).
+
 ## What to read next
 
 - Integrate a tool: [MCP integration](mcp-integration.md).

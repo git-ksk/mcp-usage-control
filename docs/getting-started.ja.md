@@ -158,6 +158,8 @@ pnpm example:free-plus
 
 [Free/Plusの例](../examples/free-plus-credits/README.md) は、残り10クレジットを2件のレポートのうち1件だけが予約できることと、同じ処理で再予約できないことを検証します。
 
+- ACK喪失・Store障害時の安全な対応: [運用判断ガイド](operation-recovery-playbook.ja.md)。
+
 ## 次に読む
 
 - ツールに組み込む：[MCP連携](mcp-integration.ja.md)

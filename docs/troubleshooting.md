@@ -4,6 +4,8 @@
 
 Start with the symptom below. Preserve the original operation identity and error when diagnosing a failure; changing IDs or clearing accounting state can hide the cause and admit work twice.
 
+**Ambiguous reserve, liability, renewal, or settlement acknowledgement?** Start with the [operator decision playbook](operation-recovery-playbook.md); a timeout is not permission to retry or refund.
+
 ## Find the right path
 
 | Symptom | First check | Details |
