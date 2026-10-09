@@ -132,13 +132,20 @@ test('handler throw after liability never proves zero cost', { timeout: 10000 },
     assert.equal(server.metrics.handlerEntries, 1);
   }));
 
-test('invalid cost classifier fails closed and settles full maximum', { timeout: 10000 }, () =>
-  withSdk({ classifySuccessUnits: () => Number.NaN, onProtectedError: e => { assert.equal(e.name, 'UsageClassificationError'); } }, async (client, server) => {
+test('invalid cost classifier fails closed and settles full maximum', { timeout: 10000 }, () => {
+  const observedErrors = [];
+  return withSdk({
+    classifySuccessUnits: () => Number.NaN,
+    onProtectedError: error => { observedErrors.push(error); },
+  }, async (client, server) => {
     const bad = await invoke(client);
     assert.equal(bad.isError, true);
+    assert.equal(observedErrors.length, 1, 'server error classification must be observed');
+    assert.equal(observedErrors[0].name, 'UsageClassificationError');
     assert.equal((await invoke(client)).isError, true);
     assert.equal(server.metrics.handlerEntries, 1);
-  }));
+  });
+});
 
 test('settlement committed but ACK lost: no blind retry or paid handler reentry', { timeout: 10000 }, () => {
   let settlements = 0;

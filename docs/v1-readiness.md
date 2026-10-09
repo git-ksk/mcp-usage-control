@@ -8,9 +8,9 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v1.1.1 is the latest published stable GitHub/npm baseline; v1.2.0 is an unreleased source candidate.** All five source manifests stage 1.2.0 and require Node.js 22 or later; no v1.2.0 source tag or npm publication is authorized. The v1.0 readiness evidence below remains the compatibility/safety foundation for this non-breaking maintenance release.
+**The v1.1.1 release is the verified historical GitHub/npm baseline.** All five source manifests stage 1.2.0 and require Node.js 22 or later. Current publication status is determined from [GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases) and [npm](https://www.npmjs.com/package/mcp-usage-control), not from the manifest alone. Source release and registry publication each require separate explicit authorization. The v1.0 evidence below remains the compatibility/safety foundation for the backward-compatible v1.2.0 work.
 
-All five v1.1.1 packages were published to npm on 2026-10-09 through the separately authorized manual Trusted Publishing workflow. Registry provenance is present for all five packages, downloaded registry tarballs were verified SHA-256 byte-identical to the GitHub Release assets, and a clean Node 22 registry install/import smoke passed. Source version 1.2.0 is still a candidate and does not imply an npm version exists.
+All five v1.1.1 packages were published to npm on 2026-10-09 through the separately authorized manual Trusted Publishing workflow. Registry provenance is present for all five packages, downloaded registry tarballs were verified SHA-256 byte-identical to the GitHub Release assets, and a clean Node 22 registry install/import smoke passed. A source version number alone never implies the corresponding npm package has been published.
 
 The v0.11 freeze line has now resolved the accounting/reliability/runtime/storage/API/governance tranche:
 
@@ -131,7 +131,7 @@ v0.11 established the accounting/runtime/storage/API freeze, v0.12 completed the
 
 ## npm distribution boundary
 
-The current stable source/npm baseline is `v1.1.1`, published 2026-10-09. All five npm registry tarballs have provenance and were independently verified SHA-256 byte-identical to the immutable GitHub Release artifacts; clean Node 22 registry install/import smoke passed.
+The historically verified source/npm baseline `v1.1.1` was published 2026-10-09. All five npm registry tarballs have provenance and were independently verified SHA-256 byte-identical to the immutable GitHub Release artifacts; clean Node 22 registry install/import smoke passed.
 
 Issue #6 remains completed and closed. v1.1.0 publication was separately authorized and completed through the manual OIDC Trusted Publishing workflow; future npm publications remain independent operations requiring the same explicit authorization.
 

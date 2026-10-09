@@ -196,16 +196,23 @@ assert.ok(
   'liable recovery event must be observed',
 );
 
-// Long-running work survives beyond its initial lease through explicit renewal.
-// Keep a wide margin after each renewal so slow CI/workerd requests cannot make this timing test flaky.
-const longRunning = await reserve(store, 'long-running', 'long-running-budget', 1, 500);
+// Long-running work must survive beyond the original lease deadline via
+// explicit renewals. Workerd/CI network timing is not deterministic, so each
+// renewal needs substantial margin relative to the lease lifetime.
+const longRunningTtlMs = 2_500;
+const longRunningStartedAt = Date.now();
+const longRunning = await reserve(store, 'long-running', 'long-running-budget', 1, longRunningTtlMs);
 assert.equal(longRunning.accepted, true);
 if (!longRunning.accepted) throw new Error('expected long-running admission');
 await store.markLiable({ reservationId: longRunning.reservation.id });
 for (let index = 0; index < 8; index += 1) {
-  await sleep(100);
-  await store.renew({ reservationId: longRunning.reservation.id, ttlMs: 500 });
+  await sleep(400);
+  await store.renew({ reservationId: longRunning.reservation.id, ttlMs: longRunningTtlMs });
 }
+assert.ok(
+  Date.now() - longRunningStartedAt > longRunningTtlMs,
+  'renewals must carry the same reservation beyond its original lease duration',
+);
 await sleep(100);
 await store.settle({ reservationId: longRunning.reservation.id, actualUnits: 1, outcome: 'success' });
 

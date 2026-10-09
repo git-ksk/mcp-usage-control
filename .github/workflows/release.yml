@@ -219,6 +219,10 @@ jobs:
             capture { print }
           ' CHANGELOG.md > /tmp/release-notes.md
           test -s /tmp/release-notes.md
+          if grep -Eiq 'not authorized or performed|not released|not yet published|source candidate /|未承認・未実施|未公開のsource' /tmp/release-notes.md; then
+            echo 'Versioned changelog notes contain an outdated pre-release status; refusing to publish misleading notes.' >&2
+            exit 1
+          fi
           cat >> /tmp/release-notes.md <<'NOTES'
 
           ---
