@@ -50,6 +50,8 @@ handler開始直前に markLiable()
 
 ただし、このadapterは認証やsubscription判定そのものを行いません。`principal` や `operationId` はapplication側で信頼できる情報から渡します。
 
+**公式SDKで実際に動く導入サンプル:** [MCPサーバー + クライアント](../examples/mcp-protect-tool/README.ja.md)。固定のデモ用principalとは別に、本番ではこのガイドの認証・論理操作ID境界を満たしてください。
+
 ## 一般的なtoolを包む
 
 以下は既存サーバーへ組み込む断片です。`server` は設定済みのMCPサーバー、`control` は [導入ガイド](getting-started.ja.md) で作る `UsageControl`、`z` はZodです。認証・操作ID・検索処理の関数はアプリ側で実装します。再試行で変わるJSON-RPCリクエストIDを、そのまま論理操作IDとして使わないでください。

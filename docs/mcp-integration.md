@@ -16,6 +16,8 @@ For local patches or release archives, use [Source / local tarballs](using-from-
 
 The adapter does not authenticate callers or decide subscriptions. The application must derive a trusted `Principal` and a suitable logical `operationId`.
 
+**Runnable official SDK integration:** [server + client example](../examples/mcp-protect-tool/README.md). This page also documents production boundaries that the fixed-principal local demo does not implement.
+
 ## Register a protected single-round tool
 
 The following is an integration fragment. `server` is your configured MCP server, `control` is the `UsageControl` from [Getting started](getting-started.md), and `z` is Zod. Implement the authentication, operation-ID, and search functions in your application. A JSON-RPC request ID that changes on retry is not a stable logical operation ID.

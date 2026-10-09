@@ -11,7 +11,7 @@
 
 [English](README.md) · [日本語](README.ja.md)
 
-[クイックスタート](#クイックスタート) · [ドキュメント](docs/README.ja.md) · [実行例](examples/free-plus-credits/README.md) · [貢献する](CONTRIBUTING.ja.md)
+[クイックスタート](#クイックスタート) · [ドキュメント](docs/README.ja.md) · [MCP実行サンプル](examples/mcp-protect-tool/README.ja.md) · [Core実行例](examples/free-plus-credits/README.md) · [貢献する](CONTRIBUTING.ja.md)
 
 </div>
 

@@ -11,7 +11,7 @@
 
 [English](README.md) · [日本語](README.ja.md)
 
-[Quick start](#quick-start) · [Documentation](docs/README.md) · [Examples](examples/free-plus-credits/README.md) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [Documentation](docs/README.md) · [Runnable MCP server](examples/mcp-protect-tool/README.md) · [Core example](examples/free-plus-credits/README.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 

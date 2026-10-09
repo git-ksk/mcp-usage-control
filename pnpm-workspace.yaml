@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - examples/mcp-protect-tool
 
 # Target only currently-vulnerable transitive ranges; do not widen peer floors.
 overrides:
