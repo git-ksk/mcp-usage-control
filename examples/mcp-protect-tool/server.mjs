@@ -11,9 +11,33 @@ import { protectTool } from 'mcp-usage-control-mcp';
 const DEMO_PRINCIPAL = Object.freeze({ id: 'example-user', tenantId: 'example-tenant' });
 const MAX_REQUEST_BYTES = 64 * 1024;
 
-export async function startExampleServer({ budgetLimit = 8 } = {}) {
+// The official MCP SDK can serialize thrown Error.message to the client.
+// Keep raw Store/classification errors in the trusted server boundary only.
+// A product may attach its own access-controlled diagnostics here, but must
+// NEVER expose raw exception messages, principal IDs or budget keys on the wire.
+function sanitizeClientErrors(handler, onProtectedError) {
+  return async (args, ctx) => {
+    try {
+      return await handler(args, ctx);
+    } catch (error) {
+      try { await onProtectedError?.(error); } catch { /* diagnostics are best-effort */ }
+      return {
+        content: [{ type: 'text', text: 'Usage denied or tool unavailable' }],
+        isError: true,
+      };
+    }
+  };
+}
+
+export async function startExampleServer({
+  budgetLimit = 8,
+  createStore = () => new MemoryUsageStore(),
+  onHandlerEntry,
+  classifySuccessUnits,
+  onProtectedError,
+} = {}) {
   const metrics = { handlerEntries: 0, quotes: 0 };
-  const store = new MemoryUsageStore();
+  const store = createStore();
   const control = new UsageControl(store, {
     quote({ principal, tool }) {
       metrics.quotes += 1;
@@ -34,10 +58,10 @@ export async function startExampleServer({ budgetLimit = 8 } = {}) {
         description: 'Simulate a metered report (no paid calls or external side effects)',
         inputSchema: z.object({
           actionId: z.string().uuid(),
-          mode: z.enum(['ok', 'unknown-cost']),
-        }),
+          mode: z.enum(['ok', 'unknown-cost', 'tool-error']),
+        }).strict(),
       },
-      protectTool(
+      sanitizeClientErrors(protectTool(
         {
           control,
           tool: 'demo-report',
@@ -47,21 +71,25 @@ export async function startExampleServer({ budgetLimit = 8 } = {}) {
           // A production app must define the ID's lifecycle, or use a fresh
           // server UUID for each ordinary dispatch without a stable action key.
           operationId: args => args.actionId,
-          successUnits: ({ result }) => result.actualUnits,
+          successUnits: ({ result }) => classifySuccessUnits ? classifySuccessUnits(result) : result.actualUnits,
         },
         async ({ mode }) => {
           metrics.handlerEntries += 1;
+          await onHandlerEntry?.();
           if (mode === 'unknown-cost') {
             // After handler entry usage is cost-liable: default error settlement
             // conservatively charges the full 5-unit reservation.
             throw new Error('example simulated metered-work failure');
+          }
+          if (mode === 'tool-error') {
+            return { content: [{ type: 'text', text: 'Local tool error' }], isError: true };
           }
           return {
             content: [{ type: 'text', text: 'Local example report' }],
             actualUnits: 3,
           };
         },
-      ),
+      ), onProtectedError),
     );
     return server;
   });

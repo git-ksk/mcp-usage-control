@@ -39,7 +39,7 @@ await withExample(async (client, server) => {
   const denied = await call(client, randomUUID());
   assert.equal(denied.isError, true, 'quota must deny before paid work');
   assert.equal(server.metrics.handlerEntries, 2);
-  assert.match(JSON.stringify(denied.content), /Usage denied/);
+  assert.match(JSON.stringify(denied.content), /Usage denied or tool unavailable/);
   console.log('PASS: real loopback MCP calls settle actual usage; duplicates and exhausted budgets deny before work.');
 });
 

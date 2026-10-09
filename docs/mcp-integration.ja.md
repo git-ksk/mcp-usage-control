@@ -81,6 +81,8 @@ server.registerTool(
 
 MCP SDK本来の入力検証は、そのまま元のhandlerより前に動きます。
 
+**公開エラーの信頼境界:** 公式MCP SDKはサーバー内部でthrowされた`Error.message`を、クライアントに見えるエラー文字列へ変換する場合があります。`protectTool()`の内部例外（`UsageDeniedError`、`UsageClassificationError`、`UsageSettlementError`等）はサーバー側の判断に必要ですが、任意のStoreエラーは自動で秘匿されません。tool登録側でwrapper例外をcatchし、機密情報を含まない`{ isError: true, content: [...] }`をアプリ側で作って返してください。生のStore例外、cost、tenant情報、認証情報を公開せず、エラー表示のために会計処理や有料handlerを再試行しません。[公式SDKサンプルと漏洩テスト](../examples/mcp-protect-tool/README.ja.md)を参照してください。
+
 ## 入力がないtool
 
 input schemaを持たないtoolでは `noInput: true` を指定します。
