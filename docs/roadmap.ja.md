@@ -143,6 +143,45 @@ boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0
 
 **v1.1.0はrelease済みのpost-v1 integration-ergonomics source / npm lineです。** #232でopt-in Cloudflare exact post-reserve retry、#233でweak dedupを追加しないMCP operation-identity方針、#237でrelease / backoff / tooling hardening、#239でprivacy-safeなretry運用telemetryを追加しました。すべてadditiveで、frozen v1 accounting / replay boundaryを維持します。separate authorizationされたv1.1.0 Trusted Publishing workflowは成功し、registry tarballもGitHub Release assetとbyte-identicalであることをverify済みです。
 
+## 次期リリース案（未承認・未リリース）
+
+以下は**今後の候補**であり、実装済み機能、公開承認、リリース日程の確約ではありません。まず保守パッチを優先し、v1の公開API、Store永続化契約、課金・リプレイの意味を変更しないことを前提にします。
+
+### v1.1.1候補 — 保守・セキュリティパッチ（最優先）
+
+**目的:** 公開APIや利用量会計の振る舞いを意図的に変更せず、依存関係のセキュリティと互換性の検証を正常化します。
+
+- 2026-10-05のsecurity-maintenance実行で報告されたHigh深刻度の推移的依存問題（Firestore系の`brace-expansion`、`@grpc/grpc-js`を含む）を調査します。実際の到達可能性を評価し、最小限の依存関係・lockfile修正を優先します。例外が必要な場合はaudit全体を無効化せず、根拠を残します。
+- Dependabot PR #244は**互換性の境界ごとに**審査します。TypeScript、Vitest、Node型定義、Firestoreなどのメジャー更新を8件一括で自動マージせず、パッチとして安全でなければ分割・修正・延期します。Node.js 22/24のサポートと既存MCP SDK最小peer互換を維持し、変更が必要な場合は別途互換性判断を行います。
+- 未マージのGitHub Actions更新PR 4件（#186、#189、#230、#231）は、固定SHA・供給元・permissions・runner/runtime要件・protected checkへの影響を個別に検証し、安全なものだけ取り込みます。
+- 予約→課金責任→精算、論理操作ID、unknown-liability時の保守的な復旧、読み取り専用reconciliation、provider固有の制限、Storeのスキーマ互換性を変更しません。
+
+**パッチリリースを提案する前の完了条件:**
+
+1. 最新の依存関係監査で、許容根拠のないHigh/Critical指摘が残っていないこと。例外はadvisory、依存経路、露出評価、担当、再確認方針を記録します。
+2. 対象commitで`pnpm install --frozen-lockfile`、build、unit/regression test、Node 22/24、およびMCP/Redisの最小・現行peer互換性テストに成功すること。
+3. 影響範囲に応じてRedis統合、Firestore Emulatorの競合・障害テスト、Cloudflare workerd/providerテストを実施すること。protected `test (22)`と該当security checkはgreenであり、provider testのskipは既存change classifierにより説明可能であること。
+4. 配布tarball、公開entry point、クリーンNode 22 consumer smokeを検証し、patchに非互換API・永続化形式・利用量会計の変更を混入させないこと。
+5. 英日ドキュメントを実測結果と一致させること。GitHub/source releaseとnpm Trusted Publishingは**それぞれ別の明示承認**が必要で、このロードマップ更新は公開承認にはなりません。
+
+### v1.2.0候補 — 開発者体験の追加改善（v1.1.1の後）
+
+**目的:** 導入ミスを減らして再利用可能な検証を強化します。第二の会計上の正本を作ったり、既存helperを重複実装したりしません。採用する機能は利用者・統合時の実証された課題からIssue単位で選びます。
+
+- **MCP導入導線:** trusted principal / operation ID、quote・reserve・liability・settlement、拒否・失敗時の処理、Memoryから本番Storeへの切替を扱う実行可能な`protectTool()`例を改善します。既存getting-started、`free-plus-credits`、MCP integration資料を再利用し、競合する新APIは作りません。
+- **運用playbook:** 既存の`UsageOperationalMonitor`、read-only reconciliation、threshold/projection helperを使い、providerごとの安全な状態確認、復旧判断、quota-window表示、障害診断を整理します。再現可能な不足が残る場合のみ、**read-onlyかつnon-authoritative**なhelper追加を審査し、observer telemetryを請求残高の正本にしません。
+- **適合性・障害注入テスト:** 既存のStore/MCP flow conformance kit、決定的な同時実行・lost-ACK・expiry fixture、provider別の証拠資料を強化します。振る舞いの互換性と、Redis/Firestore/Durable Objectsの個別デプロイ条件下での本番安全性を区別します。
+- **統合互換性:** MCP SDKの最小・現行peerとNode 22/24を継続検証します。opt-inで後方互換な追加、docs/test中心を優先し、破壊的変更を要する提案は別途major version判断に分離します。
+
+**マイナーリリースを提案する前の完了条件:**
+
+1. 採用する各改善に、独立したIssue、利用実績や再現手順、対象範囲・対象外、リスクに応じたテストがあること。
+2. 既存公開export、operation identity、lease、Store契約、永続化schema、scalar/vectorのall-or-nothing会計を維持すること。新しい公開helperは任意・追加的で、clean-consumer配布テストを伴うこと。
+3. portable conformance、provider別の回帰証拠、対応runtime/peer matrix、protected aggregate release gateがgreenであり、英日docsと例が一致すること。
+4. 認証、サブスクリプション請求、価格表、汎用gateway/control plane、権威的なdashboard、業務副作用の再実行をcoreへ持ち込まないこと。
+
+**実施順:** (1) セキュリティ指摘の評価とpatch-safeな修正 → (2) Dependabot/Actions PRの個別審査と全検証 → (3) 必要に応じて別途承認されたv1.1.1公開 → (4) 実証に基づくv1.2.0 Issue選定・小規模実装 → (5) 別途承認された公開審査。日程と公開の承認はまだ未設定です。
+
 ## 「v1 complete」の定義
 
 v1.0は未決定事項を最後に解くreleaseではなく、**すでに完成したsurfaceをstableへ昇格するrelease**です。
