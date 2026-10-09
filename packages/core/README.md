@@ -2,7 +2,7 @@
 
 Core package for concurrency-safe MCP usage enforcement. MCP and storage vendor independent.
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a a locally packed `mcp-usage-control-<version>.tgz`. See [Use from source / local tarballs](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md) / [日本語](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.ja.md).
+> **Current distribution status:** `mcp-usage-control` v1.1.1 was published to npm on 2026-10-09 with provenance. GitHub release tarballs and source/local-package workflows remain available; see [GitHub Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.1.1) / [Use from source](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md).
 
 ## English
 

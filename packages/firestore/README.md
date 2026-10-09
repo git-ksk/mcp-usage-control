@@ -2,7 +2,7 @@
 
 Server-side Firestore `UsageStore` adapter for [`mcp-usage-control`](https://github.com/git-ksk/mcp-usage-control/tree/main/packages/core#readme).
 
-> **Current distribution status:** this package is not published to npm yet. Use the repository checkout or a locally packed tarball until the first registry release.
+> **Current distribution status:** `mcp-usage-control-firestore` v1.1.1 was published to npm on 2026-10-09 with provenance. GitHub release tarballs and source/local-package workflows remain available; see [GitHub Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.1.1) / [Use from source](https://github.com/git-ksk/mcp-usage-control/blob/main/docs/using-from-source.md).
 
 ```ts
 import { getFirestore } from 'firebase-admin/firestore';

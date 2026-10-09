@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.1.0がcurrent stable GitHub/source / npm baselineです。** Node.js 22+対応の5 packageは、2026-09-26にvalidated GitHub Release tarballと同一byteでnpmへ公開済みです。source上の5 manifestだけを別途承認が必要なpatch候補 `1.1.1` に揃えており、v1.1.1はまだ未公開です。
+**v1.1.1が現在のstable GitHub/source / npm baselineです。** Node.js 22+対応の5パッケージを2026-10-09に、GitHub Releaseとnpm Trusted Publishingを別途承認して公開しました。registry provenance、GitHub assetとのSHA-256 byte identity、クリーンなNode 22利用側テストを確認済みです。
 
 初回publication gate #6は完了・close済みです。v1.1.0もseparate authorizationされたmanual Trusted Publishing pathを使い、registry provenanceとGitHub Release assetとのbyte identityを独立verifyしました。今後のregistry publicationも引き続き独立authorize対象です。
 
@@ -57,6 +57,7 @@ v0.6 progressive growth [RELEASED]
 | **v0.12.0** | product/operations hardening: release provenance/artifact、supply-chain maintenance、incident runbook、競合判断、quota-window projection、provider benchmark | Release済み / Complete |
 | **v0.13.0** | final v1-blocker closure: authoritative clock、renew uncertainty、安全なhistorical cleanup、vector reconciliation、bounded input、shipped docs、Node/peer CI | Release済み / Complete |
 | **v1.1.0** | additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232)、weak transport-ID dedupを追加しないsingle-round read operation-identity guidance (#233)、release / backoff / test-tool hardening (#237)、privacy-safe exact-retry operational telemetry (#239) | Release済み / Complete |
+| **v1.1.1** | 依存関係のセキュリティ修正、Cloudflareテスト領域分離、後方互換の配布・リリース検証（#246、#248） | GitHub + npm公開済み / Complete |
 
 Firestore outer retryはdefinitive transaction abortだけに限定します。`UNKNOWN` / `UNAVAILABLE` / `INVALID_ARGUMENT` などambiguous/provider failureをgeneric retry allow-listへ昇格しません。
 
@@ -143,11 +144,11 @@ boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0
 
 **v1.1.0はrelease済みのpost-v1 integration-ergonomics source / npm lineです。** #232でopt-in Cloudflare exact post-reserve retry、#233でweak dedupを追加しないMCP operation-identity方針、#237でrelease / backoff / tooling hardening、#239でprivacy-safeなretry運用telemetryを追加しました。すべてadditiveで、frozen v1 accounting / replay boundaryを維持します。separate authorizationされたv1.1.0 Trusted Publishing workflowは成功し、registry tarballもGitHub Release assetとbyte-identicalであることをverify済みです。
 
-## 次期リリース案（未承認・未リリース）
+## v1.1.1完了・v1.2.0提案中
 
-以下は**今後の候補**であり、実装済み機能、公開承認、リリース日程の確約ではありません。まず保守パッチを優先し、v1の公開API、Store永続化契約、課金・リプレイの意味を変更しないことを前提にします。
+v1.1.1の保守計画は、source / npmを別途承認した上で**公開完了**しました（#246、#248）。v1.2.0のDeveloper Experience改善は、公開承認も確定日程もない提案段階です。v1の公開API、Store永続化契約、課金・リプレイの意味は維持します。
 
-### v1.1.1候補 — 保守・セキュリティパッチ（最優先）
+### v1.1.1 — 保守・セキュリティパッチ（2026-10-09公開済み）
 
 **目的:** 公開APIや利用量会計の振る舞いを意図的に変更せず、依存関係のセキュリティと互換性の検証を正常化します。
 
@@ -180,7 +181,7 @@ boundedな **v0.12 product/operations hardening** tranche (#177〜#184) と **v0
 3. portable conformance、provider別の回帰証拠、対応runtime/peer matrix、protected aggregate release gateがgreenであり、英日docsと例が一致すること。
 4. 認証、サブスクリプション請求、価格表、汎用gateway/control plane、権威的なdashboard、業務副作用の再実行をcoreへ持ち込まないこと。
 
-**実施順:** (1) セキュリティ指摘の評価とpatch-safeな修正 → (2) Dependabot/Actions PRの個別審査と全検証 → (3) 必要に応じて別途承認されたv1.1.1公開 → (4) 実証に基づくv1.2.0 Issue選定・小規模実装 → (5) 別途承認された公開審査。日程と公開の承認はまだ未設定です。
+**実施順:** v1.1.1の脆弱性修正・検証・個別承認されたGitHub/npm公開は完了しました。未マージのDependabot/Actions PRは引き続き別途互換性を審査します。次は実証に基づくv1.2.0 Issue選定・小規模な後方互換改善で、v1.2.0の公開日程・承認は未確定です。
 
 ## 「v1 complete」の定義
 

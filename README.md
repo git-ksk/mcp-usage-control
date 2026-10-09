@@ -154,7 +154,7 @@ Provider guides cover persistence, deployment, clock, and contention requirement
 
 ## Project status
 
-The published five-package baseline remains **v1.1.0**; the main source manifests prepare a not-yet-published **v1.1.1 patch candidate**. v1.1.0 was published to npm on 2026-09-26 through the manually authorized Trusted Publishing workflow using the exact validated GitHub Release tarballs. CI covers Node.js 22/24, Redis, MCP SDK v2 integration, Cloudflare local/workerd, Firestore Emulator, and package-consumer checks. See [release evidence](docs/v1-readiness.md) for the scope of validation.
+All five packages are published at **v1.1.1** on GitHub and npm (2026-10-09), through separately authorized source release and npm Trusted Publishing workflows. The downloaded npm tarballs were verified SHA-256 byte-identical to the GitHub Release assets, with registry provenance for all five packages. CI covers Node.js 22/24, Redis, MCP SDK v2 integration, Cloudflare local/workerd, Firestore Emulator, and package-consumer checks. See [release evidence](docs/v1-readiness.md) for the scope of validation.
 
 Single-round and multi-round MCP accounting are supported. A stable first-class MCP Tasks adapter remains deferred; see [Tasks accounting](docs/mcp-tasks-accounting.md) for the defined lifecycle boundary.
 
