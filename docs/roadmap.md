@@ -143,6 +143,45 @@ The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.
 
 **v1.1.0 is the released post-v1 integration-ergonomics source/npm line.** #232 adds opt-in Cloudflare exact post-reserve retry, #233 records the no-weak-dedup MCP operation-identity decision, #237 hardens release/backoff/tooling, and #239 adds privacy-safe retry operations telemetry. All are additive and preserve the frozen v1 accounting/replay boundary. The separately authorized v1.1.0 Trusted Publishing workflow completed successfully, and registry tarballs were verified byte-identical to the GitHub Release assets.
 
+## Planned next releases (proposals; not yet authorized)
+
+These are **forward-looking candidates**, not shipped features, approved publication, or a commitment to a date. Prioritize the maintenance patch before optional new work. The existing v1 public API, Store persistence contracts, and accounting/replay semantics remain the baseline.
+
+### Candidate v1.1.1 — maintenance and security patch (first priority)
+
+**Goal:** restore clean dependency-security and compatibility evidence with **no intentional public-contract or accounting-behavior changes**.
+
+- Triage the outstanding high-severity transitive dependency findings reported in the 2026-10-05 security-maintenance run, including `brace-expansion` and `@grpc/grpc-js` via Firestore tooling. Identify reachable exposure and apply the narrowest safe dependency/lockfile remediation; document any justified advisory exception rather than suppressing the audit globally.
+- Review Dependabot PR #244 **by compatibility boundary**, not as an automatic eight-package bulk merge. Major TypeScript, Vitest, Node type, and Firestore dependency upgrades must be separated, adapted, or deferred if they exceed a patch-safe change; retain Node.js 22/24 support and existing MCP SDK minimum-peer guarantees unless explicitly approved under a separate compatibility decision.
+- Individually evaluate the four open GitHub Actions update PRs (#186, #189, #230, #231) for pinned-action provenance, permissions, supported runner/runtime requirements, and protected-check behavior. Merge only verified safe updates.
+- Preserve the fixed lifecycle, single-operation identity, conservative unknown-liability recovery, read-only reconciliation, provider-specific limits, and all documented Store state/schema compatibility.
+
+**Acceptance before proposing a patch release:**
+
+1. A fresh dependency audit has no unresolved **unaccepted** high/critical findings; any exception records its exact advisory, dependency path, exposure assessment, owner, and follow-up.
+2. `pnpm install --frozen-lockfile`, build, unit/regression tests, and the supported Node 22/24 and MCP/Redis peer-compatibility checks pass on the exact candidate commit.
+3. Redis integration, Firestore Emulator concurrency/failure tests, and Cloudflare workerd/provider tests pass where changed dependencies or code can affect those boundaries. Aggregate protected `test (22)` and applicable security checks are green; skipping provider tests must be justified by the existing change classifier.
+4. Release archives, exported entry points, and a clean Node 22 consumer smoke remain compatible; no unsupported public API, storage-format, or quota-accounting change is slipped into a patch.
+5. English/Japanese release and operator documentation agree with actual tested behavior. GitHub/source release and npm Trusted Publishing each require **separate explicit authorization**; completing this roadmap does not authorize either action.
+
+### Candidate v1.2.0 — additive developer experience (after v1.1.1)
+
+**Goal:** reduce integration mistakes and strengthen reusable verification **without creating a second accounting authority or duplicating shipped helpers**. Select precise issues from demonstrated user/integration gaps before committing implementation.
+
+- **MCP adoption path:** improve an end-to-end, runnable `protectTool()` example covering trusted principal/operation ID, realistic quote/reserve/liability/settlement, denial/error handling, and the Memory-to-production-Store decision. Reuse the existing getting-started guide, `free-plus-credits` example, and MCP integration guidance rather than introducing a competing API.
+- **Operational playbooks:** document safe provider-specific inspection, reconcile/restore decisions, quota-window projections, and incident diagnosis using already shipped `UsageOperationalMonitor`, read-only reconciliation, and threshold/projection helpers. Add a new **read-only, non-authoritative** helper only if a reproducible gap remains after that reuse analysis; never derive billing balances from observer telemetry.
+- **Conformance and failure injection:** strengthen the existing portable Store/MCP flow conformance kits, deterministic concurrency/lost-ACK/expiry test fixtures, and provider-specific evidence guidance. Keep behavioral compatibility separate from claims of production safety for a stated Redis/Firestore/Durable Object deployment.
+- **Integration compatibility:** include minimum/current MCP SDK peers and Node 22/24 in the evidence. Prefer opt-in, backward-compatible enhancements and additive docs/tests; proposals that require breaking changes need a separate major-version decision.
+
+**Acceptance before proposing a minor release:**
+
+1. Each accepted improvement has a focused issue, motivating reproduction or adoption evidence, explicit scope/non-goals, and tests appropriate to its risk.
+2. Existing public exports, operation identity, lease semantics, Store contracts, persisted schemas, and all-or-nothing scalar/vector accounting remain compatible; any new public helper is optional, additive, and tested in clean-consumer packaging.
+3. Portable conformance, provider-specific regression evidence, supported-runtime/peer matrix, and the protected aggregate release gate remain green, with bilingual docs and examples kept synchronized.
+4. No embedded authentication, subscription billing, pricing catalog, generic gateway/control plane, authoritative dashboard, or business-side-effect replay is added to the core.
+
+**Execution order:** (1) security/advisory triage and patch-safe dependency remediation; (2) dependency/Actions PR review and full verification; (3) separately authorized v1.1.1 release, if warranted; (4) evidence-based v1.2.0 issue selection and scoped implementation; (5) separately authorized release review. Dates and publication are intentionally unset.
+
 ## v1 completion definition
 
 v1.0 is a **stable promotion of an already completed surface**, not the release where unresolved product/accounting questions are decided.
