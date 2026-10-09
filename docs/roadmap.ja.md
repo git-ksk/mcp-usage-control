@@ -169,6 +169,8 @@ v1.1.1の保守計画は、source / npmを別途承認した上で**公開完了
 
 **目的:** 導入ミスを減らして再利用可能な検証を強化します。第二の会計上の正本を作ったり、既存helperを重複実装したりしません。採用する機能は利用者・統合時の実証された課題からIssue単位で選びます。
 
+**Issue化した実装範囲:** 親Issue [#252](https://github.com/git-ksk/mcp-usage-control/issues/252)。P1は、公式SDKで起動・呼出できるMCPサーバーのサンプル [#253](https://github.com/git-ksk/mcp-usage-control/issues/253)、並行して障害・再照合時の安全な判断手順 [#254](https://github.com/git-ksk/mcp-usage-control/issues/254)、#253を利用する公式SDK経由のE2E [#255](https://github.com/git-ksk/mcp-usage-control/issues/255)。P2は、SDK version記載と配布tarball利用側の互換性検証 [#256](https://github.com/git-ksk/mcp-usage-control/issues/256)。すべて**起票済み・未実装**です。既存のCore/Store/flow conformanceとpeer CIを再利用し、課金・認可の第二の正本やambiguous呼出の自動retryを追加しません。
+
 - **MCP導入導線:** trusted principal / operation ID、quote・reserve・liability・settlement、拒否・失敗時の処理、Memoryから本番Storeへの切替を扱う実行可能な`protectTool()`例を改善します。既存getting-started、`free-plus-credits`、MCP integration資料を再利用し、競合する新APIは作りません。
 - **運用playbook:** 既存の`UsageOperationalMonitor`、read-only reconciliation、threshold/projection helperを使い、providerごとの安全な状態確認、復旧判断、quota-window表示、障害診断を整理します。再現可能な不足が残る場合のみ、**read-onlyかつnon-authoritative**なhelper追加を審査し、observer telemetryを請求残高の正本にしません。
 - **適合性・障害注入テスト:** 既存のStore/MCP flow conformance kit、決定的な同時実行・lost-ACK・expiry fixture、provider別の証拠資料を強化します。振る舞いの互換性と、Redis/Firestore/Durable Objectsの個別デプロイ条件下での本番安全性を区別します。
