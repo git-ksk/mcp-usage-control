@@ -234,6 +234,8 @@ The adapter intentionally does not expose a JSON-RPC request-ID helper, weak rea
 
 For `protectMultiRoundTool()`, only the first round calls the application `operationId()` callback; resumed rounds reuse the trusted original identity.
 
+If a reserve, mark-liable, renewal or settlement acknowledgement is ambiguous, follow the [operator recovery decision matrix](operation-recovery-playbook.md) rather than inventing automatic retries.
+
 ## Lease heartbeat
 
 Both wrappers renew an actively executing lease at roughly one third of its TTL by default. Before settlement or suspension they stop the heartbeat and wait for an in-flight renewal.

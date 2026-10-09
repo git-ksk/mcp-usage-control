@@ -8,6 +8,8 @@ Status: **v0.8 contract。future v1 surfaceへoptionalなscalar Store capability
 
 v0.8ではprovider-neutralな小さい **read-only** scalar operation status語彙を追加します。base `UsageStore` はsource-compatibleのままで、Storeは `OperationReconciliationStore`、またはCloudflare remote reconciliation helperのようなadapter固有の同等capabilityとしてopt-inします。
 
+フェーズ別の具体的な判断は[運用判断ガイド](operation-recovery-playbook.ja.md)を参照してください。再照合は読み取り専用の証拠であり、再実行許可ではありません。
+
 ## Core types
 
 ```ts

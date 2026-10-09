@@ -4,6 +4,8 @@
 
 This runbook applies when a released version may violate usage-enforcement, replay, settlement, authentication, or persisted-state safety. It consumes the compatibility contract in [Persisted-state compatibility and rollback](persisted-state-compatibility.md); it does not redefine provider schema semantics.
 
+For specific ACK-loss or replay decisions, start with the [operator recovery decision guide](operation-recovery-playbook.md) before considering mutation of authoritative data.
+
 ## First rule: contain before changing authoritative state
 
 When impact is uncertain, stop or gate **new cost-bearing dispatch** before attempting a data repair. Do not clear counters, rotate accounting-domain selectors, or fall back to an unmetered path merely to restore availability.

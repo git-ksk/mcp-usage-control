@@ -4,6 +4,8 @@
 
 release済みversionがusage enforcement、replay、settlement、authentication、persisted-state safetyを壊す可能性がある場合のrunbookです。[Persisted-state compatibility / rollback](persisted-state-compatibility.ja.md) のcontractを運用で使うもので、provider schema semanticsを再定義しません。
 
+予約・精算のACK喪失や再実行の判断は、正本データを変更する前に[運用判断ガイド](operation-recovery-playbook.ja.md)を参照してください。
+
 ## 最初の原則: authoritative stateを触る前にcontainする
 
 impactが不明な場合は、data repairより先に**新しいcost-bearing dispatchを停止またはgate**します。availabilityを戻す目的でcounterをclearしたり、accounting-domain selectorを変えたり、unmetered fallbackへ逃がしたりしません。
