@@ -371,6 +371,7 @@ jobs:
           cd /tmp/muc-consumer
           cp "$GITHUB_WORKSPACE/examples/mcp-protect-tool/server.mjs" ./server.mjs
           cp "$GITHUB_WORKSPACE/examples/mcp-protect-tool/run.mjs" ./run.mjs
+          cp "$GITHUB_WORKSPACE/examples/mcp-protect-tool/test.mjs" ./test.mjs
           # All five packages above were installed from this exact commit's .tgz,
           # not from npm's last released baseline or pnpm workspace symlinks.
           npm install --no-save --ignore-scripts \
@@ -378,11 +379,13 @@ jobs:
             @modelcontextprotocol/server@2.0.0 \
             zod@^4.0.0
           node run.mjs
+          node --test test.mjs
           npm install --no-save --ignore-scripts \
             '@modelcontextprotocol/client@^2.0.0' \
             '@modelcontextprotocol/server@^2.0.0' \
             zod@^4.0.0
           node run.mjs
+          node --test test.mjs
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { MCP_USAGE_CONTROL_VERSION } from 'mcp-usage-control/operational';

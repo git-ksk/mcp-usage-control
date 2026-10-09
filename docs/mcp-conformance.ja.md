@@ -8,6 +8,8 @@
 
 公開MCP adapterのpeer下限は`@modelcontextprotocol/server@^2.0.0`です。repositoryのdev依存ではclient `^2.3.1`、server `^2.0.0`を宣言し、現行`pnpm-lock.yaml`はそれぞれclient `2.3.1`、server `2.0.0`を解決しています。CIは宣言されたserver peer範囲の**minimum `2.0.0`**と**current compatible version**を別々にテストし、Node 22/24も検証します。SDKのバージョンとMCP protocol revisionは別概念で、current conformance integration testではlegacy fallbackへ依存せずprotocol revision `2026-07-28` を明示的にpinします。
 
+実際に起動できるサーバー/クライアントと**公式SDK経由の10ケースE2E**は[`examples/mcp-protect-tool/`](../examples/mcp-protect-tool/README.ja.md)にあり、CIではsource候補の正確なtarballをクリーンな利用側へインストールし、minimum/current compatibleなMCP SDK peerで実行します。これは既存のmulti-round conformanceとは別の証拠です。
+
 検証経路はofficial SDKそのものです。
 
 ```text

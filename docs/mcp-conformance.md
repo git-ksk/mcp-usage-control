@@ -8,6 +8,8 @@ This document records the protocol-level proof for the current MCP adapter bound
 
 The public MCP adapter declares a `@modelcontextprotocol/server` peer range of `^2.0.0`. Repository development ranges are `@modelcontextprotocol/client@^2.3.1` and `@modelcontextprotocol/server@^2.0.0`, currently resolved in `pnpm-lock.yaml` to client **2.3.1** and server **2.0.0** respectively. CI independently checks the minimum server peer **2.0.0**, a current compatible peer, and Node **22/24**; these are different evidence sets. The **MCP protocol revision** is not the SDK package version: the current conformance integration test explicitly pins revision `2026-07-28` instead of relying on legacy fallback.
 
+The runnable server/client and **ten focused official-SDK E2E scenarios** are in [`examples/mcp-protect-tool/`](../examples/mcp-protect-tool/README.md); the CI clean consumer also installs exact source-candidate tarballs and runs these scenarios with minimum/current compatible MCP SDK peers. This is distinct from and does not replace the existing multi-round conformance proofs.
+
 The proof uses the official SDK path:
 
 ```text
