@@ -14,17 +14,18 @@ MCP Task の状態と、利用量 accounting の状態は関係しますが、**
 
 ## プロトコル基準と対応範囲
 
-2026-08-13 時点で、このリポジトリは MCP `2026-07-28` 系を対象にし、TypeScript の client/server SDK `2.0.0` をテストしています。
+2026-10-10時点の再確認：安定版MCP `2026-07-28` protocolを対象に、公式TypeScript SDK v2の**最小・現行互換peer matrix**を検証します。client/server SDKを両方2.0.0に固定しているという意味ではありません。
 
-現在の MCP Tasks は `io.modelcontextprotocol/tasks` extension として設計されています。draft では task 対応 `tools/call`、`tasks/get`、`tasks/update`、`tasks/cancel` と、`working`、`input_required`、`completed`、`failed`、`cancelled` の状態が定義されています。
+MCP Tasksは`io.modelcontextprotocol/tasks`拡張で提供され、**2026-07-28のschema snapshotはStable**（進行中のDraftとは別）です。task対応`tools/call`、`tasks/get`、`tasks/update`、`tasks/cancel`と`working`、`input_required`、`completed`、`failed`、`cancelled`の状態が定義されています。
 
-一方、TypeScript SDK v2 の core は旧来の `tasks/*` wire vocabulary を modern core protocol として扱いません。Tasks extension の仕様・実装は別リポジトリで管理され、現時点では明示的に experimental です。そのため本プロジェクトは **accounting semantics を先に確定・検証**し、安定版の first-class TypeScript Tasks adapter まではまだ名乗りません。
+TypeScript SDK v2 Coreは古い2025-11-25の`tasks/*`語彙をmodern core protocolとして扱いません。調査した`@modelcontextprotocol/ext-tasks@0.2.2`は**requester/clientのlifecycle API**と**2025-11-25 Tasks受信側**を提供していますが、Stable schemaの存在だけでは2026-07-28の**server/receiver**実装互換性を証明できません。本OSSは現時点で**利用量会計モデルのみ確定・検証済み**で、正式なTasks server adapter対応は宣言しません。[#272](https://github.com/git-ksk/mcp-usage-control/issues/272)の公式SDK検証を先行し、[#275](https://github.com/git-ksk/mcp-usage-control/issues/275)の実装可否を判断します。
 
 判断に使った一次情報:
 
 - MCP `2026-07-28` release notes: <https://blog.modelcontextprotocol.io/posts/2026-07-28/>
 - TypeScript SDK `2026-07-28` support notes: <https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/support-2026-07-28.md>
-- Tasks extension repository/specification: <https://github.com/modelcontextprotocol/ext-tasks>
+- Tasks extension repository/specification (stable 2026-07-28 snapshot): <https://github.com/modelcontextprotocol/ext-tasks>
+- TypeScript拡張パッケージの提供範囲: <https://modelcontextprotocol.github.io/ext-tasks/typescript/>
 
 これは互換性上の境界であって、accounting core の不足ではありません。既存の lease primitive で以下の安全性を表現できます。
 
@@ -189,8 +190,8 @@ Accounting のための sticky MCP session は不要です。task router が tas
 
 `packages/core/src/task-accounting-proof.test.ts` で、長時間/input wait 中の renewal、liability 前 cancellation、liability 後 cancellation、pending/liable worker crash expiry、terminal settlement の idempotent/conflicting replay を既存 primitive に対して検証します。
 
-**First-class MCP Tasks adapter: deferred / experimental。**
+**First-class MCP Tasksサーバー側アダプター：公式receiver互換性の確認（#272）まで延期し、#275は条件付き。**
 
-現在の accounting lifecycle を表現するための新しい runtime API は不要です。MCP Tasks extension と TypeScript 実装 surface が十分安定してから、experimental wire/runtime contract へ package を固定せずに統合できる形で adapter を追加します。
+現在の会計ライフサイクルを表現するためにCoreへ新しいruntime APIを増やす必要はありません。Stable schemaと実際に動く公式extension/server receiverは別なので、2026-07-28 Tasksのreceiver相互運用性を確認してから、既存Storeの安全性を維持するopt-inアダプターを設計します。
 
-本プロジェクトが first-class Tasks protocol support を宣伝しない限り、これは v1 の accounting blocker ではありません。upstream extension が v1 判定前に安定化しない場合、post-v1 integration candidate とします。
+これは現行の会計機能のブロッカーではありません。v1.3で[#272](https://github.com/git-ksk/mcp-usage-control/issues/272)の互換性判定を行い、証拠があればv1.4候補の[#275](https://github.com/git-ksk/mcp-usage-control/issues/275)に着手します。受信側APIが実際には未対応なら延期し、Tasksを正式サポート済みとは表明しません。
