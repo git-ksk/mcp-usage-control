@@ -10,7 +10,7 @@
 
 ## [1.1.1] - 2026-10-09
 
-v1.1.1はセキュリティ・テスト安定性のpatch release候補です。mainのsource準備とGitHub Release / npm公開は独立して管理し、公開前に別途明示承認が必要です。
+v1.1.1はセキュリティ・テスト安定性のpatch releaseです。GitHub Releaseとnpm Trusted Publishingは2026-10-09にそれぞれ別途承認して公開完了しました。5 tarballのbyte identity・provenance・clean Node 22 consumer testを確認済みです。
 
 ### セキュリティ・互換性
 

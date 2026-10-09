@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v1.1.0 is the current stable GitHub/source and npm baseline.** Its five Node.js 22+ packages were published to npm on 2026-09-26 from the exact validated GitHub Release tarballs. The five source manifests are staged at `1.1.1` for a separately authorized patch release; v1.1.1 is not yet published.
+**v1.1.1 is the current stable GitHub/source and npm baseline.** All five Node.js 22+ packages were released on 2026-10-09 through separately approved GitHub Release and npm Trusted Publishing workflows. Their npm tarballs are SHA-256 byte-identical to the validated GitHub assets, with registry provenance and clean Node 22 consumer checks.
 
 The first-publication gate #6 remains complete and closed. v1.1.0 used the same separately authorized manual Trusted Publishing path, with registry provenance and byte identity against GitHub Release assets independently verified. Future registry publications remain separately authorized operations; source-release progress never implies registry publication.
 
@@ -57,6 +57,7 @@ Across every remaining release:
 | **v0.12.0** | Product/operations hardening: release provenance/artifacts, supply-chain maintenance, incident runbook, competitor decisions, quota-window projection, provider benchmarks | Released / complete |
 | **v0.13.0** | Final v1-blocker closure: authoritative clocks, renewal uncertainty, safe historical cleanup, vector reconciliation, bounded inputs, shipped docs, Node/peer CI | Released / complete |
 | **v1.1.0** | Additive post-v1 integration ergonomics: bounded Cloudflare exact post-reserve retry (#232), explicit single-round read operation-identity guidance without weak transport-ID dedup (#233), release/backoff/test-tool hardening (#237), privacy-safe exact-retry operational telemetry (#239) | Released / complete |
+| **v1.1.1** | Security advisory remediation, Cloudflare local test-state isolation, contract-preserving package and release verification (#246, #248) | GitHub + npm released / complete |
 
 Firestore outer retry remains restricted to definitive transaction aborts. `UNKNOWN`, `UNAVAILABLE`, `INVALID_ARGUMENT`, and other ambiguous/provider failures are not promoted into a generic retry allow-list.
 
@@ -143,11 +144,11 @@ The bounded **v0.12 product/operations hardening** tranche (#177-#184) and **v0.
 
 **v1.1.0 is the released post-v1 integration-ergonomics source/npm line.** #232 adds opt-in Cloudflare exact post-reserve retry, #233 records the no-weak-dedup MCP operation-identity decision, #237 hardens release/backoff/tooling, and #239 adds privacy-safe retry operations telemetry. All are additive and preserve the frozen v1 accounting/replay boundary. The separately authorized v1.1.0 Trusted Publishing workflow completed successfully, and registry tarballs were verified byte-identical to the GitHub Release assets.
 
-## Planned next releases (proposals; not yet authorized)
+## v1.1.1 completed; v1.2.0 proposed
 
-These are **forward-looking candidates**, not shipped features, approved publication, or a commitment to a date. Prioritize the maintenance patch before optional new work. The existing v1 public API, Store persistence contracts, and accounting/replay semantics remain the baseline.
+The v1.1.1 maintenance plan below has **shipped** under separately approved source/npm releases (#246, #248). The v1.2.0 developer-experience plan remains a proposal without release authorization or a committed date. The existing v1 public API, Store persistence contracts, and accounting/replay semantics remain the baseline.
 
-### Candidate v1.1.1 — maintenance and security patch (first priority)
+### v1.1.1 — maintenance and security patch (released 2026-10-09)
 
 **Goal:** restore clean dependency-security and compatibility evidence with **no intentional public-contract or accounting-behavior changes**.
 
@@ -180,7 +181,7 @@ These are **forward-looking candidates**, not shipped features, approved publica
 3. Portable conformance, provider-specific regression evidence, supported-runtime/peer matrix, and the protected aggregate release gate remain green, with bilingual docs and examples kept synchronized.
 4. No embedded authentication, subscription billing, pricing catalog, generic gateway/control plane, authoritative dashboard, or business-side-effect replay is added to the core.
 
-**Execution order:** (1) security/advisory triage and patch-safe dependency remediation; (2) dependency/Actions PR review and full verification; (3) separately authorized v1.1.1 release, if warranted; (4) evidence-based v1.2.0 issue selection and scoped implementation; (5) separately authorized release review. Dates and publication are intentionally unset.
+**Execution order:** v1.1.1 security remediation, verification, and separately authorized GitHub/npm releases are complete. Remaining open dependency/Actions proposals require separate compatibility review. Next, select evidence-based v1.2.0 issues and implement narrowly scoped additive changes; v1.2.0 timing and release approval remain unset.
 
 ## v1 completion definition
 

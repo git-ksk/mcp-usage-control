@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v1.1.0がcurrent stable GitHub/source / npm baselineです。** npm公開済みの5 packageはv1.1.0のままで、source上の5 manifestのみ次の独立承認patch候補 `1.1.1` に揃い、Node.js 22以上をrequireします。以下のv1.0 readiness evidenceは、このadditiveなpost-v1 releaseでもcompatibility / safety foundationとして維持します。
+**v1.1.1が現在のstable GitHub/source / npm baselineです。** 5パッケージとsource manifestはすべて1.1.1に揃い、Node.js 22以上をrequireします。以下のv1.0 readiness evidenceは、この後方互換maintenance releaseのcompatibility / safety foundationとして維持します。
 
 5 packageすべてを2026-09-26に、separate authorizationされたmanual Trusted Publishing workflowからnpmへ公開しました。5 packageすべてにregistry provenanceがあり、registryから再取得したtarballはGitHub Release assetとSHA-256でbyte-identical、clean Node 22 registry install / import smokeもPASS済みです。
 
@@ -131,7 +131,7 @@ v0.11でaccounting / runtime / storage / API freezeを確立し、v0.12で#177�
 
 ## npm distribution boundary
 
-current stable source / npm baselineは `v1.1.0` です。5 registry tarballはvalidated GitHub Release artifactそのものをpublishし、provenance、registry metadata、byte identity、package content、clean Node 22 consumer installを独立verify済みです。
+current stable source / npm baselineは、2026-10-09に公開済みの `v1.1.1` です。5 registry tarballすべてにprovenanceがあり、GitHub Release assetとのSHA-256 byte identityとclean Node 22 registry install / import smokeを独立verify済みです。
 
 #6は完了・close済みです。v1.1.0 publicationもmanual OIDC Trusted Publishing workflowでseparate authorizationして完了しました。今後のnpm publicationも独立したexplicit authorization対象です。
 

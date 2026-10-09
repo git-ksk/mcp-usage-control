@@ -10,7 +10,7 @@ No entries yet.
 
 ## [1.1.1] - 2026-10-09
 
-Security and test-reliability maintenance patch. Preparing source artifacts does **not** authorize a GitHub Release or npm publication; those remain separate explicitly approved steps.
+Security and test-reliability maintenance patch. The GitHub Release and npm Trusted Publishing workflows were **separately authorized and completed** on 2026-10-09. All five npm tarballs were verified byte-identical to the validated GitHub assets, with provenance and clean Node 22 consumer evidence.
 
 ### Security and compatibility
 
