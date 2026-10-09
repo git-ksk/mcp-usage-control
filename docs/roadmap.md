@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v1.1.0 is the current stable GitHub/source and npm baseline.** All five publishable manifests are aligned at `1.1.0`, require Node.js 22+, and were published to npm on 2026-09-26 from the exact validated GitHub Release tarballs.
+**v1.1.0 is the current stable GitHub/source and npm baseline.** Its five Node.js 22+ packages were published to npm on 2026-09-26 from the exact validated GitHub Release tarballs. The five source manifests are staged at `1.1.1` for a separately authorized patch release; v1.1.1 is not yet published.
 
 The first-publication gate #6 remains complete and closed. v1.1.0 used the same separately authorized manual Trusted Publishing path, with registry provenance and byte identity against GitHub Release assets independently verified. Future registry publications remain separately authorized operations; source-release progress never implies registry publication.
 

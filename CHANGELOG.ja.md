@@ -6,7 +6,13 @@
 
 ## [Unreleased]
 
-### セキュリティ・互換性（v1.1.1候補）
+現在entryはありません。
+
+## [1.1.1] - 2026-10-09
+
+v1.1.1はセキュリティ・テスト安定性のpatch release候補です。mainのsource準備とGitHub Release / npm公開は独立して管理し、公開前に別途明示承認が必要です。
+
+### セキュリティ・互換性
 
 - 問題のある `brace-expansion`、`@grpc/grpc-js`、`source-map-js` の推移的依存解決を限定的に修正し、開発専用MCP client SDKを修正版へ更新して、現時点で報告されたlockfile脆弱性を解消しました。公開MCP server peerの最小条件 `^2.0.0` は維持します。
 - Cloudflareローカルworkerd統合CIで毎回独立した状態領域を使い、過去のテストbudgetの残存による誤ったconformance拒否を防ぎます。
