@@ -27,7 +27,7 @@ describe('operational snapshot helpers', () => {
       }),
     ).toEqual({
       packageName: 'mcp-usage-control',
-      packageVersion: '1.1.1',
+      packageVersion: MCP_USAGE_CONTROL_VERSION,
       provider: 'redis',
       capabilities: ['progressive', 'vector'],
       storageSchemaVersion: 'redis-v2',

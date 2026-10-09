@@ -8,9 +8,9 @@
 
 ## 現在のstatus
 
-**v1.1.1が現在のstable GitHub/source / npm baselineです。** 5パッケージとsource manifestはすべて1.1.1に揃い、Node.js 22以上をrequireします。以下のv1.0 readiness evidenceは、この後方互換maintenance releaseのcompatibility / safety foundationとして維持します。
+**v1.1.1は公開済みstable GitHub/npm baseline、v1.2.0は未公開のsource候補です。** 5つのsource manifestは1.2.0に揃い、Node.js 22以上をrequireします。v1.2.0のtagやnpm公開は未承認です。以下のv1.0 readiness evidenceは、この後方互換maintenance releaseのcompatibility / safety foundationとして維持します。
 
-5 packageすべてを2026-09-26に、separate authorizationされたmanual Trusted Publishing workflowからnpmへ公開しました。5 packageすべてにregistry provenanceがあり、registryから再取得したtarballはGitHub Release assetとSHA-256でbyte-identical、clean Node 22 registry install / import smokeもPASS済みです。
+v1.1.1の5 packageすべてを2026-10-09に、separate authorizationされたmanual Trusted Publishing workflowからnpmへ公開しました。mainの1.2.0 sourceは未公開候補で、npm公開を意味しません。5 packageすべてにregistry provenanceがあり、registryから再取得したtarballはGitHub Release assetとSHA-256でbyte-identical、clean Node 22 registry install / import smokeもPASS済みです。
 
 v0.11 freeze lineでは、accounting / reliability / runtime / storage / API / governance trancheを解消しました。
 

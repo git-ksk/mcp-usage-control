@@ -8,6 +8,16 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [1.2.0] - Source candidate / not released
+
+**GitHub Release and npm publication have not been authorized or performed.** This entry describes the source candidate, not a shipped release.
+
+- Runnable `protectTool()` server/client example using the official MCP v2 SDK on real loopback HTTP (#253).
+- Bilingual operator-safe lost-ACK and read-only reconciliation playbooks (#254).
+- Official-SDK E2E for concurrency, denials, conservative cost handling, and safe client-facing error boundaries (#255).
+- Correct version/peer documentation and verify exact v1.2.0 candidate tarballs in a clean external consumer (#256).
+- No intentional change to existing public APIs, accounting lifecycle, or persisted Store schemas.
+
 ## [1.1.1] - 2026-10-09
 
 Security and test-reliability maintenance patch. The GitHub Release and npm Trusted Publishing workflows were **separately authorized and completed** on 2026-10-09. All five npm tarballs were verified byte-identical to the validated GitHub assets, with provenance and clean Node 22 consumer evidence.

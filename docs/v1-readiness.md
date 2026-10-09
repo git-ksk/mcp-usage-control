@@ -8,9 +8,9 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v1.1.1 is the current stable GitHub/source and npm baseline.** All five packages and source manifests are at 1.1.1 and require Node.js 22 or later. The v1.0 readiness evidence below remains the compatibility/safety foundation for this non-breaking maintenance release.
+**v1.1.1 is the latest published stable GitHub/npm baseline; v1.2.0 is an unreleased source candidate.** All five source manifests stage 1.2.0 and require Node.js 22 or later; no v1.2.0 source tag or npm publication is authorized. The v1.0 readiness evidence below remains the compatibility/safety foundation for this non-breaking maintenance release.
 
-All five v1.1.0 packages were published to npm on 2026-09-26 through the separately authorized manual Trusted Publishing workflow. Registry provenance is present for all five packages, downloaded registry tarballs were verified SHA-256 byte-identical to the GitHub Release assets, and a clean Node 22 registry install/import smoke passed.
+All five v1.1.1 packages were published to npm on 2026-10-09 through the separately authorized manual Trusted Publishing workflow. Registry provenance is present for all five packages, downloaded registry tarballs were verified SHA-256 byte-identical to the GitHub Release assets, and a clean Node 22 registry install/import smoke passed. Source version 1.2.0 is still a candidate and does not imply an npm version exists.
 
 The v0.11 freeze line has now resolved the accounting/reliability/runtime/storage/API/governance tranche:
 
