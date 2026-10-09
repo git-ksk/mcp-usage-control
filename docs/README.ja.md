@@ -6,7 +6,7 @@
 
 API名やclass名は英語のまま使いますが、説明文はできるだけ日本語として自然に読める形にしています。
 
-> **まず動かしてみる：** [READMEのクイックスタート](../README.ja.md#クイックスタート) はデータベース不要。[Free / Plusの実行例](../examples/free-plus-credits/README.md) では同時実行と重複予約防止を確認できます。
+> **まず動かしてみる：** [READMEのクイックスタート](../README.ja.md#クイックスタート) はデータベース不要。[MCPサーバー + クライアント実行例](../examples/mcp-protect-tool/README.ja.md) は公式SDKで実際に通信します。[Free / PlusのCore実行例](../examples/free-plus-credits/README.md) では同時実行と重複予約防止を確認できます。
 
 ## 初めて読むなら
 

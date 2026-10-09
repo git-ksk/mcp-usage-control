@@ -112,6 +112,8 @@ Use [accounting-window keys](accounting-window-keys.md) for calendar windows and
 
 One quote may return `budgets` instead of `budget` to enforce user-daily, user-monthly, and tenant-monthly limits together. Admission is **all-or-nothing**: every budget reserves or none does. Build each key from the intended trusted scope and period.
 
+To **run a real protected MCP server and client**, follow the [official SDK loopback example](../examples/mcp-protect-tool/README.md) (`pnpm example:mcp`). It verifies admission, known-cost settlement, duplicate-ID denial and conservative unknown-cost handling.
+
 ## Which package should I use?
 
 | Integration | Install |

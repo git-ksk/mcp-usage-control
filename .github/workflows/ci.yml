@@ -154,6 +154,7 @@ jobs:
 
       - run: pnpm check
       - run: pnpm example:free-plus
+      - run: pnpm example:mcp
 
       - name: Verify public package versions are aligned
         shell: bash

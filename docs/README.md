@@ -4,7 +4,7 @@
 
 User-facing documentation for `mcp-usage-control`.
 
-> **Try it first:** the [README quick start](../README.md#quick-start) needs no database. The [Free / Plus example](../examples/free-plus-credits/README.md) checks concurrent admission and duplicate-operation protection.
+> **Try it first:** the [README quick start](../README.md#quick-start) needs no database. The [runnable MCP server/client](../examples/mcp-protect-tool/README.md) exercises the official SDK over real loopback HTTP; the [Free / Plus Core example](../examples/free-plus-credits/README.md) checks concurrent admission and duplicate-operation protection.
 
 ## Start here
 
