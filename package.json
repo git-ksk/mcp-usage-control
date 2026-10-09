@@ -18,8 +18,8 @@
     "example:mcp": "pnpm build && pnpm --filter mcp-usage-control-example-protect-tool demo"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.9.0",
-    "vitest": "^4.1.11"
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   }
 }
