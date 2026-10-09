@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.1.0がcurrent stable GitHub/source / npm baselineです。** publish可能な5 package manifestは `1.1.0` に揃い、Node.js 22+をrequireし、2026-09-26にvalidated GitHub Release tarballと同一byteでnpmへ公開済みです。
+**v1.1.0がcurrent stable GitHub/source / npm baselineです。** Node.js 22+対応の5 packageは、2026-09-26にvalidated GitHub Release tarballと同一byteでnpmへ公開済みです。source上の5 manifestだけを別途承認が必要なpatch候補 `1.1.1` に揃えており、v1.1.1はまだ未公開です。
 
 初回publication gate #6は完了・close済みです。v1.1.0もseparate authorizationされたmanual Trusted Publishing pathを使い、registry provenanceとGitHub Release assetとのbyte identityを独立verifyしました。今後のregistry publicationも引き続き独立authorize対象です。
 

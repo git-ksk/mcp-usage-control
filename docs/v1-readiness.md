@@ -8,7 +8,7 @@ No v1.0 tag, GitHub Release, or npm publication is authorized by this document.
 
 ## Current status
 
-**v1.1.0 is the current stable GitHub/source and npm baseline.** All five publishable manifests are aligned at `1.1.0` and require Node.js 22 or later. The v1.0 readiness evidence below remains the compatibility/safety foundation for this additive post-v1 release.
+**v1.1.0 is the current stable GitHub/source and npm baseline.** The five published v1.1.0 packages form the registry baseline; the five source manifests are staged at `1.1.1` for an independently authorized patch release and require Node.js 22 or later. The v1.0 readiness evidence below remains the compatibility/safety foundation for this additive post-v1 release.
 
 All five v1.1.0 packages were published to npm on 2026-09-26 through the separately authorized manual Trusted Publishing workflow. Registry provenance is present for all five packages, downloaded registry tarballs were verified SHA-256 byte-identical to the GitHub Release assets, and a clean Node 22 registry install/import smoke passed.
 

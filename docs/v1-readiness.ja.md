@@ -8,7 +8,7 @@
 
 ## 現在のstatus
 
-**v1.1.0がcurrent stable GitHub/source / npm baselineです。** publish可能な5 package manifestは `1.1.0` に揃い、Node.js 22以上をrequireします。以下のv1.0 readiness evidenceは、このadditiveなpost-v1 releaseでもcompatibility / safety foundationとして維持します。
+**v1.1.0がcurrent stable GitHub/source / npm baselineです。** npm公開済みの5 packageはv1.1.0のままで、source上の5 manifestのみ次の独立承認patch候補 `1.1.1` に揃い、Node.js 22以上をrequireします。以下のv1.0 readiness evidenceは、このadditiveなpost-v1 releaseでもcompatibility / safety foundationとして維持します。
 
 5 packageすべてを2026-09-26に、separate authorizationされたmanual Trusted Publishing workflowからnpmへ公開しました。5 packageすべてにregistry provenanceがあり、registryから再取得したtarballはGitHub Release assetとSHA-256でbyte-identical、clean Node 22 registry install / import smokeもPASS済みです。
 

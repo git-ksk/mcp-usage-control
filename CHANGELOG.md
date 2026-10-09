@@ -6,7 +6,13 @@ All notable project changes are recorded here.
 
 ## [Unreleased]
 
-### Security and compatibility (v1.1.1 candidate)
+No entries yet.
+
+## [1.1.1] - 2026-10-09
+
+Security and test-reliability maintenance patch. Preparing source artifacts does **not** authorize a GitHub Release or npm publication; those remain separate explicitly approved steps.
+
+### Security and compatibility
 
 - Eliminated the currently reported lockfile dependency advisories by narrowly overriding affected `brace-expansion`, `@grpc/grpc-js`, and `source-map-js` resolutions, and updated the development-only MCP client SDK to a patched version. The published MCP server peer floor remains `^2.0.0`.
 - Isolated the Cloudflare local workerd integration CI state from prior runs so retained test budgets cannot falsely deny a fresh conformance scenario.
