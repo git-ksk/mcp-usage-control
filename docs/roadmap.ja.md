@@ -197,8 +197,11 @@ v1.1.1の保守計画（#246、#248）と、v1.2.0のDeveloper Experience改善�
 | **P1・並行** | [#270 Firestore Flow Store](https://github.com/git-ksk/mcp-usage-control/issues/270) | transactionでreplica間の再開を1件だけ許可。時計偏差、TTL、transaction不明時の動作を明示 |
 | **P1・#269/#270後** | [#271 公式SDK複数ラウンドE2E](https://github.com/git-ksk/mcp-usage-control/issues/271) | Redis/DO/Firestoreで本物の`input_required`を検証。署名requestState、再予約なし、handler二重実行なし |
 | **P1・並行調査** | [#272 MCP Tasks互換性ゲート](https://github.com/git-ksk/mcp-usage-control/issues/272) | 公式Tasks拡張の**サーバー受信側**を実際に検証しadopt/experimental/deferを決定。非対応のまま正式対応を宣言しない |
+| **P2・並行、SDK受入ゲート** | [#279 安全な利用制限の拒否情報](https://github.com/git-ksk/mcp-usage-control/issues/279) | Core→`protectTool()`で拒否budgetの証拠をserver-onlyの追加的APIとして保持。公開scope/windowへの信頼済み変換・機密漏洩のないSDKエラー・複数budget時のretry時刻unknownを検証。#48/#183再利用、raw keyをclientへ渡さない |
 | **P2・E2E後** | [#274 永続Store導入例](https://github.com/git-ksk/mcp-usage-control/issues/274) | 公開パッケージで実行できる日英例、認証境界、時計、失敗、各providerの運用条件 |
 | **P1・独立保守** | [#267 npm反映待ちCI](https://github.com/git-ksk/mcp-usage-control/issues/267) | 公開済みバージョンを再publishせず、有限で現実的な伝播待ちと証拠検証を強化 |
+
+**#279 実装境界：** v1.3.0のP2対象として、利用制限で拒否されたbudgetの根拠をserver-onlyで受け取り、MCP公式SDKへ秘匿情報を含まないエラーを返す仕組みを追加する。Storeが最初のブロッカーしか返さない場合、すべての枠が回復する時刻を保証せずunknownを明示する。Core/Store互換性を維持し、Flow Store実装とは独立に並行作業する。v1.2への遡及適用や公開の承認ではない。
 
 **リリース条件：** workerd・Firestore Emulatorで共通`McpUsageFlowStore`適合性（duplicate suspend、binding mismatch、16並行consumeで1勝、expiry/clock、ACK喪失、破損時fail-closed）を検証。Redis回帰、公式SDKの単一/複数ラウンドE2E、Node 22/24、MCP/Redis最小・現行peer、tarballクリーンconsumer、脆弱性監査、最後の正確なmain SHAでprotected`test (22)`をPASSすること。Providerごとの耐久性や時計条件を混同せず、破壊的API/永続schema変更は別途判断します。
 
