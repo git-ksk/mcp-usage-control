@@ -37,6 +37,16 @@
       "types": "./dist/maintenance.d.ts",
       "import": "./dist/maintenance.js",
       "default": "./dist/maintenance.js"
+    },
+    "./mcp-flow": {
+      "types": "./dist/mcp-flow.d.ts",
+      "import": "./dist/mcp-flow.js",
+      "default": "./dist/mcp-flow.js"
+    },
+    "./mcp-flow-worker": {
+      "types": "./dist/mcp-flow-worker.d.ts",
+      "import": "./dist/mcp-flow-worker.js",
+      "default": "./dist/mcp-flow-worker.js"
     }
   },
   "files": [
@@ -81,7 +91,19 @@
     "dist/maintenance-protocol.d.ts",
     "dist/maintenance-protocol.d.ts.map",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "dist/mcp-flow.js",
+    "dist/mcp-flow.js.map",
+    "dist/mcp-flow.d.ts",
+    "dist/mcp-flow.d.ts.map",
+    "dist/mcp-flow-validation.js",
+    "dist/mcp-flow-validation.js.map",
+    "dist/mcp-flow-validation.d.ts",
+    "dist/mcp-flow-validation.d.ts.map",
+    "dist/mcp-flow-worker.js",
+    "dist/mcp-flow-worker.js.map",
+    "dist/mcp-flow-worker.d.ts",
+    "dist/mcp-flow-worker.d.ts.map"
   ],
   "engines": {
     "node": ">=22"
@@ -115,5 +137,8 @@
   },
   "dependencies": {
     "mcp-usage-control": "workspace:^"
+  },
+  "devDependencies": {
+    "mcp-usage-control-mcp": "workspace:^"
   }
 }

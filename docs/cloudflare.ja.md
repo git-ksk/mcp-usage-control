@@ -223,3 +223,17 @@ coverする内容:
 `CloudflareUsageStore` / `RemoteCloudflareUsageStore`はoptional `VectorUsageStore`を実装します。base `reservations` rowはshared operation/lifecycle identityとして維持し、schema v3ではvector専用metadataをadditive `reservation_vectors` sidecar tableへ保存します。existing v1/v2 scalar accounting rowはrewriteしません。
 
 Durable Object `transactionSync`が全vector dimension/budget変更とreservation/vector metadataを1 atomic boundaryで処理します。vector HTTP methodはprotocol v1へのadditive method（`reserve_vector` / `grow_vector` / `settle_vector`）です。local workerd CIではportable vector conformanceとremote committed-vector-growth ACK-loss replayも実行します。
+
+## v1.3 MCP複数ラウンド: 専用DO Flow Store（opt-in）
+
+開発中の`mcp-usage-control-cloudflare/mcp-flow`は`protectMultiRoundTool()`
+向けの専用DO版`McpUsageFlowStore`です。`/mcp-flow-worker`から
+`CloudflareMcpFlowDurableObject`をexportし、SQLite用の独立したDO bindingを
+設定してください。既存`UsageControlDurableObject`の会計スキーマとは共用しません。
+フローIDごとに1つのDOへルーティングし、そのDO内だけで一回限りの
+compare-and-consumeと消費済みtombstoneを保証します。時計はDO側基準で、
+alarmの保持期間・料金・上限に注意が必要です。署名`requestState`、
+信頼済みサーバー認証、ACK喪失時のfail-closedは
+[パッケージREADME](../packages/cloudflare/README.md)を参照してください。
+リモートHTTP gatewayは未提供で、DOをまたぐHA保証はありません。
+workerdテストに加え、公開前の公式SDK複数ラウンドE2Eは#271で検証します。

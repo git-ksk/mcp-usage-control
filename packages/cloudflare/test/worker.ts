@@ -6,10 +6,13 @@ import {
 import { createCloudflareBearerTokenAuthorizer } from '../src/auth.js';
 import { createCloudflareBudgetMaintenanceGateway } from '../src/maintenance.js';
 import { createReconciliableCloudflareUsageStoreGateway } from '../src/reconciliation.js';
+import { CloudflareMcpUsageFlowStore, type CloudflareMcpFlowNamespace } from '../src/mcp-flow.js';
 export { UsageControlDurableObject } from '../src/versioned-worker.js';
+export { CloudflareMcpFlowDurableObject } from '../src/mcp-flow-worker.js';
 
 interface Env {
   USAGE_CONTROL: CloudflareDurableObjectNamespace;
+  MCP_FLOWS: CloudflareMcpFlowNamespace;
   MCP_USAGE_TEST_TOKEN: string;
   MCP_USAGE_TEST_PREVIOUS_TOKEN?: string;
   MCP_USAGE_ENABLE_FAULT_INJECTION?: string;
@@ -33,6 +36,33 @@ export default {
     // routes cannot be enabled on a workers.dev/custom-domain hostname.
     const isLocalHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
     if (env.MCP_USAGE_ENABLE_FAULT_INJECTION === '1' && isLocalHost) {
+      if (pathname === '/test/mcp-flow' && request.method === 'POST') {
+        if (request.headers.get('authorization') !== `Bearer ${env.MCP_USAGE_TEST_TOKEN}`) {
+          return jsonResponse({ error: 'unauthorized' }, 401);
+        }
+        const store = new CloudflareMcpUsageFlowStore({ namespace: env.MCP_FLOWS });
+        try {
+          const input = await request.json() as {
+            action: string;
+            record?: Parameters<CloudflareMcpUsageFlowStore['suspend']>[0];
+            flowId?: string;
+            binding?: Parameters<CloudflareMcpUsageFlowStore['consume']>[1];
+          };
+          if (input.action === 'suspend' && input.record) {
+            await store.suspend(input.record);
+            return jsonResponse({ ok: true }, 200);
+          }
+          if (input.action === 'consume' && input.flowId && input.binding) {
+            const record = await store.consume(input.flowId, input.binding);
+            return jsonResponse({ ok: true, record: record ?? null }, 200);
+          }
+          return jsonResponse({ error: 'invalid test request' }, 400);
+        } catch {
+          // Do not serialize trusted payload, ids, budget keys or backend errors.
+          return jsonResponse({ error: 'flow_rejected' }, 409);
+        }
+      }
+
       if (pathname === '/test/platform-limit') {
         return jsonResponse({ error: 'simulated_platform_limit' }, 429);
       }
