@@ -46,6 +46,10 @@ importers:
       mcp-usage-control:
         specifier: workspace:^
         version: link:../core
+    devDependencies:
+      mcp-usage-control-mcp:
+        specifier: workspace:^
+        version: link:../mcp
 
   packages/core: {}
 

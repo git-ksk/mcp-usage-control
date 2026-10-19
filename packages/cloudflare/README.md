@@ -119,3 +119,75 @@ The reconciliation subpath now uses the core `UsageOperationReconciliation` voca
 ## Atomic vector usage (v0.7)
 
 `CloudflareUsageStore` and `RemoteCloudflareUsageStore` implement optional `VectorUsageStore`. Schema v3 adds the `reservation_vectors` sidecar without rewriting v1/v2 scalar accounting rows. Durable Object `transactionSync` keeps all vector dimensions atomic; workerd integration covers vector conformance and remote committed-growth acknowledgement-loss replay.
+
+## MCP durable multi-round Flow Store (v1.3 development, opt-in)
+
+`mcp-usage-control-cloudflare/mcp-flow` provides `CloudflareMcpUsageFlowStore`
+for `protectMultiRoundTool()`; separately export
+`CloudflareMcpFlowDurableObject` from
+`mcp-usage-control-cloudflare/mcp-flow-worker` as a **new** SQLite Durable
+Object class. The existing `UsageControlDurableObject` accounting schema is
+not modified. Bind the separate flow class in your Wrangler configuration:
+
+```json
+{
+  "durable_objects": { "bindings": [
+    { "name": "MCP_FLOWS", "class_name": "CloudflareMcpFlowDurableObject" }
+  ] },
+  "exports": {
+    "CloudflareMcpFlowDurableObject": { "type": "durable-object", "storage": "sqlite" }
+  }
+}
+```
+
+```ts
+import { CloudflareMcpUsageFlowStore } from 'mcp-usage-control-cloudflare/mcp-flow';
+export { CloudflareMcpFlowDurableObject } from 'mcp-usage-control-cloudflare/mcp-flow-worker';
+
+// Create inside your Worker, using its private, server-side namespace binding.
+const flowStore = new CloudflareMcpUsageFlowStore({
+  namespace: env.MCP_FLOWS,
+  domainPrefix: 'my-service-mcp-v1',
+});
+```
+
+Each flow ID is deterministically routed to **one separate SQLite DO**; the
+DO atomically compares the server-trusted principal/tenant/tool/argument
+binding and marks the flow consumed once. A consumed tombstone prevents ID
+reuse before retention. DO-side `Date.now()` determines expiry; **it is not
+Redis server TIME nor a promise of synchronized clocks across providers**.
+Bounded state (64 KiB) is kept server-side; the client must never receive raw
+lease state. Only trust signed SDK `requestState` and server-established
+identity. The default 24h retention after flow expiry uses a DO alarm to
+clear the tombstone/record; unlike the older accounting adapter's lazy cleanup,
+this optional flow adapter **does schedule an alarm** and has per-flow DO/alarm
+cost and quota implications. Configure a separate migration for the SQLite DO
+class when deploying it; never reuse the accounting DO binding/schema.
+
+The adapter supports **direct same-Worker DO RPC only**, not a remote HTTP
+FlowStore. It provides no authentication gateway or business-task scheduler.
+Do not serialize/store the flow in browser storage, attach it to public telemetry,
+or bypass Worker authentication. An ambiguous suspend/consume RPC/ACK is a
+hard failure: never blind-retry the same paid business effect. Workerd tests
+cover 16-way consume contention, expired flows, duplicate suspension, binding
+mismatch, lost ACK and consumed tombstones. Full official MCP SDK cross-provider
+HTTP lifecycle tests are tracked separately in #271 before production release.
+
+### MCP複数ラウンド用Cloudflare Flow Store（v1.3開発中）
+
+`mcp-usage-control-cloudflare/mcp-flow` は `protectMultiRoundTool()` 向けの
+opt-in 永続Flow Storeです。`mcp-flow-worker` の専用SQLite Durable Objectを
+**既存の課金用DOとは別の名前・binding・schema**で設定してください。
+各フローIDは専用DOに一意にルーティングし、principal/tenant/tool/argsを
+照合して一度だけatomicに取得します。消費済みtombstoneが同じIDの再利用を防ぎます。
+期限判定はDO側の`Date.now()`が基準で、他プロバイダーの時計同期や
+完全な分散HA保証ではありません。
+
+状態は最大64KiBでサーバー内部だけに保持し、clientが送信したIDや
+未検証の`requestState`を信頼してはいけません。デフォルト期限後24時間の
+保存後、**DO alarm**で記録を削除します。既存の会計用DOはlazy cleanupですが
+新Flow Storeはアラームとフロー単位DOのコストが発生します。
+同一Worker内の直接DO RPCのみが対応範囲で、リモートHTTP版や認証gateway、
+タスクスケジューラは提供しません。ACK喪失時は安全側に停止し、
+業務副作用を無条件再実行しないでください。workerdでの16並列競合等を
+テストし、公式SDKを使った全プロバイダーE2Eは #271 の受入条件です。

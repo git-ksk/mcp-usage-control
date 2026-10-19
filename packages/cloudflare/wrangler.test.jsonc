@@ -3,17 +3,27 @@
   "name": "mcp-usage-control-cloudflare-test",
   "main": "./test/worker.ts",
   "compatibility_date": "2026-07-29",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "durable_objects": {
     "bindings": [
       {
         "name": "USAGE_CONTROL",
         "class_name": "UsageControlDurableObject"
+      },
+      {
+        "name": "MCP_FLOWS",
+        "class_name": "CloudflareMcpFlowDurableObject"
       }
     ]
   },
   "exports": {
     "UsageControlDurableObject": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    },
+    "CloudflareMcpFlowDurableObject": {
       "type": "durable-object",
       "storage": "sqlite"
     }

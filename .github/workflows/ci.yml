@@ -288,6 +288,8 @@ jobs:
           grep -qx 'package/dist/maintenance.js' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance.d.ts' <<<"$cloudflare_listing"
           grep -qx 'package/dist/maintenance-protocol.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/mcp-flow.js' <<<"$cloudflare_listing"
+          grep -qx 'package/dist/mcp-flow-worker.js' <<<"$cloudflare_listing"
           redis_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-redis-${version}.tgz")"
           grep -qx 'package/dist/mcp-flow.js' <<<"$redis_listing"
           grep -qx 'package/dist/mcp-flow.d.ts' <<<"$redis_listing"

@@ -223,3 +223,17 @@ See [Operation reconciliation/status](operation-reconciliation.md) and [Cloudfla
 `CloudflareUsageStore` and `RemoteCloudflareUsageStore` implement optional `VectorUsageStore`. The base `reservations` row remains the shared operation/lifecycle identity, while schema v3 stores vector-only metadata in the additive `reservation_vectors` sidecar table. Existing v1/v2 scalar accounting rows are not rewritten.
 
 Durable Object `transactionSync` covers all vector dimension/budget changes plus reservation/vector metadata. Vector HTTP methods are additive protocol-v1 methods (`reserve_vector`, `grow_vector`, `settle_vector`); existing scalar callers remain compatible. Local workerd CI runs portable vector conformance and remote committed-vector-growth acknowledgement-loss replay.
+
+## v1.3 MCP multi-round: isolated DO Flow Store (opt-in)
+
+The development `mcp-usage-control-cloudflare/mcp-flow` entry point is a
+**separate DO-backed** `McpUsageFlowStore` for `protectMultiRoundTool()`.
+Export the dedicated `CloudflareMcpFlowDurableObject` from the
+`/mcp-flow-worker` subpath and bind it with **SQLite** storage; never combine
+it with `UsageControlDurableObject` accounting state. Each flow ID maps to one
+DO; one-time compare-and-consume and consumed tombstones are atomic inside that
+DO only. Worker DO clock, alarm retention, cost/quotas, signed requestState,
+trusted server identity, no remote gateway, and fail-closed ambiguous ACK
+behavior are detailed in the [package README](../packages/cloudflare/README.md).
+Real workerd conformance is mandatory; the full official SDK multi-round HTTP
+proof remains #271 before release. No production HA claim across DO instances.
