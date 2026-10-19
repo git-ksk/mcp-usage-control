@@ -100,6 +100,15 @@ importers:
         specifier: workspace:^
         version: link:../core
     devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: 2.3.1
+        version: 2.3.1
+      '@modelcontextprotocol/server':
+        specifier: 2.3.1
+        version: 2.3.1
+      mcp-usage-control-mcp:
+        specifier: workspace:^
+        version: link:../mcp
       redis:
         specifier: ^6.2.0
         version: 6.2.0(@opentelemetry/api@1.9.1)
