@@ -12,6 +12,23 @@ Emulator / Cloudflareローカルworkerdの本物の永続化基盤を使い、M
 **npm公開中の版はv1.2.0のまま**です。新しいv1.3のFlowStore APIは
 別途リリース承認されるまでmain内の開発候補です。
 
+## 公開済みnpmパッケージと未公開のFlowStore APIを区別
+
+現在公開済みの**v1.2.0**をNode.js 22/24のESM環境で利用する場合は：
+
+```sh
+npm install mcp-usage-control@1.2.0 mcp-usage-control-mcp@1.2.0 \
+  mcp-usage-control-redis@1.2.0 mcp-usage-control-firestore@1.2.0 \
+  mcp-usage-control-cloudflare@1.2.0 \
+  @modelcontextprotocol/server@^2 @modelcontextprotocol/client@^2
+```
+
+これは**公開済みv1.2のAPIをインストールするコマンド**であり、新しい
+`/mcp-flow` exportはまだ含まれません。このドキュメントのv1.3 FlowStore
+コードは、現在はリポジトリで作った**未公開の配布候補tarball**でのみ検証します。
+正式リリース前に`npm install ...@1.3.0`が成功するものとして扱わないでください。
+認証、Firestore IAM、Cloudflare DO binding、SDK v2 peerはアプリ側で設定します。
+
 ## プロバイダーを選んで実行
 
 Redis 7をローカル起動後：
