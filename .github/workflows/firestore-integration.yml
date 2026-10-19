@@ -72,6 +72,7 @@ jobs:
           java-version: '21'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter mcp-usage-control build
+      - run: pnpm --filter mcp-usage-control-mcp build
       - run: pnpm --filter mcp-usage-control-firestore build
       - name: Type-check server Firestore client compatibility
         shell: bash
