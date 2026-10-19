@@ -58,7 +58,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run src",
-    "test:emulator": "node test/emulator.mjs && node test/growth-concurrency-stress.mjs",
+    "test:emulator": "node test/emulator.mjs && node test/mcp-sdk-e2e.mjs && node test/growth-concurrency-stress.mjs",
     "prepack": "node ../../scripts/pack-workspace-deps.mjs prepare",
     "postpack": "node ../../scripts/pack-workspace-deps.mjs restore"
   },
@@ -67,6 +67,8 @@
   },
   "devDependencies": {
     "@google-cloud/firestore": "8.7.0",
-    "mcp-usage-control-mcp": "workspace:^"
+    "mcp-usage-control-mcp": "workspace:^",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1"
   }
 }
