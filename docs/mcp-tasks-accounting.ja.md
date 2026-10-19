@@ -18,7 +18,7 @@ MCP Task の状態と、利用量 accounting の状態は関係しますが、**
 
 MCP Tasksは`io.modelcontextprotocol/tasks`拡張で提供され、**2026-07-28のschema snapshotはStable**（進行中のDraftとは別）です。task対応`tools/call`、`tasks/get`、`tasks/update`、`tasks/cancel`と`working`、`input_required`、`completed`、`failed`、`cancelled`の状態が定義されています。
 
-TypeScript SDK v2 Coreは古い2025-11-25の`tasks/*`語彙をmodern core protocolとして扱いません。調査した`@modelcontextprotocol/ext-tasks@0.2.2`は**requester/clientのlifecycle API**と**2025-11-25 Tasks受信側**を提供していますが、Stable schemaの存在だけでは2026-07-28の**server/receiver**実装互換性を証明できません。本OSSは現時点で**利用量会計モデルのみ確定・検証済み**で、正式なTasks server adapter対応は宣言しません。[#272](https://github.com/git-ksk/mcp-usage-control/issues/272)の公式SDK検証を先行し、[#275](https://github.com/git-ksk/mcp-usage-control/issues/275)の実装可否を判断します。
+TypeScript SDK v2 Coreは古い2025-11-25の`tasks/*`語彙をmodern core protocolとして扱いません。調査した`@modelcontextprotocol/ext-tasks@0.2.2`は**requester/clientのlifecycle API**と**2025-11-25 Tasks受信側**を提供していますが、Stable schemaの存在だけでは2026-07-28の**server/receiver**実装互換性を証明できません。本OSSは現時点で**利用量会計モデルのみ確定・検証済み**で、正式なTasks server adapter対応は宣言しません。[#272](https://github.com/git-ksk/mcp-usage-control/issues/272)の実SDK検証結果は**DEFER**です。[#275](https://github.com/git-ksk/mcp-usage-control/issues/275)は上流のreceiver対応が確認できるまでブロックします。
 
 判断に使った一次情報:
 
@@ -28,6 +28,24 @@ TypeScript SDK v2 Coreは古い2025-11-25の`tasks/*`語彙をmodern core protoc
 - TypeScript拡張パッケージの提供範囲: <https://modelcontextprotocol.github.io/ext-tasks/typescript/>
 
 これは互換性上の境界であって、accounting core の不足ではありません。既存の lease primitive で以下の安全性を表現できます。
+
+### 2026-10-19 実SDKのTasks receiver互換性ゲート（#272）
+
+[再現可能な実SDK検証](../examples/tasks-interop-probe/README.md)を
+`@modelcontextprotocol/ext-tasks@0.2.2`、`@modelcontextprotocol/client@2.3.1`、
+`server@2.3.1`の組合せで実行しました。公開されている`bindTaskReceiver()`は
+SDK **Client**に結び付けるAPIで、従来の`tasks/list`、`tasks/get`、
+`tasks/result`、`tasks/cancel`のhandlerを登録しました。一方、2026-07-28の
+`tools/call`と`tasks/update`は登録されません。`tools/call`をreceiverとして
+有効化しようとした場合も未対応callbackとして拒否され、公開型
+`TaskReceiverMethod`は`sampling/createMessage`と`elicitation/create`のみです。
+
+**判断：2026-07-28 Tasks専用server側会計アダプター（#275）は延期（DEFER）。**
+Stable schemaがあっても、実装runtimeのserver受信側相互運用性が無ければ
+正式対応は宣言できません。未提供のwire APIを模造せず、既存の会計leaseと
+アプリ所有のdurable task管理・冪等性で構成します。新SDKでサーバー受信
+互換性が実証できるまで#275をブロック扱いにし、今後の上流バージョン公開時に
+この検証を再実行します。requester/client側の実装が使用不可という意味ではありません。
 
 ## 2つの状態機械と1つの論理 operation
 

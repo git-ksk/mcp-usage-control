@@ -196,7 +196,7 @@ v1.1.1の保守計画（#246、#248）と、v1.2.0のDeveloper Experience改善�
 | **P1・並行** | [#269 Cloudflare DO Flow Store](https://github.com/git-ksk/mcp-usage-control/issues/269) | atomic suspend＋一回限りのcompare/consume。workerdの時計、DOへのルーティング、ACK喪失とHAの境界まで検証 |
 | **P1・並行** | [#270 Firestore Flow Store](https://github.com/git-ksk/mcp-usage-control/issues/270) | transactionでreplica間の再開を1件だけ許可。時計偏差、TTL、transaction不明時の動作を明示 |
 | **P1・#269/#270後** | [#271 公式SDK複数ラウンドE2E](https://github.com/git-ksk/mcp-usage-control/issues/271) | Redis/DO/Firestoreで本物の`input_required`を検証。署名requestState、再予約なし、handler二重実行なし |
-| **P1・並行調査** | [#272 MCP Tasks互換性ゲート](https://github.com/git-ksk/mcp-usage-control/issues/272) | 公式Tasks拡張の**サーバー受信側**を実際に検証しadopt/experimental/deferを決定。非対応のまま正式対応を宣言しない |
+| **P1・並行調査** | [#272 MCP Tasks互換性ゲート](https://github.com/git-ksk/mcp-usage-control/issues/272) | 2026-10-19の実SDK検証で**DEFER**と判定（ext-tasks@0.2.2はmodern tools/call受信側未対応）。上流更新時に再検証 |
 | **P2・並行、SDK受入ゲート** | [#279 安全な利用制限の拒否情報](https://github.com/git-ksk/mcp-usage-control/issues/279) | Core→`protectTool()`で拒否budgetの証拠をserver-onlyの追加的APIとして保持。公開scope/windowへの信頼済み変換・機密漏洩のないSDKエラー・複数budget時のretry時刻unknownを検証。#48/#183再利用、raw keyをclientへ渡さない |
 | **P2・E2E後** | [#274 永続Store導入例](https://github.com/git-ksk/mcp-usage-control/issues/274) | 公開パッケージで実行できる日英例、認証境界、時計、失敗、各providerの運用条件 |
 | **P1・独立保守** | [#267 npm反映待ちCI](https://github.com/git-ksk/mcp-usage-control/issues/267) | 公開済みバージョンを再publishせず、有限で現実的な伝播待ちと証拠検証を強化 |
