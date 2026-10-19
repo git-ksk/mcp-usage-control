@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
 
 const root = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const tests = {
@@ -15,6 +16,27 @@ const tests = {
 const args = process.argv.slice(2);
 const provider = args[0];
 const startWorkerd = args.includes('--start-workerd');
+
+// A generic /health on 8799 cannot prove it belongs to *this* isolated
+// workerd. Refuse to launch if an earlier process already owns the test port;
+// otherwise this command could incorrectly report a "fresh DO" PASS against
+// an unrelated or persistent Worker left behind by another test.
+async function assertWorkerdPortAvailable() {
+  const probe = createServer();
+  try {
+    await new Promise((done, reject) => {
+      probe.once('error', reject);
+      probe.listen(8799, '127.0.0.1', done);
+    });
+  } catch (error) {
+    throw new Error(`Local workerd port 8799 is already in use; cannot prove isolated execution (${error?.code ?? 'bind error'})`);
+  } finally {
+    if (probe.listening) {
+      await new Promise((done, reject) => probe.close(error => error ? reject(error) : done()));
+    }
+  }
+}
+
 if (args.includes('--help') || args.includes('-h') || !provider) {
   console.log(`Usage: node examples/mcp-durable-multi-round/run.mjs <redis|firestore|cloudflare|all> [--start-workerd]\n\nRedis: REDIS_URL=redis://127.0.0.1:6379 (server must be running).\nFirestore: FIRESTORE_EMULATOR_HOST=127.0.0.1:8080 (emulator only).\nCloudflare: local Wrangler worker on 127.0.0.1:8799; --start-workerd launches a fresh isolated test worker.\nOnly test identities and localhost are used. No production credentials, datasets, or paid APIs.`);
   process.exitCode = provider ? 0 : 2;
@@ -32,6 +54,7 @@ if (args.includes('--help') || args.includes('-h') || !provider) {
   let temporaryDirectory;
   try {
     if (providers.includes('cloudflare') && startWorkerd) {
+      await assertWorkerdPortAvailable();
       temporaryDirectory = await mkdtemp(join(tmpdir(), 'muc-v130-do-sdk-e2e-'));
       workerd = spawn('pnpm', ['dlx', 'wrangler@4.114.0', 'dev', '--local',
         '--config', 'packages/cloudflare/wrangler.test.jsonc',

@@ -152,6 +152,7 @@ jobs:
           docker logs muc-redis >&2 || true
           exit 1
 
+      - run: node --test examples/mcp-durable-multi-round/test.mjs
       - run: pnpm check
       - run: node examples/mcp-durable-multi-round/run.mjs redis
       - run: pnpm example:free-plus

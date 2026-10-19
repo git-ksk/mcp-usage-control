@@ -87,3 +87,5 @@ Flowの保存だけで有料処理を再実行する許可にはなりません�
 `mcp-usage-control-cloudflare/mcp-flow`、
 `mcp-usage-control-cloudflare/mcp-flow-worker`です。
 **現行公開v1.2.0にv1.3 APIが既存実装済みだと主張するものではありません。**
+
+注意：`--start-workerd`は`127.0.0.1:8799`を他プロセスが使用中の場合、別Workerに対して「隔離環境で成功」と誤判定しないため停止します。

@@ -104,3 +104,5 @@ The new public ESM entry points **after an authorized release** are
 `mcp-usage-control-cloudflare/mcp-flow`, and
 `mcp-usage-control-cloudflare/mcp-flow-worker`. Existing published v1.2
 installations are **not** claimed to already include these v1.3 APIs.
+
+Note: `--start-workerd` refuses to run if port `127.0.0.1:8799` is already occupied, rather than claiming isolation against another Worker.
