@@ -58,6 +58,9 @@ importers:
       '@google-cloud/firestore':
         specifier: 8.7.0
         version: 8.7.0
+      mcp-usage-control-mcp:
+        specifier: workspace:^
+        version: link:../mcp
 
   packages/mcp:
     dependencies:
