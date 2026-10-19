@@ -444,3 +444,17 @@ policy quote 1回、同じ`operationId`、SDKで検証した署名`requestState`
 
 これは**#271のFirestore部分のみ**です。Redis・Cloudflare DO上の実SDK
 transport、改ざん・replay・ACK不明などの統合検証はv1.3公開前に必要です。
+
+### v1.3 公式SDK + Cloudflare DO の実ランタイム検証（テスト限定）
+
+`packages/cloudflare/test/mcp-sdk-e2e.mjs`は公式2026-07-28 MCP SDK
+`client@2.3.1`から実HTTPを通して、`server@2.3.1`を使う**localhost限定・
+Bearer認証付きのテストWorker**へ接続します。Workerはリクエストごとに新しい
+MCP server factoryを用意し、会計用とFlow Store用に**別々のSQLite DO**を
+使います。`input_required`→2回目の`tools/call`→同一論理操作の再開→
+settleまでを確認し、同じ操作の再予約拒否と内部情報の非公開も検証します。
+
+別の実workerd FlowStore conformanceで16並列one-winner、期限切れ、
+テナント不一致、ACK喪失を試験します。これは開発用E2Eの証拠であり、
+remote Cloudflare FlowStoreや本番認証・全DO時刻同期の保証ではありません。
+テスト用ルートはlocalhostと明示的な試験フラグの両方が必要です。
