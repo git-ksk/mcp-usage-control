@@ -7,6 +7,11 @@ import { createCloudflareBearerTokenAuthorizer } from '../src/auth.js';
 import { createCloudflareBudgetMaintenanceGateway } from '../src/maintenance.js';
 import { createReconciliableCloudflareUsageStoreGateway } from '../src/reconciliation.js';
 import { CloudflareMcpUsageFlowStore, type CloudflareMcpFlowNamespace } from '../src/mcp-flow.js';
+import { CloudflareUsageStore } from '../src/index.js';
+import { UsageControl } from 'mcp-usage-control';
+import { protectMultiRoundTool } from 'mcp-usage-control-mcp';
+import { McpServer, createMcpHandler, createRequestStateCodec, inputRequired } from '@modelcontextprotocol/server';
+
 export { UsageControlDurableObject } from '../src/versioned-worker.js';
 export { CloudflareMcpFlowDurableObject } from '../src/mcp-flow-worker.js';
 
@@ -25,6 +30,43 @@ function jsonResponse(body: unknown, status: number): Response {
   });
 }
 
+
+/** Real protocol test only: same-worker DO accounting and flow stores, fresh MCP factory per request. */
+function officialSdkHandler(env: Env, request: Request): Promise<Response> {
+  const codec = createRequestStateCodec({ key: '0123456789abcdef0123456789abcdef', ttlSeconds: 60 });
+  const usage = new UsageControl(
+    new CloudflareUsageStore(env.USAGE_CONTROL, { domainName: 'mcp-sdk-v130-accounting' }),
+    { quote() { return { decision: 'allow' as const, units: 1, budget: { key: 'mcp-sdk-v130-budget', limit: 1 } }; } },
+  );
+  const flows = new CloudflareMcpUsageFlowStore({ namespace: env.MCP_FLOWS, domainPrefix: 'sdk-v130' });
+  const handler = protectMultiRoundTool({
+    control: usage,
+    tool: 'confirm',
+    noInput: true,
+    principal: () => ({ id: 'alice', tenantId: 'tenant-1' }),
+    operationId: () => 'sdk-flow-v130-original-operation',
+    flowStore: flows,
+    suspendTtlMs: 30_000,
+    requestState: { mint: payload => codec.mint(payload) },
+    successUnits: () => 0,
+    leaseHeartbeat: false,
+  }, async (_args: unknown, _ctx, flow) => {
+    if (flow.round === 0) return inputRequired({ inputRequests: {}, requestState: 'app-private-state' });
+    if (flow.applicationRequestState !== 'app-private-state' || flow.operationId !== 'sdk-flow-v130-original-operation') {
+      throw new Error('SDK flow lost the server-trusted original state');
+    }
+    return { content: [{ type: 'text' as const, text: 'Cloudflare official SDK durable resume round 1 completed' }] };
+  });
+  return createMcpHandler(() => {
+    const server = new McpServer(
+      { name: 'mcp-cloudflare-sdk-v130', version: '1.0.0' },
+      { requestState: { verify: codec.verify } },
+    );
+    server.registerTool('confirm', { description: 'Cloudflare DO cross-request official SDK flow' }, handler);
+    return server;
+  }).fetch(request);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -36,6 +78,12 @@ export default {
     // routes cannot be enabled on a workers.dev/custom-domain hostname.
     const isLocalHost = url.hostname === '127.0.0.1' || url.hostname === 'localhost';
     if (env.MCP_USAGE_ENABLE_FAULT_INJECTION === '1' && isLocalHost) {
+      if (pathname === '/test/mcp-sdk') {
+        if (request.headers.get('authorization') !== `Bearer ${env.MCP_USAGE_TEST_TOKEN}`) {
+          return jsonResponse({ error: 'unauthorized' }, 401);
+        }
+        return officialSdkHandler(env, request);
+      }
       if (pathname === '/test/mcp-flow' && request.method === 'POST') {
         if (request.headers.get('authorization') !== `Bearer ${env.MCP_USAGE_TEST_TOKEN}`) {
           return jsonResponse({ error: 'unauthorized' }, 401);
