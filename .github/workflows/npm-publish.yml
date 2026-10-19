@@ -12,6 +12,11 @@ on:
         required: true
         default: false
         type: boolean
+      verify_only:
+        description: Read-only registry verification without npm publication
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -19,7 +24,7 @@ permissions:
 
 jobs:
   publish:
-    if: ${{ inputs.confirm == true }}
+    if: ${{ inputs.confirm == true || inputs.verify_only == true }}
     runs-on: ubuntu-latest
     services:
       redis:
@@ -67,6 +72,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - run: node --test scripts/verify-npm-registry.test.mjs
 
       - name: Download exact GitHub Release package artifacts
         env:
@@ -118,6 +124,7 @@ jobs:
           done
 
       - name: Publish packages in dependency order
+        if: ${{ inputs.confirm == true && inputs.verify_only != true }}
         shell: bash
         env:
           VERSION: ${{ steps.release.outputs.version }}
@@ -128,10 +135,23 @@ jobs:
             local name="$1"
             local archive="$2"
             if npm view "${name}@${VERSION}" version --json >/dev/null 2>&1; then
-              echo "${name}@${VERSION} is already published; skipping"
+              echo "ALREADY PUBLISHED: ${name}@${VERSION}; verifying immutable release artifact before skip"
+              node scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs "$name"
               return 0
             fi
-            npm publish "$archive" --access public --provenance
+            echo "PUBLISH REQUEST: ${name}@${VERSION}"
+            if npm publish "$archive" --access public --provenance; then
+              echo "PUBLISH ACCEPTED: ${name}@${VERSION}; awaiting registry propagation in verification phase"
+              return 0
+            fi
+            # Some registry acknowledgements are ambiguous: accept only if the
+            # exact signed/provenance-bearing release artifact eventually appears.
+            # Never blindly re-publish after an uncertain response.
+            echo "PUBLISH ACK UNCERTAIN: ${name}@${VERSION}; checking exact immutable version" >&2
+            node scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs "$name" || {
+              echo "PUBLISH FAILED and exact published artifact could not be verified for ${name}@${VERSION}" >&2
+              return 1
+            }
           }
 
           publish_one mcp-usage-control "/tmp/muc-packs/mcp-usage-control-${VERSION}.tgz"
@@ -140,33 +160,41 @@ jobs:
           publish_one mcp-usage-control-cloudflare "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz"
           publish_one mcp-usage-control-firestore "/tmp/muc-packs/mcp-usage-control-firestore-${VERSION}.tgz"
 
-      - name: Verify registry versions
+      - name: Verify registry propagation, exact immutable artifacts and provenance metadata
         shell: bash
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -euo pipefail
-          names=(
-            mcp-usage-control
-            mcp-usage-control-mcp
-            mcp-usage-control-redis
-            mcp-usage-control-cloudflare
-            mcp-usage-control-firestore
-          )
-          for attempt in $(seq 1 18); do
-            missing=0
-            for name in "${names[@]}"; do
-              observed="$(npm view "${name}@${VERSION}" version 2>/dev/null || true)"
-              if [[ "$observed" != "$VERSION" ]]; then
-                echo "registry propagation pending for ${name}@${VERSION} (attempt ${attempt}/18)"
-                missing=1
-              fi
-            done
-            if [[ "$missing" -eq 0 ]]; then
-              echo "all registry versions are visible"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "registry verification did not converge within 90 seconds" >&2
-          exit 1
+          # Up to 15 minutes, without npm CLI cached metadata. Published bytes,
+          # dist integrity, exact name/version, latest tags and provenance are
+          # all mandatory; a missing version eventually fails, never silently passes.
+          node scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs
+
+      - name: Independently verify npm registry signatures and provenance
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Fresh scratch consumer; never install from a mutable workspace or
+          # execute third-party lifecycle scripts. npm validates registry-backed
+          # signatures/attestations independently of the metadata/byte check.
+          mkdir -p /tmp/muc-registry-audit
+          printf '{"name":"muc-registry-audit","version":"1.0.0","private":true}\n' > /tmp/muc-registry-audit/package.json
+          cd /tmp/muc-registry-audit
+          npm install --ignore-scripts --no-audit --no-fund --save-exact \
+            "mcp-usage-control@${VERSION}" \
+            "mcp-usage-control-mcp@${VERSION}" \
+            "mcp-usage-control-redis@${VERSION}" \
+            "mcp-usage-control-cloudflare@${VERSION}" \
+            "mcp-usage-control-firestore@${VERSION}"
+          npm audit signatures --json > /tmp/muc-registry-signatures.json
+          node -e '
+            const fs = require("node:fs");
+            const result = JSON.parse(fs.readFileSync("/tmp/muc-registry-signatures.json", "utf8"));
+            if (result.invalid?.length || result.missing?.length) {
+              throw new Error("npm registry signature/provenance verification was incomplete or invalid");
+            }
+            console.log("npm registry signatures/provenance: verified");
+          '
