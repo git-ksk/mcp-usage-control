@@ -508,10 +508,44 @@ export class UsageStateError extends Error {
   }
 }
 
+/**
+ * INTERNAL-only admission diagnostic for server code. This is not an MCP/HTTP
+ * response, retry hint or public scope name. Budget keys can contain private
+ * IDs and MUST be projected through an application-owned allowlist before use.
+ */
+export interface UsageDenialContext {
+  readonly limitingBudgetKey?: string;
+  readonly remaining?: number;
+}
+
+// WeakMap intentionally keeps raw Store limiting keys off enumerable Error
+// properties, JSON serialization, wire exception formatting, and default logs.
+const serverDenialContexts = new WeakMap<UsageDeniedError, Readonly<UsageDenialContext>>();
+
+/** Explicit server-side accessor; never place its output directly on the wire. */
+export function getUsageDenialContext(error: unknown): Readonly<UsageDenialContext> | undefined {
+  if (!(error instanceof UsageDeniedError)) return undefined;
+  const context = serverDenialContexts.get(error);
+  return context === undefined ? undefined : { ...context };
+}
+
 export class UsageDeniedError extends Error {
-  constructor(public readonly reason: string) {
+  constructor(public readonly reason: string, context?: UsageDenialContext) {
     super('Usage denied by usage policy');
     this.name = 'UsageDeniedError';
+    if (context !== undefined) {
+      if (context.limitingBudgetKey !== undefined) {
+        assertUsageIdentifier(context.limitingBudgetKey, 'denial.limitingBudgetKey');
+      }
+      if (context.remaining !== undefined &&
+          (!Number.isSafeInteger(context.remaining) || context.remaining < 0)) {
+        throw new RangeError('denial.remaining must be a non-negative safe integer');
+      }
+      serverDenialContexts.set(this, Object.freeze({
+        ...(context.limitingBudgetKey === undefined ? {} : { limitingBudgetKey: context.limitingBudgetKey }),
+        ...(context.remaining === undefined ? {} : { remaining: context.remaining }),
+      }));
+    }
   }
 }
 
