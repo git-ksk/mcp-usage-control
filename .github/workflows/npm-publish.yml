@@ -57,6 +57,16 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
           fetch-depth: 0
 
+      # Workflow verifier code is pinned to the exact dispatch SHA, independent
+      # of the historical immutable release tag. Prior releases (e.g. v1.2.0)
+      # predate verify-npm-registry.mjs: verify-only/idempotent reruns must not
+      # silently fail or need to rewrite historical signed tags.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          path: .verification-tools
+          persist-credentials: false
+
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
         with:
           version: 10.15.0
@@ -72,7 +82,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: node --test scripts/verify-npm-registry.test.mjs
+      - run: node .verification-tools/scripts/verify-npm-registry.test.mjs
 
       - name: Download exact GitHub Release package artifacts
         env:
@@ -136,7 +146,7 @@ jobs:
             local archive="$2"
             if npm view "${name}@${VERSION}" version --json >/dev/null 2>&1; then
               echo "ALREADY PUBLISHED: ${name}@${VERSION}; verifying immutable release artifact before skip"
-              node scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs "$name"
+              node .verification-tools/scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs "$name"
               return 0
             fi
             echo "PUBLISH REQUEST: ${name}@${VERSION}"
@@ -148,7 +158,7 @@ jobs:
             # exact signed/provenance-bearing release artifact eventually appears.
             # Never blindly re-publish after an uncertain response.
             echo "PUBLISH ACK UNCERTAIN: ${name}@${VERSION}; checking exact immutable version" >&2
-            node scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs "$name" || {
+            node .verification-tools/scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs "$name" || {
               echo "PUBLISH FAILED and exact published artifact could not be verified for ${name}@${VERSION}" >&2
               return 1
             }
@@ -169,7 +179,7 @@ jobs:
           # Up to 15 minutes, without npm CLI cached metadata. Published bytes,
           # dist integrity, exact name/version, latest tags and provenance are
           # all mandatory; a missing version eventually fails, never silently passes.
-          node scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs
+          node .verification-tools/scripts/verify-npm-registry.mjs "$VERSION" /tmp/muc-packs
 
       - name: Independently verify npm registry signatures and provenance
         shell: bash
