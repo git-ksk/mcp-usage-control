@@ -158,6 +158,7 @@ jobs:
       - run: node examples/mcp-durable-multi-round/run.mjs redis
       - run: pnpm example:free-plus
       - run: pnpm example:mcp
+      - run: node --test examples/mcp-protect-tool/denial-projection.test.mjs
 
       - name: Verify public package versions are aligned
         shell: bash
