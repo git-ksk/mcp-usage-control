@@ -9,6 +9,8 @@ import {
   runVectorUsageStoreConformance,
 } from 'mcp-usage-control/conformance';
 import { FirestoreUsageStore } from '../dist/index.js';
+import { FirestoreMcpUsageFlowStore } from '../dist/mcp-flow.js';
+import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
 
 const projectId = process.env.GCLOUD_PROJECT ?? 'demo-muc-firestore';
 assert.ok(
@@ -381,8 +383,64 @@ async function testIdempotentSettlement() {
   assert.equal(remaining.accepted, true, 'settlement must release unused reserved capacity');
 }
 
+async function testMcpFlowStore() {
+  const prefix = randomUUID().replaceAll('-', '').slice(0, 12);
+  const report = await assertMcpUsageFlowStoreConformance({
+    createStore(scenario) {
+      return new FirestoreMcpUsageFlowStore(database, {
+        collectionPath: `muc_flow_${prefix}_${scenario.replaceAll('-', '_')}`,
+      });
+    },
+    async waitForFlowExpiry(ttlMs) { await sleep(ttlMs + 150); },
+    flowTtlMs: 1_500,
+    concurrency: 16,
+  });
+  assert.ok(report.passed, JSON.stringify(report.cases.filter(x => !x.passed)));
+}
+
+async function testMcpFlowAckAndReplicaSafety() {
+  const name = `muc_flow_ack_${randomUUID().replaceAll('-', '')}`;
+  const a = new FirestoreMcpUsageFlowStore(database, { collectionPath: name });
+  const b = new FirestoreMcpUsageFlowStore(database, { collectionPath: name });
+  const expiresAt = Date.now() + 120_000;
+  const record = {
+    flowId: 'flow-ack-test-00000001',
+    binding: { principalId: 'alice', tenantId: 'one', tool: 'search', argsHash: 'a'.repeat(64) },
+    lease: {
+      reservation: { id: 'reserve-1', operationId: 'operation-1', principalId: 'alice',
+        tenantId: 'one', tool: 'search', budgetKeys: ['tenant:one'], reservedUnits: 2, expiresAt },
+      ttlMs: 120_000,
+    },
+    round: 1,
+    expiresAt,
+  };
+  await a.suspend(record);
+  assert.equal(await b.consume(record.flowId, { ...record.binding, tenantId: 'other' }), undefined,
+    'other tenant must not consume original record');
+  const ackLoss = {
+    collection(path) { return database.collection(path); },
+    async runTransaction(fn) {
+      await database.runTransaction(fn);
+      throw new Error('simulated LOST ACK after committed transaction');
+    },
+  };
+  const ambiguous = new FirestoreMcpUsageFlowStore(ackLoss, { collectionPath: name });
+  await assert.rejects(() => ambiguous.consume(record.flowId, record.binding), /LOST ACK/);
+  assert.equal(await a.consume(record.flowId, record.binding), undefined,
+    'the committed consume must never execute a handler twice');
+
+  const corrupt = { ...record, flowId: 'flow-corrupt-0000001' };
+  await a.suspend(corrupt);
+  await database.collection(name).doc(corrupt.flowId).update({ payload: '{broken' });
+  await assert.rejects(() => b.consume(corrupt.flowId, corrupt.binding), /invalid/);
+  assert.equal((await database.collection(name).doc(corrupt.flowId).get()).exists, true,
+    'corrupt payload must never be deleted and consumed');
+}
+
 const tests = [
   ['portable UsageStore conformance', testPortableConformance],
+  ['Firestore MCP flow (16 concurrent consumers)', testMcpFlowStore],
+  ['Firestore MCP flow replica/lost-ACK/corruption', testMcpFlowAckAndReplicaSafety],
   ['operation reconciliation conformance', testReconciliationConformance],
   ['progressive UsageStore conformance', testProgressiveConformance],
   ['vector UsageStore conformance', testVectorConformance],

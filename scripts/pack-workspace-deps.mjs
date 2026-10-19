@@ -52,7 +52,7 @@ async function prepare() {
   const versions = await workspaceVersions();
   let changed = false;
 
-  for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+  for (const section of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
     const dependencies = manifest[section];
     if (!dependencies) continue;
 

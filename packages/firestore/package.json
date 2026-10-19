@@ -12,6 +12,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./mcp-flow": {
+      "types": "./dist/mcp-flow.d.ts",
+      "import": "./dist/mcp-flow.js",
+      "default": "./dist/mcp-flow.js"
     }
   },
   "files": [
@@ -20,7 +25,11 @@
     "dist/index.d.ts",
     "dist/index.d.ts.map",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "dist/mcp-flow.js",
+    "dist/mcp-flow.js.map",
+    "dist/mcp-flow.d.ts",
+    "dist/mcp-flow.d.ts.map"
   ],
   "engines": {
     "node": ">=22"
@@ -57,6 +66,7 @@
     "mcp-usage-control": "workspace:^"
   },
   "devDependencies": {
-    "@google-cloud/firestore": "8.7.0"
+    "@google-cloud/firestore": "8.7.0",
+    "mcp-usage-control-mcp": "workspace:^"
   }
 }

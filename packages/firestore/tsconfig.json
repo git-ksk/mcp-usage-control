@@ -4,8 +4,19 @@
     "composite": true,
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "references": [{ "path": "../core" }],
-  "include": ["src/**/*.ts"]
+  "references": [
+    {
+      "path": "../core"
+    },
+    {
+      "path": "../mcp"
+    }
+  ],
+  "include": [
+    "src/**/*.ts"
+  ]
 }

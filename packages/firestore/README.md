@@ -79,3 +79,61 @@ See the public guides and reference:
 ## Atomic vector usage (v0.7)
 
 `FirestoreUsageStore` implements optional `VectorUsageStore`. Vector metadata uses additive optional reservation-document fields, so existing scalar documents remain valid without rewrite. Admission/growth/settlement use one Firestore transaction and emulator tests cover portable vector conformance plus committed-growth acknowledgement loss.
+
+## Durable MCP multi-round flow store (v1.3 development candidate)
+
+`mcp-usage-control-firestore/mcp-flow` exports `FirestoreMcpUsageFlowStore`.
+It is an **opt-in, server-only** `McpUsageFlowStore` for the MCP adapter's
+`protectMultiRoundTool()`; it does not change the Firestore accounting Store or
+its schemas. Example:
+
+```ts
+import { FirestoreMcpUsageFlowStore } from 'mcp-usage-control-firestore/mcp-flow';
+// Use the same authenticated, backend-only Firestore Admin client for all replicas.
+const flowStore = new FirestoreMcpUsageFlowStore(adminFirestore, {
+  collectionPath: 'muc_mcp_flows',
+  expirySafetyMarginMs: 1000,
+});
+```
+
+- A Firestore transaction reads and conditionally **creates** a flow, then
+  compares a trusted binding and **deletes** it on one winner's resume.
+  Concurrent retries must not execute billable work twice.
+- Expiry is checked against Firestore transaction snapshot `readTime`, not the
+  host's wall clock. Missing/invalid server read time is an error (fail closed).
+  The default 1-second margin refuses flows too close to expiry; actual
+  transaction duration and network/ACK ambiguity must be handled by the
+  application, not assumed to be a strict distributed lease clock. Applications
+  should use comfortably longer TTLs and bound handler/transaction latency.
+- Configure a **Firestore TTL policy on `deleteAt`** in this private collection;
+  deletion is asynchronous and is only storage hygiene. `expiresAt` is checked
+  for authorization within each transaction. Defaults: 24h retention beyond
+  expiry, 64 KiB maximum stored record. Never grant mobile/web clients read or
+  write privileges to the collection: records include private lease state.
+- `suspend()` or `consume()` can throw after an **ambiguous committed write**.
+  The wrapper must fail closed; do not blindly retry the same flow, mint another
+  reservation or re-enter business handlers. Store-level idempotence does not
+  replace application-owned side-effect fencing or result retention.
+- Firestore transactions guarantee one-winner semantics **inside one database**;
+  they do not provide HA across distinct projects/databases or control effects
+  outside the transaction. Test with an Emulator and official MCP HTTP SDK before
+  promoting this development candidate for production.
+
+### MCP複数ラウンドのFirestoreフロー保存（v1.3開発中）
+
+`mcp-usage-control-firestore/mcp-flow` の `FirestoreMcpUsageFlowStore` は、
+認証済みサーバー専用の opt-in アダプターです。会計用の既存Firestoreコレクションや
+Storeスキーマは変更しません。`suspend()` と `consume()` を単一ドキュメントの
+Firestoreトランザクションで実行し、binding照合後の一回限りの取得を保証します。
+
+期限判定はFirestoreトランザクションのスナップショット `readTime` と、
+デフォルト1秒の安全マージンを利用します。ホスト時計を正本にはせず、
+`readTime` が無ければ安全側に拒否します。ただしコミット遅延・通信途絶・
+ACK不明を解消する完全な分散時計/HA機構ではありません。`consume()` が例外を
+返した際の無条件再試行や課金対象業務処理の再実行は禁止です。
+
+フロー用コレクションはクライアントSDKからアクセスできないようにし、
+`deleteAt` にFirestore TTLポリシーを設定してください。TTL削除は非同期の
+容量整理のみで、有効期限の判定には使用しません。デフォルト保持期間は
+有効期限後24時間です。公開・本番導入前には実Emulatorと公式SDK E2Eの
+受け入れ条件をすべて満たす必要があります。

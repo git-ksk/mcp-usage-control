@@ -291,6 +291,9 @@ jobs:
           redis_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-redis-${version}.tgz")"
           grep -qx 'package/dist/mcp-flow.js' <<<"$redis_listing"
           grep -qx 'package/dist/mcp-flow.d.ts' <<<"$redis_listing"
+          firestore_listing="$(tar -tzf "/tmp/muc-packs/mcp-usage-control-firestore-${version}.tgz")"
+          grep -qx 'package/dist/mcp-flow.js' <<<"$firestore_listing"
+          grep -qx 'package/dist/mcp-flow.d.ts' <<<"$firestore_listing"
 
       - name: Install tarballs in a clean consumer project
         shell: bash
@@ -500,6 +503,7 @@ jobs:
           java-version: '21'
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter mcp-usage-control build
+      - run: pnpm --filter mcp-usage-control-mcp build
       - run: pnpm --filter mcp-usage-control-firestore build
       - name: Type-check server Firestore client compatibility
         shell: bash
