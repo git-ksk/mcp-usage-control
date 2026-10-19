@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { verifyRegistryVisibility } from './verify-npm-registry.mjs';
@@ -103,3 +105,17 @@ test('transient registry transport failure is treated as pending rather than dif
   });
   assert.equal(result.attempts, 2);
 }));
+
+
+test('CLI invoked through a symbolic-link path never silently skips verification', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'muc-registry-cli-'));
+  try {
+    const alias = join(dir, 'registry-check-alias.mjs');
+    await symlink(fileURLToPath(new URL('./verify-npm-registry.mjs', import.meta.url)), alias);
+    const result = spawnSync(process.execPath, [alias], { encoding: 'utf8' });
+    assert.equal(result.status, 2, `expected CLI usage failure, not an unconditional success: ${result.stderr}`);
+    assert.match(result.stderr, /usage:/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

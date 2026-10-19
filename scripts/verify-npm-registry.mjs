@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 
 export const RELEASE_PACKAGES = Object.freeze([
   'mcp-usage-control', 'mcp-usage-control-mcp', 'mcp-usage-control-redis',
@@ -101,7 +102,9 @@ export async function verifyRegistryVisibility({
   throw new Error(`registry propagation verification timed out after ${maxAttempts} attempts; ${names.length - confirmed.size} package(s) missing`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+// Canonicalize executable paths: /tmp and other symlinked launch paths must
+// never silently bypass verification and return exit code 0.
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   const [version, artifactsDirectory, onePackage] = process.argv.slice(2);
   if (!version || !artifactsDirectory) {
     console.error('usage: node scripts/verify-npm-registry.mjs <version> <immutable-release-artifacts-dir> [one-package-name]');
