@@ -62,6 +62,12 @@ importers:
       '@google-cloud/firestore':
         specifier: 8.7.0
         version: 8.7.0
+      '@modelcontextprotocol/client':
+        specifier: 2.3.1
+        version: 2.3.1
+      '@modelcontextprotocol/server':
+        specifier: 2.3.1
+        version: 2.3.1
       mcp-usage-control-mcp:
         specifier: workspace:^
         version: link:../mcp

@@ -430,3 +430,17 @@ core package自体はMCP SDKへ依存しません。
 ## v0.13 lease renewal uncertainty
 
 automatic heartbeatのrenew ACKが失われた場合、renewがcommit済みかどうかはambiguousです。optional `onLeaseRenewalState` で最初の失敗を `uncertain`、その後のrenew成功を `confirmed` と通知できます。これはfencing / telemetry用のadvisory hookであり、callback failureは隔離され、authoritative accounting stateを変更しません。外部のbillable workを制御するapplicationは `uncertain` を追加exposure停止のsignalとして利用できます。
+
+## v1.3公式SDK E2Eの進捗（2026-10-19）
+
+最初の実HTTP・公式MCP `2026-07-28` 複数ラウンドテストは
+`packages/firestore/test/mcp-sdk-e2e.mjs` です。Firestore Emulator上で
+ローカルTCP HTTPサーバーを起動し、初回の`input_required`はサーバーA、
+新しい`tools/call`再開要求はサーバーBに振り分けます。Flow Storeと
+accounting Storeは両インスタンスで同じFirestoreドメインを共有します。
+policy quote 1回、同じ`operationId`、SDKで検証した署名`requestState`、
+異なるMCP request ID、再開handlerの1回実行、アプリ状態の引継ぎ、
+0-unit settlement後の残枠解放を検証します。
+
+これは**#271のFirestore部分のみ**です。Redis・Cloudflare DO上の実SDK
+transport、改ざん・replay・ACK不明などの統合検証はv1.3公開前に必要です。
