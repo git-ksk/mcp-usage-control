@@ -340,3 +340,23 @@ one-winner races, expiry, tenant mismatch and lost-ACK behavior. These are
 *development test proofs*, not a remote Cloudflare FlowStore gateway or a
 production authentication/synchronization guarantee. The test Worker route
 is unavailable off localhost and depends on the explicit test-only flag.
+
+### v1.3 server-private quota denial diagnostics
+
+`UsageDeniedError` keeps its existing public `reason` and generic `message`.
+On denied admission, `protectTool()` and the first round of
+`protectMultiRoundTool()` additionally retain the **Store's first limiting
+budget key** and authoritative `remaining` (when provided), accessible **only
+in trusted server code** using `getUsageDenialContext(error)` from
+`mcp-usage-control`. The context is held in a private `WeakMap`, not enumerable
+Error properties. Neither ordinary `JSON.stringify(error)` nor the official
+SDK's client-visible error automatically contains the raw budget key.
+
+Application code MUST map that private key through its own **allowlist** into
+an approved public scope (for example, an abstract daily/short-window name),
+then use its own reliable calendar/window boundary data if it wants to display
+an expected reset. Never forward `getUsageDenialContext()` directly to an MCP
+client, logs or metric labels. An unknown key remains **unknown**, not
+arbitrarily classified as a five-minute quota. Multiple budgets can block a
+request; a first observed limiter does not guarantee success when it resets.
+No `Retry-After` or new authorization/billing/Store contract is inferred.
