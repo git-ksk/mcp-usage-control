@@ -3,6 +3,8 @@ import type { ServerContext } from '@modelcontextprotocol/server';
 import {
   MemoryUsageStore,
   UsageControl,
+  UsageDeniedError,
+  getUsageDenialContext,
   type MarkLiableInput,
   type MarkLiableResult,
   type RenewInput,
@@ -95,6 +97,39 @@ const exhausted = {
 };
 
 afterEach(() => vi.useRealTimers());
+
+describe('private denial context propagation', () => {
+  it('preserves the authoritative first limiting budget to server code in protectTool', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    await control.reserve({ operationId: 'already-admitted', principal: { id: 'user-1' }, tool: 'expensive_tool', args: undefined });
+    const handler = vi.fn(async () => 'must-not-run');
+    const wrapped = protectTool({ control, tool: 'expensive_tool', noInput: true, principal, operationId }, handler);
+    let caught: unknown;
+    try { await wrapped(ctx); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(UsageDeniedError);
+    expect((caught as UsageDeniedError).message).toBe('Usage denied by usage policy');
+    expect(getUsageDenialContext(caught)).toEqual({ limitingBudgetKey: 'monthly:user-1', remaining: 0 });
+    expect(JSON.stringify(caught)).not.toContain('monthly:user-1');
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('provides the same private context for initial multi-round denial, not an extra admission', async () => {
+    const control = new UsageControl(new MemoryUsageStore(), policy);
+    await control.reserve({ operationId: 'already-admitted', principal: { id: 'user-1' }, tool: 'expensive_tool', args: undefined });
+    const handler = vi.fn(async () => 'must-not-run');
+    const wrapped = protectMultiRoundTool({
+      control, tool: 'expensive_tool', noInput: true, principal, operationId,
+      flowStore: new MemoryMcpUsageFlowStore(),
+      requestState: { mint: state => JSON.stringify(state) },
+      suspendTtlMs: 10_000, leaseHeartbeat: false,
+    }, handler);
+    let caught: unknown;
+    try { await wrapped(contextWithState(undefined)); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(UsageDeniedError);
+    expect(getUsageDenialContext(caught)).toEqual({ limitingBudgetKey: 'monthly:user-1', remaining: 0 });
+    expect(handler).not.toHaveBeenCalled();
+  });
+});
 
 describe('protectTool', () => {
   it('charges the full reservation on an unclassified thrown error', async () => {

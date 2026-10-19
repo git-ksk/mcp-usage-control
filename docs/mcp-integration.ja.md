@@ -458,3 +458,20 @@ settleまでを確認し、同じ操作の再予約拒否と内部情報の非�
 テナント不一致、ACK喪失を試験します。これは開発用E2Eの証拠であり、
 remote Cloudflare FlowStoreや本番認証・全DO時刻同期の保証ではありません。
 テスト用ルートはlocalhostと明示的な試験フラグの両方が必要です。
+
+### v1.3 サーバー内部限定の利用上限拒否情報
+
+`UsageDeniedError`の公開`reason`と汎用`message`は従来どおりです。
+`protectTool()`および`protectMultiRoundTool()`初回予約の拒否時には、
+Storeが返した最初の制限予算キーと`remaining`（存在する場合）をサーバー内に
+保持します。`mcp-usage-control`の`getUsageDenialContext(error)`から
+**信頼できるサーバーコードだけ**で取り出せます。内部情報は非列挙の
+`WeakMap`へ保存され、`JSON.stringify(error)`や公式SDKのMCPエラーには
+自動的に追加されません。
+
+内部キーをMCPクライアント・ログ・メトリクスにそのまま出してはいけません。
+アプリ固有のallowlistで短期/日次など公開可能な範囲へ写像し、明確な
+窓期限情報がある場合だけ解除予定を説明してください。未知のキーは未知の
+まま扱います。複数の予算が同時に枯渇し得るため、最初の制限条件だけから
+「5分後に確実に再試行可能」と推測しません。新しい`Retry-After`保証や
+認証・課金・Storeスキーマ変更は行いません。
