@@ -1,0 +1,14 @@
+{
+  "name": "mcp-usage-control-tasks-interop-probe",
+  "private": true,
+  "type": "module",
+  "description": "Reproducible upstream MCP Tasks server receiver capability gate for #272",
+  "scripts": {
+    "test": "node probe.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.3.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "@modelcontextprotocol/ext-tasks": "0.2.2"
+  }
+}

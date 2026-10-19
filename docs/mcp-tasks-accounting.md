@@ -18,7 +18,7 @@ Reviewed 2026-10-10: the repository targets the stable MCP `2026-07-28` protocol
 
 The Tasks feature is provided as the `io.modelcontextprotocol/tasks` extension. Its **2026-07-28 schema snapshot is marked Stable** (separate from the independently evolving Draft), defining task-backed `tools/call`, `tasks/get`, `tasks/update`, and `tasks/cancel`, with `working`, `input_required`, `completed`, `failed`, and `cancelled` statuses.
 
-The TypeScript SDK v2 core no longer treats the old 2025-11-25 `tasks/*` vocabulary as modern core protocol. As of the reviewed upstream `@modelcontextprotocol/ext-tasks@0.2.2`, the extension package documents **requester/client lifecycle APIs** and a **2025-11-25 Tasks receiver**; stable 2026-07-28 **server/receiver** support cannot be inferred from schema maturity. This project defines and proves **accounting semantics**, but does **not** advertise a first-class official Tasks server adapter. [#272](https://github.com/git-ksk/mcp-usage-control/issues/272) requires a live official-SDK/extension interop spike; [#275](https://github.com/git-ksk/mcp-usage-control/issues/275) is gated on its outcome.
+The TypeScript SDK v2 core no longer treats the old 2025-11-25 `tasks/*` vocabulary as modern core protocol. As of the reviewed upstream `@modelcontextprotocol/ext-tasks@0.2.2`, the extension package documents **requester/client lifecycle APIs** and a **2025-11-25 Tasks receiver**; stable 2026-07-28 **server/receiver** support cannot be inferred from schema maturity. This project defines and proves **accounting semantics**, but does **not** advertise a first-class official Tasks server adapter. [#272](https://github.com/git-ksk/mcp-usage-control/issues/272) now records the live official-SDK/extension interop decision: **DEFER**. [#275](https://github.com/git-ksk/mcp-usage-control/issues/275) remains gated on upstream receiver support.
 
 Primary references used for this decision:
 
@@ -28,6 +28,28 @@ Primary references used for this decision:
 - Official current TypeScript extension package scope: <https://modelcontextprotocol.github.io/ext-tasks/typescript/>
 
 This is a compatibility boundary, not an accounting limitation. The existing core lease primitives are sufficient to enforce the state machine below.
+
+### Live upstream receiver gate — 2026-10-19 (#272)
+
+The [reproducible official-SDK runtime probe](../examples/tasks-interop-probe/README.md)
+was run with `@modelcontextprotocol/ext-tasks@0.2.2`,
+`@modelcontextprotocol/client@2.3.1`, and `server@2.3.1`. The published
+`bindTaskReceiver()` accepted an SDK **Client**, registering legacy
+`tasks/list`, `tasks/get`, `tasks/result`, and `tasks/cancel` handlers. It
+registered **neither `tools/call` nor `tasks/update`**. Attempting to enable
+`tools/call` as a receiver method failed, because there is no supported
+callback for that method. Its public `TaskReceiverMethod` type accepts only
+`sampling/createMessage` and `elicitation/create`.
+
+**Decision: DEFER first-class 2026-07-28 Tasks server accounting (#275)**
+under the tested runtime matrix. The stable extension schema does not make
+server `tools/call` creation / `tasks/update` / cancellation and recovery
+interop available. This is a demonstrated upstream blocker, not permission to
+imitate undocumented wire operations. Continue using the existing accounting
+contracts with application-owned durable task scheduling and ownership; do
+not claim a first-class receiver until a future reproducible protocol E2E
+proves it. The versioned client/requester extension may still be used on the
+requester side. Re-run the probe when new upstream runtime versions ship.
 
 ## Two state machines, one logical operation
 
