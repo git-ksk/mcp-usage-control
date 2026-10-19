@@ -106,3 +106,15 @@ The new public ESM entry points **after an authorized release** are
 installations are **not** claimed to already include these v1.3 APIs.
 
 Note: `--start-workerd` refuses to run if port `127.0.0.1:8799` is already occupied, rather than claiming isolation against another Worker.
+
+### Exact candidate tarball consumer acceptance (CI)
+
+Beyond the source-linked developer runner, provider CI now constructs clean
+npm projects, installs the **exact version-matched candidate `.tgz` artifacts**
+(all five in the Redis consumer, each provider's required packages in its
+own CI), and executes official SDK HTTP multi-round E2E against real Redis
+and Firestore Emulator. The Cloudflare job installs the candidate tarballs
+in a separate npm project and runs a dedicated local workerd Worker imported
+**exclusively through those installed packages**, including both packaged DO
+classes. Source runs and new consumer tests have separate, explicit scopes.
+These are candidate artifacts, **not evidence that npm v1.3 is already live**.

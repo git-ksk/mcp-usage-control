@@ -43,7 +43,7 @@ jobs:
           run_integration=false
           for path in "${changed[@]}"; do
             case "$path" in
-              packages/cloudflare/*|packages/cloudflare/**|packages/core/*|packages/core/**|.github/workflows/cloudflare-integration.yml)
+              packages/cloudflare/*|packages/cloudflare/**|packages/core/*|packages/core/**|examples/mcp-durable-multi-round/*|examples/mcp-durable-multi-round/**|.github/workflows/cloudflare-integration.yml)
                 run_integration=true
                 break
                 ;;
@@ -100,6 +100,42 @@ jobs:
           node packages/cloudflare/test/reconciliation.mjs
           node packages/cloudflare/test/maintenance.mjs
           node packages/cloudflare/test/authorization.mjs
+
+      - name: Install exact packed candidate into clean Cloudflare consumer and run real SDK + SQLite DO
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/muc-cf-packs /tmp/muc-cf-consumer
+          for dir in core mcp cloudflare; do
+            (cd "packages/$dir" && npm pack --pack-destination /tmp/muc-cf-packs >/dev/null)
+          done
+          cd /tmp/muc-cf-consumer
+          npm init -y >/dev/null
+          npm install --ignore-scripts \
+            /tmp/muc-cf-packs/mcp-usage-control-*.tgz \
+            @modelcontextprotocol/client@2.3.1 \
+            @modelcontextprotocol/server@2.3.1 \
+            zod@^4.0.0
+          cp "$GITHUB_WORKSPACE/examples/mcp-durable-multi-round/packed-cloudflare-worker.mjs" ./packed-cloudflare-worker.mjs
+          cp "$GITHUB_WORKSPACE/packages/cloudflare/test/mcp-sdk-e2e.mjs" ./cloudflare-sdk-e2e.mjs
+          sed 's#"main": "./test/worker.ts"#"main": "./packed-cloudflare-worker.mjs"#' \
+            "$GITHUB_WORKSPACE/packages/cloudflare/wrangler.test.jsonc" > wrangler.jsonc
+          # Use a different test port: the earlier source-workerd test may be
+          # completing shutdown; do not accidentally reuse its HTTP endpoint.
+          pnpm dlx wrangler@4.114.0 dev --local --config wrangler.jsonc --port 8800 \
+            --persist-to /tmp/muc-cf-candidate-do >/tmp/muc-cf-candidate-workerd.log 2>&1 &
+          WORKER_PID=$!
+          trap 'kill "$WORKER_PID" 2>/dev/null || true; cat /tmp/muc-cf-candidate-workerd.log || true' EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 2 http://127.0.0.1:8800/health >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          MCP_USAGE_TEST_PORT=8800 node cloudflare-sdk-e2e.mjs
 
   cloudflare-safety:
     name: cloudflare-safety

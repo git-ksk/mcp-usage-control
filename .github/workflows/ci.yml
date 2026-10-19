@@ -345,6 +345,8 @@ jobs:
           import { assertMcpUsageFlowStoreConformance } from 'mcp-usage-control-mcp/conformance';
           import { RedisUsageStore } from 'mcp-usage-control-redis';
           import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
+          import { FirestoreMcpUsageFlowStore } from 'mcp-usage-control-firestore/mcp-flow';
+          import { CloudflareMcpUsageFlowStore } from 'mcp-usage-control-cloudflare/mcp-flow';
           import { CloudflareUsageStore, RemoteCloudflareUsageStore } from 'mcp-usage-control-cloudflare';
           import {
             createReconciliableCloudflareUsageStoreGateway,
@@ -377,6 +379,8 @@ jobs:
             assertMcpUsageFlowStoreConformance,
             RedisUsageStore,
             RedisMcpUsageFlowStore,
+            FirestoreMcpUsageFlowStore,
+            CloudflareMcpUsageFlowStore,
             CloudflareUsageStore,
             RemoteCloudflareUsageStore,
             createExactRetryingRemoteCloudflareUsageStore,
@@ -389,6 +393,20 @@ jobs:
             throw new Error('public package import smoke test failed');
           }
           NODE
+
+      - name: Run Redis multi-round official SDK E2E from packed candidate packages
+        shell: bash
+        env:
+          REDIS_URL: redis://127.0.0.1:6379
+        run: |
+          set -euo pipefail
+          cd /tmp/muc-consumer
+          npm install --no-save --ignore-scripts \
+            @modelcontextprotocol/client@2.3.1 \
+            @modelcontextprotocol/server@2.3.1 \
+            redis@6.2.0 zod@^4.0.0
+          cp "$GITHUB_WORKSPACE/packages/redis/test/mcp-sdk-e2e.mjs" ./redis-sdk-e2e.mjs
+          node redis-sdk-e2e.mjs
 
       - name: Run official-SDK sample from exact candidate tarballs (minimum/current peers)
         shell: bash

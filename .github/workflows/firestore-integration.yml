@@ -96,6 +96,24 @@ jobs:
             --moduleResolution NodeNext \
             --types node \
             "$compat_file"
+      - name: Prepare packed Firestore candidate external consumer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/muc-fs-candidate /tmp/muc-fs-consumer
+          for dir in core mcp firestore; do
+            (cd "packages/$dir" && npm pack --pack-destination /tmp/muc-fs-candidate >/dev/null)
+          done
+          cd /tmp/muc-fs-consumer
+          npm init -y >/dev/null
+          npm install --ignore-scripts \
+            /tmp/muc-fs-candidate/mcp-usage-control-*.tgz \
+            @google-cloud/firestore@8.7.0 \
+            @modelcontextprotocol/client@2.3.1 \
+            @modelcontextprotocol/server@2.3.1 \
+            zod@^4.0.0
+          cp "$GITHUB_WORKSPACE/packages/firestore/test/mcp-sdk-e2e.mjs" ./firestore-sdk-e2e.mjs
+
       - name: Run Firestore adapter against Local Emulator Suite
         shell: bash
         run: >-
