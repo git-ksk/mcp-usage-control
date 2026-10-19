@@ -287,7 +287,10 @@ export function protectTool<TArgs, TResult>(
     });
 
     if (!admission.allowed) {
-      throw new UsageDeniedError(admission.reason);
+      throw new UsageDeniedError(admission.reason, {
+        ...(admission.limitingBudgetKey === undefined ? {} : { limitingBudgetKey: admission.limitingBudgetKey }),
+        ...(admission.remaining === undefined ? {} : { remaining: admission.remaining }),
+      });
     }
 
     const { lease } = admission;
@@ -409,7 +412,10 @@ export function protectMultiRoundTool<TArgs, TResult>(
         tool: options.tool,
         args,
       });
-      if (!admission.allowed) throw new UsageDeniedError(admission.reason);
+      if (!admission.allowed) throw new UsageDeniedError(admission.reason, {
+        ...(admission.limitingBudgetKey === undefined ? {} : { limitingBudgetKey: admission.limitingBudgetKey }),
+        ...(admission.remaining === undefined ? {} : { remaining: admission.remaining }),
+      });
       lease = admission.lease;
       await lease.markLiable();
       round = 0;
