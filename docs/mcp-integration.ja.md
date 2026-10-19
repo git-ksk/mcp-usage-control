@@ -475,3 +475,17 @@ Storeが返した最初の制限予算キーと`remaining`（存在する場合�
 まま扱います。複数の予算が同時に枯渇し得るため、最初の制限条件だけから
 「5分後に確実に再試行可能」と推測しません。新しい`Retry-After`保証や
 認証・課金・Storeスキーマ変更は行いません。
+
+**公式SDKでの安全な利用上限表示例（#279）:** 開発checkoutから
+`node --test examples/mcp-protect-tool/denial-projection.test.mjs`を実行できます。
+[`denial-example.mjs`](../examples/mcp-protect-tool/denial-example.mjs)と
+[`denial-projection.mjs`](../examples/mcp-protect-tool/denial-projection.mjs)は、
+公式SDKの`callTool`→`protectTool()`→アプリ所有のcatch境界を実際に通します。
+`getUsageDenialContext()`はサーバー内部だけで使い、MCPの`structuredContent`は
+許可済み`scope`と固定`reason`、既知の場合の暦境界だけを公開します。
+未定義キー・不明な窓・未許可ラベルは`unknown`/`null`になり、
+**最初の制限窓の境界が分かっても、他の予算が制限中かもしれないため
+`retrySafeAt`は常に`null`**です。表示のために再予約・有料処理再実行はしません。
+サンプルの固定ユーザーとMemory StoreはSDK境界を検証するテスト専用であり、
+本番では認証済みprincipalと実プロバイダーの永続Store・アプリ所有の窓設定が
+必須です。内部の予算キー、principal/tenant、引数やStore例外は公開しません。
