@@ -306,3 +306,19 @@ CI tests the wrappers directly and through the official SDK v2 `Client + createM
 - one quote/reservation across the fresh retry request and final settlement.
 
 The adapter targets the public `@modelcontextprotocol/server` v2 API and v0.1 CI currently resolves v2.0.0. Core does not import the MCP SDK.
+
+## v1.3 cross-provider E2E progress (2026-10-19)
+
+The first real official MCP 2026-07-28 HTTP SDK multi-round integration fixture is
+`packages/firestore/test/mcp-sdk-e2e.mjs` (Firestore Emulator only). It sends an
+`input_required` round from server instance A through a real local TCP HTTP
+server and a **fresh** tools/call retry to instance B. The flow state lives in
+a transactional shared Firestore Flow Store; both instances use the same
+Firestore accounting domain. It asserts one original policy quote, stable
+`operationId`, signed `requestState` verification by the SDK, different MCP
+request IDs, one resumed handler entry, preservation of application state,
+and budget capacity restored after zero-unit settlement.
+
+This is **one provider of the #271 matrix**. Redis + Cloudflare DO actual
+provider-backed official SDK transport, adversarial requestState replay,
+consumption races and ambiguous ACK boundary tests remain release gates.
