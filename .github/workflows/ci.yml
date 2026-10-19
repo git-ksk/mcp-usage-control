@@ -152,6 +152,7 @@ jobs:
           docker logs muc-redis >&2 || true
           exit 1
 
+      - run: node --test scripts/verify-npm-registry.test.mjs
       - run: pnpm check
       - run: pnpm --filter mcp-usage-control-redis test:sdk-e2e
       - run: pnpm example:free-plus
