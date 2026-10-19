@@ -322,3 +322,21 @@ and budget capacity restored after zero-unit settlement.
 This is **one provider of the #271 matrix**. Redis + Cloudflare DO actual
 provider-backed official SDK transport, adversarial requestState replay,
 consumption races and ambiguous ACK boundary tests remain release gates.
+
+### v1.3 official SDK Cloudflare DO runtime proof (test-only)
+
+`packages/cloudflare/test/mcp-sdk-e2e.mjs` connects a real MCP 2026-07-28
+`@modelcontextprotocol/client@2.3.1` over Streamable HTTP to a **localhost-only,
+Bearer-authenticated test Worker** using
+`@modelcontextprotocol/server@2.3.1`. The Worker constructs a fresh MCP server
+factory for each request, using **different dedicated SQLite Durable Object
+bindings** for quota accounting and `McpUsageFlowStore`.
+
+The real workerd test verifies `input_required` -> a second `tools/call` ->
+resumed original logical operation -> settled completion, followed by duplicate
+operation rejection and private flow/budget state redaction. `pnpm` workspace
+unit tests and direct workerd flow conformance cover additional 16-consumer
+one-winner races, expiry, tenant mismatch and lost-ACK behavior. These are
+*development test proofs*, not a remote Cloudflare FlowStore gateway or a
+production authentication/synchronization guarantee. The test Worker route
+is unavailable off localhost and depends on the explicit test-only flag.
