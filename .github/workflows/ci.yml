@@ -153,8 +153,9 @@ jobs:
           exit 1
 
       - run: node --test scripts/verify-npm-registry.test.mjs
+      - run: node --test examples/mcp-durable-multi-round/test.mjs
       - run: pnpm check
-      - run: pnpm --filter mcp-usage-control-redis test:sdk-e2e
+      - run: node examples/mcp-durable-multi-round/run.mjs redis
       - run: pnpm example:free-plus
       - run: pnpm example:mcp
       - run: node --test examples/mcp-protect-tool/denial-projection.test.mjs
