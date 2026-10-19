@@ -158,6 +158,7 @@ jobs:
       - run: node examples/mcp-durable-multi-round/run.mjs redis
       - run: pnpm example:free-plus
       - run: pnpm example:mcp
+      - run: node --test examples/mcp-protect-tool/denial-projection.test.mjs
 
       - name: Verify public package versions are aligned
         shell: bash
@@ -319,7 +320,7 @@ jobs:
             redis@6.2.0 \
             --ignore-scripts
           node --input-type=module <<'NODE'
-          import { MemoryUsageStore, UsageControl } from 'mcp-usage-control';
+          import { MemoryUsageStore, UsageControl, UsageDeniedError, getUsageDenialContext } from 'mcp-usage-control';
           import {
             UsageOperationalMonitor,
             createUsageRuntimeIdentity,
@@ -363,6 +364,8 @@ jobs:
           if (![
             MemoryUsageStore,
             UsageControl,
+            UsageDeniedError,
+            getUsageDenialContext,
             UsageOperationalMonitor,
             createUsageRuntimeIdentity,
             projectScopedQuota,
@@ -430,6 +433,12 @@ jobs:
             zod@^4.0.0
           node run.mjs
           node --test test.mjs
+          # Same candidate packages must also preserve the private denial
+          # context safely through the official MCP SDK boundary.
+          cp "$GITHUB_WORKSPACE/examples/mcp-protect-tool/denial-example.mjs" ./denial-example.mjs
+          cp "$GITHUB_WORKSPACE/examples/mcp-protect-tool/denial-projection.mjs" ./denial-projection.mjs
+          cp "$GITHUB_WORKSPACE/examples/mcp-protect-tool/denial-projection.test.mjs" ./denial-projection.test.mjs
+          node --test denial-projection.test.mjs
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { MCP_USAGE_CONTROL_VERSION } from 'mcp-usage-control/operational';

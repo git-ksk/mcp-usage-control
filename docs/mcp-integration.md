@@ -360,3 +360,20 @@ client, logs or metric labels. An unknown key remains **unknown**, not
 arbitrarily classified as a five-minute quota. Multiple budgets can block a
 request; a first observed limiter does not guarantee success when it resets.
 No `Retry-After` or new authorization/billing/Store contract is inferred.
+
+**Official SDK server-side denial projection example (#279).** From a development
+checkout, run `node --test examples/mcp-protect-tool/denial-projection.test.mjs`.
+The tested source is [`denial-example.mjs`](../examples/mcp-protect-tool/denial-example.mjs)
+and [`denial-projection.mjs`](../examples/mcp-protect-tool/denial-projection.mjs).
+A real SDK `callTool` goes through `protectTool()`; the **application-owned
+server registration boundary** catches `UsageDeniedError`, uses
+`getUsageDenialContext()` locally and emits only allowlisted `structuredContent`
+(`scope: daily|short-window|shared|unknown`, bounded reason, advisory
+`nextWindowBoundary`). Any unseen budget, unapproved public scope or missing
+calendar boundary becomes `unknown`/`null`. Even with a known first limiter's
+calendar boundary, `retrySafeAt` remains `null` because other budgets may be
+exhausted; no automatic retry, second reservation or paid handler entry occurs.
+The example uses a fake local identity and Memory Store to demonstrate the SDK
+trust boundary; deployers must supply their own authenticated principal, real
+durable provider Store and complete policy window mappings. It never sends
+raw budget keys, principal/tenant/args or Store exception messages to clients.
