@@ -153,7 +153,7 @@ jobs:
           exit 1
 
       - run: pnpm check
-      - run: pnpm --filter mcp-usage-control-redis test:sdk-e2e
+      - run: node examples/mcp-durable-multi-round/run.mjs redis
       - run: pnpm example:free-plus
       - run: pnpm example:mcp
 

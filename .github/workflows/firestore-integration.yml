@@ -103,7 +103,7 @@ jobs:
           emulators:exec
           --only firestore
           --project demo-muc-firestore
-          "pnpm --filter mcp-usage-control-firestore test:emulator"
+          "pnpm --filter mcp-usage-control-firestore test:emulator && node examples/mcp-durable-multi-round/run.mjs firestore"
 
   firestore-safety:
     name: firestore-safety
