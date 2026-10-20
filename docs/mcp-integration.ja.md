@@ -312,6 +312,8 @@ multi-roundで引き継ぐleaseやtrusted stateはserver-sideに保存します�
 
 これにより、別のprincipalや別toolから正規flowを奪うことを防ぎます。
 
+consume後の`flowId`を以前の署名済み`requestState`が有効な間に再利用してはいけません。first-party Storeは少なくとも元flowの期限まで消費済みmarkerを残し、FirestoreとCloudflare DOは設定済みretention期間中も保持します。Redisのmarkerは元の`PXAT`時刻、Memoryは元のflow期限で消えます。Firestore TTLとDO alarmは最終的にmarkerを削除するため、**期限経過後の永久的なreplay防止は保証しません**。アプリ独自の`flowId()`は毎回新しい暗号学的に予測困難なIDを生成し、署名済み`requestState`の検証期限を保管期間より長くしないでください。
+
 ## Resume tokenは1回しか使えない
 
 resume tokenはone-timeです。

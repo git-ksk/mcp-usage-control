@@ -43,7 +43,7 @@ jobs:
           run_integration=false
           for path in "${changed[@]}"; do
             case "$path" in
-              packages/cloudflare/*|packages/cloudflare/**|packages/core/*|packages/core/**|examples/mcp-durable-multi-round/*|examples/mcp-durable-multi-round/**|.github/workflows/cloudflare-integration.yml)
+              packages/cloudflare/*|packages/cloudflare/**|packages/core/*|packages/core/**|packages/mcp/*|packages/mcp/**|examples/mcp-durable-multi-round/*|examples/mcp-durable-multi-round/**|.github/workflows/cloudflare-integration.yml)
                 run_integration=true
                 break
                 ;;
