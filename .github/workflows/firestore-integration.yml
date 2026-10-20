@@ -43,7 +43,7 @@ jobs:
           run_integration=false
           for path in "${changed[@]}"; do
             case "$path" in
-              packages/firestore/*|packages/firestore/**|packages/core/*|packages/core/**|.github/workflows/firestore-integration.yml)
+              packages/firestore/*|packages/firestore/**|packages/core/*|packages/core/**|packages/mcp/*|packages/mcp/**|.github/workflows/firestore-integration.yml)
                 run_integration=true
                 break
                 ;;

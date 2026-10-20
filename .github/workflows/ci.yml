@@ -66,13 +66,13 @@ jobs:
             esac
 
             case "$path" in
-              packages/core/*|packages/core/**|packages/cloudflare/*|packages/cloudflare/**|.github/workflows/cloudflare-integration.yml|.github/workflows/ci.yml)
+              packages/core/*|packages/core/**|packages/mcp/*|packages/mcp/**|packages/cloudflare/*|packages/cloudflare/**|.github/workflows/cloudflare-integration.yml|.github/workflows/ci.yml)
                 run_cloudflare=true
                 ;;
             esac
 
             case "$path" in
-              packages/core/*|packages/core/**|packages/firestore/*|packages/firestore/**|.github/workflows/firestore-integration.yml|.github/workflows/ci.yml)
+              packages/core/*|packages/core/**|packages/mcp/*|packages/mcp/**|packages/firestore/*|packages/firestore/**|.github/workflows/firestore-integration.yml|.github/workflows/ci.yml)
                 run_firestore=true
                 ;;
             esac
