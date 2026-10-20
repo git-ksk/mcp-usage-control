@@ -9,8 +9,8 @@ import {
 } from '@modelcontextprotocol/server';
 import { UsageControl } from 'mcp-usage-control';
 import { protectMultiRoundTool } from 'mcp-usage-control-mcp';
-import { RedisUsageStore } from '../dist/index.js';
-import { RedisMcpUsageFlowStore } from '../dist/mcp-flow.js';
+import { RedisUsageStore } from 'mcp-usage-control-redis';
+import { RedisMcpUsageFlowStore } from 'mcp-usage-control-redis/mcp-flow';
 
 assert.ok(process.env.REDIS_URL, 'Real Redis service required for official SDK E2E');
 const redis = createClient({ url: process.env.REDIS_URL, database: 13 });

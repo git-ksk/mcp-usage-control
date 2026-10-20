@@ -14,6 +14,25 @@ From the monorepo root, first run `pnpm install --frozen-lockfile` and
 these v1.3 FlowStore exports and tests exist on `main` **only until the
 v1.3 release is separately approved**.
 
+## Public npm installation vs unreleased FlowStore imports
+
+For already published **v1.2.0** Core/adapters (Node 22 or 24; server-side
+ESM), an ordinary consumer can install the following public packages:
+
+```sh
+npm install mcp-usage-control@1.2.0 mcp-usage-control-mcp@1.2.0 \
+  mcp-usage-control-redis@1.2.0 mcp-usage-control-firestore@1.2.0 \
+  mcp-usage-control-cloudflare@1.2.0 \
+  @modelcontextprotocol/server@^2 @modelcontextprotocol/client@^2
+```
+
+That command installs the **released v1.2.0 APIs**, **not** the v1.3 FlowStore
+subpaths. The ESM examples importing `/mcp-flow` below currently work only
+with this repository's locally built **prospective v1.3 tarballs**. Do not
+attempt to install `@1.3.0` from npm until its separately authorized release
+actually exists. Keep the SDK v2 peer, Node support floor, DO bindings and
+Firestore server credentials under explicit application ownership.
+
 ## Run a real provider
 
 **Redis** — start a disposable local Redis 7 server, then:
@@ -106,3 +125,15 @@ The new public ESM entry points **after an authorized release** are
 installations are **not** claimed to already include these v1.3 APIs.
 
 Note: `--start-workerd` refuses to run if port `127.0.0.1:8799` is already occupied, rather than claiming isolation against another Worker.
+
+### Exact candidate tarball consumer acceptance (CI)
+
+Beyond the source-linked developer runner, provider CI now constructs clean
+npm projects, installs the **exact version-matched candidate `.tgz` artifacts**
+(all five in the Redis consumer, each provider's required packages in its
+own CI), and executes official SDK HTTP multi-round E2E against real Redis
+and Firestore Emulator. The Cloudflare job installs the candidate tarballs
+in a separate npm project and runs a dedicated local workerd Worker imported
+**exclusively through those installed packages**, including both packaged DO
+classes. Source runs and new consumer tests have separate, explicit scopes.
+These are candidate artifacts, **not evidence that npm v1.3 is already live**.

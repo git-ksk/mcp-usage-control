@@ -9,8 +9,8 @@ import {
 } from '@modelcontextprotocol/server';
 import { UsageControl } from 'mcp-usage-control';
 import { protectMultiRoundTool } from 'mcp-usage-control-mcp';
-import { FirestoreUsageStore } from '../dist/index.js';
-import { FirestoreMcpUsageFlowStore } from '../dist/mcp-flow.js';
+import { FirestoreUsageStore } from 'mcp-usage-control-firestore';
+import { FirestoreMcpUsageFlowStore } from 'mcp-usage-control-firestore/mcp-flow';
 
 assert.ok(process.env.FIRESTORE_EMULATOR_HOST, 'Emulator only: never use production Firestore');
 const database = new Firestore({ projectId: process.env.GCLOUD_PROJECT ?? 'demo-muc-firestore' });

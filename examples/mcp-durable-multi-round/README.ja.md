@@ -12,6 +12,23 @@ Emulator / Cloudflareローカルworkerdの本物の永続化基盤を使い、M
 **npm公開中の版はv1.2.0のまま**です。新しいv1.3のFlowStore APIは
 別途リリース承認されるまでmain内の開発候補です。
 
+## 公開済みnpmパッケージと未公開のFlowStore APIを区別
+
+現在公開済みの**v1.2.0**をNode.js 22/24のESM環境で利用する場合は：
+
+```sh
+npm install mcp-usage-control@1.2.0 mcp-usage-control-mcp@1.2.0 \
+  mcp-usage-control-redis@1.2.0 mcp-usage-control-firestore@1.2.0 \
+  mcp-usage-control-cloudflare@1.2.0 \
+  @modelcontextprotocol/server@^2 @modelcontextprotocol/client@^2
+```
+
+これは**公開済みv1.2のAPIをインストールするコマンド**であり、新しい
+`/mcp-flow` exportはまだ含まれません。このドキュメントのv1.3 FlowStore
+コードは、現在はリポジトリで作った**未公開の配布候補tarball**でのみ検証します。
+正式リリース前に`npm install ...@1.3.0`が成功するものとして扱わないでください。
+認証、Firestore IAM、Cloudflare DO binding、SDK v2 peerはアプリ側で設定します。
+
 ## プロバイダーを選んで実行
 
 Redis 7をローカル起動後：
@@ -89,3 +106,12 @@ Flowの保存だけで有料処理を再実行する許可にはなりません�
 **現行公開v1.2.0にv1.3 APIが既存実装済みだと主張するものではありません。**
 
 注意：`--start-workerd`は`127.0.0.1:8799`を他プロセスが使用中の場合、別Workerに対して「隔離環境で成功」と誤判定しないため停止します。
+
+### 候補tarballを使った新規利用者環境の受け入れ検証（CI）
+
+ソースを直接使う開発者ランナーに加え、各プロバイダーCIは同じ候補バージョンの
+`.tgz`を新規npmプロジェクトへインストールして、実Redis / Firestore Emulatorで
+公式SDKの複数ラウンドE2Eを実行します。Cloudflareは別の新規npm環境から
+パック済みパッケージのDOクラスをimportする専用Workerをローカルworkerdに
+起動して動作確認します。これらは**未公開の配布候補**であり、
+「npmのv1.3が公開済み」とは主張しません。

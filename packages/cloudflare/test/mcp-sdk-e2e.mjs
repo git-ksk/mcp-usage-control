@@ -4,7 +4,8 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 // Actual official MCP SDK HTTP transport -> Worker -> Cloudflare DO persisted
 // accounting and flow state. Client's input_required automatically creates an
 // independent tools/call round, and Worker constructs a fresh server each time.
-const url = new URL('http://127.0.0.1:8799/test/mcp-sdk');
+const testPort = process.env.MCP_USAGE_TEST_PORT ?? '8799';
+const url = new URL(`http://127.0.0.1:${testPort}/test/mcp-sdk`);
 const transport = new StreamableHTTPClientTransport(url, {
   requestInit: { headers: { authorization: 'Bearer local-integration-token' } },
 });
