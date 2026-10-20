@@ -66,7 +66,7 @@
     "mcp-usage-control": "workspace:^"
   },
   "devDependencies": {
-    "@google-cloud/firestore": "8.7.0",
+    "@google-cloud/firestore": "9.3.1",
     "mcp-usage-control-mcp": "workspace:^",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1"
