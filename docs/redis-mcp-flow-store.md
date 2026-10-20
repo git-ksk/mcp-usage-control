@@ -48,7 +48,7 @@ Both keys for one flow share one Redis Cluster hash tag, so Lua can manipulate t
 1. read the flow payload and stored binding digest;
 2. fail closed if only one of the two keys exists;
 3. return no flow on a binding mismatch **without deleting the legitimate flow**;
-4. if the binding matches, delete both keys and return the payload in the same atomic script.
+4. if the binding matches, erase the sensitive payload while keeping a consumed marker with the original Redis key expiration (`PXAT`), and return the original payload in the same atomic script. The marker prevents re-suspension with the same ID while the first token was still valid.
 
 This makes a resume token one-time across processes. Under parallel contention, at most one caller receives the flow record.
 
@@ -85,7 +85,7 @@ The Redis write may have committed before the caller sees an error. The caller m
 
 ### Lost `consume()` acknowledgement
 
-The Lua script may already have atomically deleted the one-time token. Retrying `consume()` can therefore return missing even though the first claim succeeded. The safe behavior is to fail closed rather than re-enter the application handler blindly.
+The Lua script may already have atomically consumed the one-time token and cleared its payload. Retrying `consume()` can therefore return missing even though the first claim succeeded. The safe behavior is to fail closed rather than re-enter the application handler blindly.
 
 ### Failure after a successful claim
 

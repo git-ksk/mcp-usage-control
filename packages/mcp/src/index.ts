@@ -110,7 +110,8 @@ export interface McpUsageFlowRecord {
  * without consuming a legitimate live flow. A successfully returned record is
  * authoritative proof that suspended-flow expiry passed; callers MUST NOT
  * reinterpret that result using an unrelated application-host clock. This
- * one-time consume prevents concurrent retry re-entry.
+ * one-time consume prevents concurrent retry re-entry. Consumed flow IDs must
+ * remain unavailable until old signed requestState values cannot be replayed.
  */
 export interface McpUsageFlowStore {
   suspend(record: McpUsageFlowRecord): MaybePromise<void>;
@@ -126,11 +127,12 @@ export interface McpUsageFlowStore {
  */
 export class MemoryMcpUsageFlowStore implements McpUsageFlowStore {
   private readonly flows = new Map<string, McpUsageFlowRecord>();
+  private readonly consumed = new Map<string, number>();
 
   suspend(record: McpUsageFlowRecord): void {
     this.pruneExpired(Date.now());
     validateFlowRecord(record);
-    if (this.flows.has(record.flowId)) {
+    if (this.flows.has(record.flowId) || this.consumed.has(record.flowId)) {
       throw new UsageStateError('MCP usage flow ID already exists');
     }
     this.flows.set(record.flowId, cloneFlowRecord(record));
@@ -143,10 +145,14 @@ export class MemoryMcpUsageFlowStore implements McpUsageFlowStore {
     if (!record || record.expiresAt <= now) return undefined;
     if (!sameBinding(record.binding, binding)) return undefined;
     this.flows.delete(flowId);
+    this.consumed.set(flowId, record.expiresAt);
     return cloneFlowRecord(record);
   }
 
   private pruneExpired(now: number): void {
+    for (const [flowId, expiry] of this.consumed) {
+      if (expiry <= now) this.consumed.delete(flowId);
+    }
     for (const [flowId, record] of this.flows) {
       if (record.expiresAt <= now) this.flows.delete(flowId);
     }

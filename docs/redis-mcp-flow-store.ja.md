@@ -48,7 +48,7 @@ suspended flowは2つのRedis keyを使います。
 1. flow payloadとstored binding digestを読む。
 2. 片方のkeyだけ存在する場合はfail-closeする。
 3. binding mismatchなら**正規flowを削除せず**no flowを返す。
-4. binding matchなら同一atomic script内で2 keyをdeleteしpayloadを返す。
+4. binding matchなら同一atomic script内でprivate payloadを消去し、元のRedis key expiry（`PXAT`）まで消費済みmarkerを残して元payloadを返す。同じIDを期限内に再発行する操作は拒否する。
 
 これによりresume tokenはprocessを跨いでone-timeになります。parallel contentionでもflow recordを受け取れるcallerは最大1つです。
 
@@ -85,7 +85,7 @@ callerがerrorを見る前にRedis writeがcommit済みの可能性がありま�
 
 ### `consume()` ACK loss
 
-Lua scriptがone-time tokenをすでにatomic deleteしている可能性があります。そのため `consume()` retryは、初回claim成功済みでもmissingを返し得ます。安全な挙動はapplication handlerをblind再実行せずfail-closeすることです。
+Lua scriptがone-time tokenをすでにatomic consumeし、payloadを消去している可能性があります。そのため `consume()` retryは、初回claim成功済みでもmissingを返し得ます。安全な挙動はapplication handlerをblind再実行せずfail-closeすることです。
 
 ### Successful claim後のfailure
 

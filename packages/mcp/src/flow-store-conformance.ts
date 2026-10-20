@@ -77,6 +77,17 @@ export async function runMcpUsageFlowStoreConformance(
     assert(replay === undefined, 'matching flow must be consumed at most once');
   });
 
+  await runCase(harness, cases, 'consumed-id-cannot-be-reissued', async store => {
+    const record = flowRecord('flow-contract-reissue-0001', 5_000);
+    await store.suspend(record);
+    assert((await store.consume(record.flowId, record.binding)) !== undefined,
+      'first matching consume must return the flow');
+    await assertRejects(() => Promise.resolve(store.suspend(record)),
+      'consumed flow ID must not be reissued while the original flow can still be resumed');
+    assert((await store.consume(record.flowId, record.binding)) === undefined,
+      'old signed token must remain consumed after attempted flow ID reuse');
+  });
+
   await runCase(harness, cases, 'binding-mismatch-preserves-legitimate-flow', async store => {
     const record = flowRecord('flow-contract-binding-0001', 5_000);
     await store.suspend(record);

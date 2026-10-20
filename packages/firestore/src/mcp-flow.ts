@@ -25,7 +25,7 @@ export interface FirestoreMcpUsageFlowStoreOptions {
   collectionPath?: string;
   /** Reject claims this many milliseconds BEFORE expiry to allow for transaction completion. Default 1s. */
   expirySafetyMarginMs?: number;
-  /** Minimum TTL cleanup retention beyond expiration. Configure Firestore TTL on deleteAt. Default 24h. */
+  /** Keep consumed ID tombstones beyond expiry until Firestore TTL deletes deleteAt. Default 24h. */
   retentionMs?: number;
 }
 
@@ -41,7 +41,7 @@ interface FlowSnapshot {
 interface FlowTransaction {
   get(reference: FirestoreDocumentReferenceLike): Promise<FlowSnapshot>;
   create(reference: FirestoreDocumentReferenceLike, data: Record<string, unknown>): FlowTransaction;
-  delete(reference: FirestoreDocumentReferenceLike): FlowTransaction;
+  update(reference: FirestoreDocumentReferenceLike, data: Record<string, unknown>): FlowTransaction;
 }
 
 /**
@@ -93,7 +93,7 @@ export class FirestoreMcpUsageFlowStore {
       if (snapshot.exists) throw new UsageStateError('MCP usage flow ID already exists');
       const deleteAfter = record.expiresAt + this.retentionMs;
       if (!Number.isSafeInteger(deleteAfter)) throw new UsageStateError('MCP flow cleanup deadline is invalid');
-      tx.create(ref, { payload, bindingDigest: digest, expiresAt: record.expiresAt, deleteAt: new Date(deleteAfter) });
+      tx.create(ref, { status: 'active', payload, bindingDigest: digest, expiresAt: record.expiresAt, deleteAt: new Date(deleteAfter) });
     });
   }
 
@@ -107,6 +107,12 @@ export class FirestoreMcpUsageFlowStore {
       const now = trustedReadTime(snapshot);
       if (!snapshot.exists) return undefined;
       const data = snapshot.data();
+      // Retained tombstones prevent old signed requestState tokens from claiming
+      // a new flow after an application mistakenly reuses the same flowId.
+      if (data?.status === 'consumed') return undefined;
+      if (data?.status !== undefined && data.status !== 'active') {
+        throw new UsageStateError('Firestore MCP flow status is invalid');
+      }
       if (!data || typeof data.payload !== 'string' || typeof data.bindingDigest !== 'string' ||
           !Number.isSafeInteger(data.expiresAt) || (data.expiresAt as number) <= 0 ||
           Buffer.byteLength(data.payload, 'utf8') > MAX_RECORD_BYTES) {
@@ -126,7 +132,7 @@ export class FirestoreMcpUsageFlowStore {
           !sameBinding(record.binding, binding)) {
         throw new UsageStateError('Firestore MCP flow payload failed binding integrity check');
       }
-      tx.delete(ref);
+      tx.update(ref, { status: 'consumed', payload: '' });
       return cloneFlowRecord(record);
     });
   }

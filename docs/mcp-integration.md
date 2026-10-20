@@ -188,7 +188,9 @@ The reservation is cost-liable before the application handler first runs. Theref
 
 ### Replay semantics
 
-A resume token is one-time. Concurrent identical resume attempts can produce only one application re-entry; later attempts fail closed with `McpUsageResumeError`. A mismatched principal/tool/argument attempt cannot consume the legitimate flow.
+A resume token is one-time. Concurrent identical resume attempts can produce only one application re-entry; later attempts fail closed with `McpUsageResumeError`.
+
+A consumed flow ID must not be reused while a previous signed `requestState` could still pass verification. The first-party stores retain a consumed marker at least until the original flow expiry (Cloudflare DO and Firestore additionally retain it for their configured post-expiry retention window). A custom `flowId()` generator must supply a fresh cryptographically unpredictable ID for every suspension. Redis markers expire at the original Redis `PXAT` deadline, Memory markers at the original expiry, and Firestore/DO markers are eventually removed by provider cleanup. **No provider promises permanent replay prevention after its retention horizon.** If a signed requestState can remain valid longer than storage retention, the application must bound verification age accordingly and never recycle IDs. A mismatched principal/tool/argument attempt cannot consume the legitimate flow.
 
 This prevents duplicate usage reservation and duplicate handler entry for the same resume token. It does **not** make arbitrary application side effects exactly-once, and it does not cache/replay a completed business response if the response is lost after the token has already been claimed. Keep existing business idempotency/result reconciliation for destructive or externally metered operations.
 

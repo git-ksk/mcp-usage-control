@@ -170,6 +170,17 @@ describe.skipIf(!redisUrl)('RedisMcpUsageFlowStore integration', () => {
     await expect(writer.consume(value.flowId, binding)).resolves.toBeUndefined();
   });
 
+  it('keeps consumed flow ID occupied until original expiry (signed requestState replay protection)', async () => {
+    const target = store('flow-replay-guard');
+    const value = record('flow-replay-00000001', Date.now() + 30_000);
+    await target.suspend(value);
+    expect(await target.consume(value.flowId, binding)).toEqual(value);
+    const reused = record(value.flowId, Date.now() + 30_000);
+    reused.lease.reservation.operationId = 'new-operation-000001';
+    await expect(target.suspend(reused)).rejects.toThrow(/already exists/);
+    expect(await target.consume(value.flowId, binding)).toBeUndefined();
+  });
+
   it('permits exactly one consumer under parallel contention', async () => {
     const target = store('flow-contention');
     const value = record('flow-000000000004');

@@ -32,7 +32,11 @@ class FakeFlowFirestore {
         if (this.rows.has(id)) throw new Error('ALREADY_EXISTS');
         pending.set(id, structuredClone(row));
       },
-      delete: ({ id }: { id: string }) => { pending.set(id, null); },
+      update: ({ id }: { id: string }, patch: Record<string, unknown>) => {
+        const row = pending.get(id) ?? this.rows.get(id);
+        if (!row) throw new Error('NOT_FOUND');
+        pending.set(id, { ...row, ...structuredClone(patch) });
+      },
     };
     try {
       const result = await fn(tx);
@@ -73,7 +77,7 @@ function assertOfficialFirestoreTypeCompatibility(db: Firestore): void {
 void assertOfficialFirestoreTypeCompatibility;
 
 describe('Firestore MCP flow store isolated transactional contract', () => {
-  it('passes the portable five-case one-time flow-store contract with 16 contenders', async () => {
+  it('passes the portable replay-safe one-time flow-store contract with 16 contenders', async () => {
     const database = new FakeFlowFirestore();
     const report = await assertMcpUsageFlowStoreConformance({
       createStore(scenario) {
@@ -117,6 +121,21 @@ describe('Firestore MCP flow store isolated transactional contract', () => {
     db.loseAck = true;
     await expect(store.consume(original.flowId, original.binding)).rejects.toThrow(/acknowledgement/);
     db.loseAck = false;
+    expect(await store.consume(original.flowId, original.binding)).toBeUndefined();
+  });
+
+  it('rejects a reused flow ID after consume so an older signed resume token cannot claim a later flow', async () => {
+    const db = new FakeFlowFirestore();
+    const store = new FirestoreMcpUsageFlowStore(db as any);
+    const original = record('flow-reused-00000001');
+    await store.suspend(original);
+    expect(await store.consume(original.flowId, original.binding)).toEqual(original);
+    const tombstone = db.rows.get(`muc_mcp_flows/${original.flowId}`);
+    expect(tombstone?.status).toBe('consumed');
+    expect(tombstone?.payload).toBe('');
+    const second = record(original.flowId);
+    second.lease.reservation.operationId = 'different-operation-000002';
+    await expect(store.suspend(second)).rejects.toThrow(/already exists/);
     expect(await store.consume(original.flowId, original.binding)).toBeUndefined();
   });
 

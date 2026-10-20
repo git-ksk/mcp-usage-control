@@ -75,11 +75,16 @@ end
 if not payload or not stored_binding then
   return {'corrupt'}
 end
+if payload == '' then
+  return {'missing'}
+end
 if stored_binding ~= ARGV[1] then
   return {'mismatch'}
 end
 
-redis.call('DEL', KEYS[1], KEYS[2])
+-- Retain the original PXAT on both keys, but erase private payload data.
+-- A consumed ID cannot be reissued until this protected flow window ends.
+redis.call('SET', KEYS[1], '', 'KEEPTTL')
 return {'ok', payload}
 `;
 
@@ -98,7 +103,7 @@ const JSON_CODEC: RedisMcpUsageFlowCodec = {
  * Each flow gets its own Redis Cluster hash tag, so its record + binding are
  * atomically manipulated in one slot while unrelated flows can distribute
  * across slots. `consume()` compares a SHA-256 digest of the trusted binding and
- * deletes a matching flow in one Lua invocation. Mismatches never delete the
+ * erases a matching flow payload and leaves a bounded consumed marker in one Lua invocation. Mismatches never delete the
  * legitimate flow.
  *
  * Redis key expiry uses Redis server time through PXAT. Lost consume
@@ -124,7 +129,7 @@ export class RedisMcpUsageFlowStore {
   async suspend(record: RedisMcpUsageFlowRecord): Promise<void> {
     validateFlowRecord(record);
     const payload = await this.codec.encode(cloneFlowRecord(record));
-    if (typeof payload !== 'string') throw new UsageStateError('Redis MCP flow codec must encode to a string');
+    if (typeof payload !== 'string' || payload.length === 0) throw new UsageStateError('Redis MCP flow codec must encode to a non-empty string');
     if (new TextEncoder().encode(payload).byteLength > MAX_RECORD_BYTES) {
       throw new RangeError(`Redis MCP flow payload exceeds ${MAX_RECORD_BYTES} bytes`);
     }
