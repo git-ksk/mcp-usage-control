@@ -8,26 +8,20 @@
 Emulator / Cloudflareローカルworkerdの本物の永続化基盤を使い、Memoryによる
 代用はしません。本番の認証・秘密情報・有料APIは利用しません。
 
-ルートで`pnpm install --frozen-lockfile`と`pnpm build`を実行してください。
-**npm公開中の版はv1.2.0のまま**です。新しいv1.3のFlowStore APIは
-別途リリース承認されるまでmain内の開発候補です。
+ルートで`pnpm install --frozen-lockfile`と`pnpm build`を実行してください。新しい永続FlowStore exportは **v1.3.0** に含める対象です。npmの公開状態は[レジストリ](https://www.npmjs.com/package/mcp-usage-control)で別途確認してください。GitHub Releaseだけではnpm公開済みとはみなしません。
 
-## 公開済みnpmパッケージと未公開のFlowStore APIを区別
+## v1.3.0パッケージの導入
 
-現在公開済みの**v1.2.0**をNode.js 22/24のESM環境で利用する場合は：
+Node.js 22/24のESM利用側では、5パッケージのnpm公開が完了した後に次のコマンドを利用します。
 
 ```sh
-npm install mcp-usage-control@1.2.0 mcp-usage-control-mcp@1.2.0 \
-  mcp-usage-control-redis@1.2.0 mcp-usage-control-firestore@1.2.0 \
-  mcp-usage-control-cloudflare@1.2.0 \
+npm install mcp-usage-control@1.3.0 mcp-usage-control-mcp@1.3.0 \
+  mcp-usage-control-redis@1.3.0 mcp-usage-control-firestore@1.3.0 \
+  mcp-usage-control-cloudflare@1.3.0 \
   @modelcontextprotocol/server@^2 @modelcontextprotocol/client@^2
 ```
 
-これは**公開済みv1.2のAPIをインストールするコマンド**であり、新しい
-`/mcp-flow` exportはまだ含まれません。このドキュメントのv1.3 FlowStore
-コードは、現在はリポジトリで作った**未公開の配布候補tarball**でのみ検証します。
-正式リリース前に`npm install ...@1.3.0`が成功するものとして扱わないでください。
-認証、Firestore IAM、Cloudflare DO binding、SDK v2 peerはアプリ側で設定します。
+npm公開前は、このリポジトリをビルドするか、GitHub Releaseに付属する検証済みtarballを使います。各Storeはサーバー側IAM・DO binding・認証・秘密情報を利用アプリが管理します。v1.2.0のnpm配布物にはv1.3.0のFlowStore exportはありません。
 
 ## プロバイダーを選んで実行
 
@@ -99,11 +93,11 @@ Flowの保存だけで有料処理を再実行する許可にはなりません�
 外部業務副作用の冪等性は利用アプリが定義する必要があります。内部Flowや
 予算キーを公開ログやMCPエラーに出さないでください。
 
-正式公開後のESM import先は`mcp-usage-control-redis/mcp-flow`、
+v1.3.0のESM import先は`mcp-usage-control-redis/mcp-flow`、
 `mcp-usage-control-firestore/mcp-flow`、
 `mcp-usage-control-cloudflare/mcp-flow`、
 `mcp-usage-control-cloudflare/mcp-flow-worker`です。
-**現行公開v1.2.0にv1.3 APIが既存実装済みだと主張するものではありません。**
+v1.2.0にはこれらの新しいexportは含まれません。
 
 注意：`--start-workerd`は`127.0.0.1:8799`を他プロセスが使用中の場合、別Workerに対して「隔離環境で成功」と誤判定しないため停止します。
 
@@ -113,5 +107,4 @@ Flowの保存だけで有料処理を再実行する許可にはなりません�
 `.tgz`を新規npmプロジェクトへインストールして、実Redis / Firestore Emulatorで
 公式SDKの複数ラウンドE2Eを実行します。Cloudflareは別の新規npm環境から
 パック済みパッケージのDOクラスをimportする専用Workerをローカルworkerdに
-起動して動作確認します。これらは**未公開の配布候補**であり、
-「npmのv1.3が公開済み」とは主張しません。
+起動して動作確認します。配布候補の実体を検証します。npm公開は別ワークフローの検証結果で判定します。

@@ -9,29 +9,20 @@ rounds, using Redis, Firestore Emulator or local Cloudflare workerd as the
 same provider scripts that run in CI and does **not** impersonate production
 application identity, authenticate users, or invoke paid APIs.
 
-From the monorepo root, first run `pnpm install --frozen-lockfile` and
-`pnpm build`. The current npm-distributed packages are **v1.2.0**;
-these v1.3 FlowStore exports and tests exist on `main` **only until the
-v1.3 release is separately approved**.
+From the monorepo root, run `pnpm install --frozen-lockfile` and `pnpm build`. The durable FlowStore exports are part of the **v1.3.0** release line. Verify the separate [npm publication status](https://www.npmjs.com/package/mcp-usage-control) before installing from the registry; a GitHub source tag alone does not publish npm packages.
 
-## Public npm installation vs unreleased FlowStore imports
+## Install v1.3.0 packages
 
-For already published **v1.2.0** Core/adapters (Node 22 or 24; server-side
-ESM), an ordinary consumer can install the following public packages:
+On Node.js 22/24 with server-side ESM, after all five npm packages are available:
 
 ```sh
-npm install mcp-usage-control@1.2.0 mcp-usage-control-mcp@1.2.0 \
-  mcp-usage-control-redis@1.2.0 mcp-usage-control-firestore@1.2.0 \
-  mcp-usage-control-cloudflare@1.2.0 \
+npm install mcp-usage-control@1.3.0 mcp-usage-control-mcp@1.3.0 \
+  mcp-usage-control-redis@1.3.0 mcp-usage-control-firestore@1.3.0 \
+  mcp-usage-control-cloudflare@1.3.0 \
   @modelcontextprotocol/server@^2 @modelcontextprotocol/client@^2
 ```
 
-That command installs the **released v1.2.0 APIs**, **not** the v1.3 FlowStore
-subpaths. The ESM examples importing `/mcp-flow` below currently work only
-with this repository's locally built **prospective v1.3 tarballs**. Do not
-attempt to install `@1.3.0` from npm until its separately authorized release
-actually exists. Keep the SDK v2 peer, Node support floor, DO bindings and
-Firestore server credentials under explicit application ownership.
+Before npm publication, use a local build or the exact validated tarball assets from GitHub Release. The application remains responsible for server identity, Firebase IAM, Durable Object bindings, secrets and SDK peer configuration. npm v1.2.0 does not contain these new FlowStore exports.
 
 ## Run a real provider
 
@@ -117,12 +108,11 @@ quotas, retention, cleanup, idempotent result handling, app-owned authorization,
 secret rotation and incident procedures. `input_required` and signed state must
 never be forwarded in raw logs or client-visible backend exception text.
 
-The new public ESM entry points **after an authorized release** are
+The v1.3.0 public ESM entry points are
 `mcp-usage-control-redis/mcp-flow`,
 `mcp-usage-control-firestore/mcp-flow`,
 `mcp-usage-control-cloudflare/mcp-flow`, and
-`mcp-usage-control-cloudflare/mcp-flow-worker`. Existing published v1.2
-installations are **not** claimed to already include these v1.3 APIs.
+`mcp-usage-control-cloudflare/mcp-flow-worker`. Existing v1.2 installations do **not** include these v1.3 APIs.
 
 Note: `--start-workerd` refuses to run if port `127.0.0.1:8799` is already occupied, rather than claiming isolation against another Worker.
 

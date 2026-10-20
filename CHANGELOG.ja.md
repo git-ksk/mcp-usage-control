@@ -8,6 +8,26 @@
 
 現在entryはありません。
 
+## [1.3.0] - 2026-10-20
+
+MCPの複数ラウンド実行に対応する永続Flow Storeを追加し、基盤間の実SDK検証を強化した後方互換リリース。GitHub/source Releaseとnpm Trusted Publishingは別の公開ゲートであり、タグだけではnpm公開を意味しません。
+
+### 永続Flowと公式SDK検証
+- Cloudflare Durable Objects/SQLiteとFirestore transactionの`McpUsageFlowStore`を追加。1回限りのatomic consume、trusted binding、期限切れ、ACK喪失時のfail-closed、消費済みIDの期限付きtombstoneを検証（#269、#270、#293）。
+- Redis・Firestore Emulator・ローカルworkerdで、公式MCP SDK v2の`2026-07-28` Streamable HTTP `input_required` / resume、別HTTPリクエスト・別サーバーインスタンス、replay / tenant隔離、実tarball利用側のE2Eを確認（#271、#274）。
+- 導入用サンプル、運用上の注意事項、英日ガイドを公開候補へ追加（#274）。
+
+### プライバシー・相互運用・品質保証
+- MCPアダプターへprivacy-safeなquota denial contextを追加。raw予算キーの露出や、確実でないリセット日時の断定を回避（#279）。
+- Tasks拡張は仕様と公開SDK receiver実装を分けて検証。安定したserver側Tasksアダプターは上流対応確認までv1.4以降へ延期（#272、#275）。
+- npm伝播・配布物検証（#267）、MCP共通コード変更時のプロバイダーCI実行条件（#295）、workerd通信障害の安全な診断・独立SQLite DOテスト状態（#296、#297）を強化。
+
+### 互換性・既知の制限
+- Node.js **22以上**、ESM、従来の会計状態遷移・Stored state・v1の公開APIを維持。既存の課金永続データをリセットする必須移行はありません。
+- 利用アプリは認証、バックエンドの永続化/HA、副作用の冪等性、フロー期限とクリーンアップを自身で管理します。Firestoreのtransaction readTime・TTL削除とCloudflareの同一Worker内DO RPCは同じ保証ではありません。
+- Cloudflareの**リモートvector初期予約**ACK再照合は未対応のままfail-closed（#273、v1.4+）。first-class Tasks receiverは延期（#275）。Wrangler 4.114.0ローカルCIの断続的通信不具合候補（#296）は隔離環境での反復検証では再発せず、再発時はIssueを再オープンします。
+- 5公開npmパッケージを **1.3.0** に揃えます。GitHub Releaseとnpmの公開済み状態は各配布元で検証し、この変更履歴だけで公開完了とみなしません。
+
 ## [1.2.0]
 
 実行可能なMCP導入サンプルと運用・配布検証を改善する後方互換リリースです。GitHub/source releaseとnpm Trusted Publishingは**別々の承認・実行手順**であり、source releaseだけではnpmへ公開されません。
