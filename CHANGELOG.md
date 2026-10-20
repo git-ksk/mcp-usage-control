@@ -8,6 +8,26 @@ All notable project changes are recorded here.
 
 No entries yet.
 
+## [1.3.0] - 2026-10-20
+
+Additive durable MCP multi-round integration and cross-provider verification. Source/GitHub Release and npm Trusted Publishing are separately gated workflows; the GitHub tag alone does not indicate registry publication.
+
+### Durable multi-round flows
+- Add server-side **Cloudflare Durable Objects / SQLite** and **Firestore transactional** implementations of the `McpUsageFlowStore` contract, with atomic one-time flow consumption, trusted binding, expiry, failure-closed lost acknowledgements and bounded consumed-ID tombstones (#269, #270, #293).
+- Run actual official MCP SDK v2 `2026-07-28` Streamable HTTP `input_required` / resume E2E through Redis, Firestore Emulator and local workerd, including separate request/server instances, replay and tenant-isolation assertions and exact packed-consumer proofs (#271, #274).
+- Publish runnable durable-flow onboarding, operator caveats and provider-specific documentation in English and Japanese (#274).
+
+### Privacy, interop and release integrity
+- Add privacy-bounded quota denial context for server-side MCP adapters without exposing raw budget keys or promising authoritative reset times for opaque keys (#279).
+- Document Tasks extension specification interoperability and defer a first-class server Tasks receiver adapter pending verified upstream runtime support (#272; first-class implementation #275 is v1.4+).
+- Harden npm registry propagation and immutable package artifact verification (#267), shared-MCP provider CI change detection (#295), and fail-safe Cloudflare CI diagnostics and isolated SQLite DO test state (#296, #297).
+
+### Compatibility and known limits
+- Maintain the Node.js **22+** ESM runtime floor (Node 22/24 validation), existing Store accounting lifecycle, reserve/liable/settle invariants, and v1 public API compatibility. Existing stored accounting data is not reset and no new mandatory billing schema migration is introduced.
+- The new FlowStores require application-owned authentication, provider persistence/HA, effect fencing, retention and cleanup policy. Firestore uses transactional host/read-time bounds and asynchronous TTL cleanup; Cloudflare flow DO APIs are same-Worker only, not a new remote flow gateway.
+- Cloudflare **remote vector initial-reserve** ACK reconciliation remains unsupported and fail-closed (#273, v1.4+). The upstream first-class Tasks receiver remains deferred (#275). Wrangler 4.114.0 local CI has an intermittent upstream transport-regression hypothesis (#296); the repeated isolated CI qualification passed without reproducing it, and any recurrence must reopen the issue.
+- All five public packages are versioned together at **1.3.0**. GitHub Release assets and npm publication must each complete their separate approval/verification gates; the authoritative status is the linked GitHub Release and npm registry, not this changelog.
+
 ## [1.2.0]
 
 Backward-compatible improvements to runnable MCP onboarding, operator guidance, and packaged compatibility evidence. GitHub/source release and npm Trusted Publishing require **separate approval and execution**; a source release alone does not publish to npm.

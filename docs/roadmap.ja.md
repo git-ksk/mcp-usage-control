@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.2.0がGitHub/npmで公開済みの現行stable baselineです（2026-10-10 JST）。** Node.js 22+の5パッケージ（Core・MCP・Redis・Cloudflare・Firestore）を、GitHub Releaseとnpm Trusted Publishingを**それぞれ明示承認**して公開しました。レジストリtarballとGitHub assetのSHA-256完全一致、署名・provenance、クリーンな利用側importを確認済みです。[GitHub v1.2.0 Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0) · [npm Core](https://www.npmjs.com/package/mcp-usage-control) · [完了Issue #252](https://github.com/git-ksk/mcp-usage-control/issues/252)。npmへの伝播遅延で最初の確認がタイムアウトしましたが、安全な再実行で重複publishなしにPASSしました。次回向けCI改善は[#267](https://github.com/git-ksk/mcp-usage-control/issues/267)で別管理します。
+**v1.2.0はGitHub/npmで公開・検証済みの前版です（2026-10-10 JST）。v1.3.0が新しいリリース対象です。** Node.js 22+の5パッケージ（Core・MCP・Redis・Cloudflare・Firestore）を、GitHub Releaseとnpm Trusted Publishingを**それぞれ明示承認**して公開しました。レジストリtarballとGitHub assetのSHA-256完全一致、署名・provenance、クリーンな利用側importを確認済みです。[GitHub v1.2.0 Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0) · [npm Core](https://www.npmjs.com/package/mcp-usage-control) · [完了Issue #252](https://github.com/git-ksk/mcp-usage-control/issues/252)。npmへの伝播遅延で最初の確認がタイムアウトしましたが、安全な再実行で重複publishなしにPASSしました。次回向けCI改善は[#267](https://github.com/git-ksk/mcp-usage-control/issues/267)で別管理します。
 
 初回publication gate #6は完了・close済みです。v1.1.0もseparate authorizationされたmanual Trusted Publishing pathを使い、registry provenanceとGitHub Release assetとのbyte identityを独立verifyしました。今後のregistry publicationも引き続き独立authorize対象です。
 
