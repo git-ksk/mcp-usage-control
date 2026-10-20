@@ -73,11 +73,30 @@ jobs:
           MCP_USAGE_CLOUDFLARE_OLD_TOKEN: rotated-out-local-token
         run: |
           set -euo pipefail
+          # Each run starts with isolated DO state. Local Wrangler defaults can
+          # otherwise persist previous deterministic conformance operation IDs.
+          WRANGLER_STATE="$(mktemp -d /tmp/muc-workerd-state.XXXXXX)"
           pnpm dlx wrangler@4.114.0 dev --local \
             --config packages/cloudflare/wrangler.test.jsonc \
+            --persist-to "$WRANGLER_STATE" \
             --port 8799 >/tmp/muc-cloudflare-wrangler.log 2>&1 &
           WRANGLER_PID=$!
-          trap 'kill "$WRANGLER_PID" 2>/dev/null || true; cat /tmp/muc-cloudflare-wrangler.log || true' EXIT
+          cleanup() {
+            result=$?
+            if [[ "$result" -ne 0 ]]; then
+              if kill -0 "$WRANGLER_PID" 2>/dev/null; then
+                echo 'Wrangler launcher still running after failure'
+              else
+                echo 'Wrangler launcher exited unexpectedly'
+              fi
+              echo "Workerd /health HTTP status: $(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 http://127.0.0.1:8799/health || true)"
+              echo 'Last 100 lines of local Wrangler output:'
+              tail -n 100 /tmp/muc-cloudflare-wrangler.log || true
+            fi
+            kill "$WRANGLER_PID" 2>/dev/null || true
+            rm -rf "$WRANGLER_STATE"
+          }
+          trap cleanup EXIT
 
           ready=0
           for _ in $(seq 1 60); do
