@@ -14,6 +14,8 @@ npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server
 
 For local patches or release archives, use [Source / local tarballs](using-from-source.md).
 
+**HTTP SDK security:** The patched server peer floor removes the known vulnerable SDK, but does not configure tool-input bounds automatically. When exposing HTTP MCP to clients, use a fresh server/transport per request or session, set `maxToolInputElements` on `new McpServer(...)`, and bound the HTTP request via `createMcpHandler(..., { maxRequestBodySize: ... })` or your framework body parser. Choose limits appropriate to real tools; the 128-element/64-KiB limits below are examples. See [upstream advisory](https://github.com/advisories/GHSA-46jr-4wx8-v453).
+
 The adapter does not authenticate callers or decide subscriptions. The application must derive a trusted `Principal` and a suitable logical `operationId`.
 
 **Runnable official SDK integration:** [server + client example](../examples/mcp-protect-tool/README.md). This page also documents production boundaries that the fixed-principal local demo does not implement.
@@ -149,11 +151,11 @@ const protectedConfirm = protectMultiRoundTool(
 const handler = createMcpHandler(() => {
   const server = new McpServer(
     { name: 'example', version: '1.0.0' },
-    { requestState: { verify: stateCodec.verify } },
+    { requestState: { verify: stateCodec.verify }, maxToolInputElements: 128 },
   );
   server.registerTool('confirm-write', { description: 'Confirm then write' }, protectedConfirm);
   return server;
-});
+}, { maxRequestBodySize: 64 * 1024 });
 ```
 
 If `ctx.mcpReq.requestState()` is a raw string rather than a verified decoded payload, the wrapper fails closed with `McpUsageResumeError`. Do not disable verification and manually trust the client-echoed string.
