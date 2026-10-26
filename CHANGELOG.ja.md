@@ -8,6 +8,16 @@
 
 現在entryはありません。
 
+## [1.3.1]
+
+セキュリティ保守とMCP HTTPサンプルの入力制限強化（#300、PR #301）。
+
+- 公開MCPアダプターの公式SDK server peer下限を`^2.3.1`へ引き上げ、脆弱な2.0.0〜2.2.xを除外。サンプルのSDK/Zodを修正版へ変更し、開発用Viteを7.3.7へ固定。workspace監査のHigh/Criticalはゼロ。
+- 実行可能なHTTP MCPサンプルに64KiBのbody制限と128要素のtool入力制限を設定。requestごとに新しいserverを生成し、過大入力が有料handlerへ到達しない回帰テストを追加。
+- secure SDK下限に合わせたclean consumer・minimum/current peer CIを修正。GitHub runnerにない`rg`依存を標準の`grep`へ置換。
+- Coreの会計、replay/settlement、Redis/Cloudflare/Firestore永続Store契約は維持。利用側はSDK更新だけでなくtool要素数とHTTP body上限を明示設定する必要がある。
+- Node.js 22+のサポートと成果物の配布整合性ゲートを維持。GitHub source Releaseとnpm Trusted Publishingは最終SHA確認後も個別承認が必要。
+
 ## [1.3.0] - 2026-10-20
 
 MCPの複数ラウンド実行に対応する永続Flow Storeを追加し、基盤間の実SDK検証を強化した後方互換リリース。GitHub/source Releaseとnpm Trusted Publishingは別の公開ゲートであり、タグだけではnpm公開を意味しません。
