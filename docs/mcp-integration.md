@@ -309,7 +309,7 @@ CI tests the wrappers directly and through the official SDK v2 `Client + createM
 - modern protocol negotiation and a real `input_required` retry through `createRequestStateCodec` verification;
 - one quote/reservation across the fresh retry request and final settlement.
 
-The adapter targets the public `@modelcontextprotocol/server` v2 API and v0.1 CI currently resolves v2.0.0. Core does not import the MCP SDK.
+The adapter targets the public `@modelcontextprotocol/server` v2 API; the v1.3.1 CI tests secure SDK server 2.3.1 as the minimum peer and a current compatible v2 peer. Core does not import the MCP SDK.
 
 ## v1.3 cross-provider E2E progress (2026-10-19)
 

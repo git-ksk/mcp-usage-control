@@ -1,4 +1,4 @@
-# MCP複数ラウンドの永続化 — 実行可能なプロバイダー別E2E（v1.3候補）
+# MCP複数ラウンドの永続化 — 実行可能なプロバイダー別E2E（v1.3.0公開版）
 
 [English](README.md) | [日本語](README.ja.md)
 
@@ -18,10 +18,12 @@ Node.js 22/24のESM利用側では、5パッケージのnpm公開が完了した
 npm install mcp-usage-control@1.3.0 mcp-usage-control-mcp@1.3.0 \
   mcp-usage-control-redis@1.3.0 mcp-usage-control-firestore@1.3.0 \
   mcp-usage-control-cloudflare@1.3.0 \
-  @modelcontextprotocol/server@^2 @modelcontextprotocol/client@^2
+  @modelcontextprotocol/server@^2.3.1 @modelcontextprotocol/client@^2.3.1
 ```
 
-npm公開前は、このリポジトリをビルドするか、GitHub Releaseに付属する検証済みtarballを使います。各Storeはサーバー側IAM・DO binding・認証・秘密情報を利用アプリが管理します。v1.2.0のnpm配布物にはv1.3.0のFlowStore exportはありません。
+**セキュリティ保守：** 上記は公開済み**v1.3.0**の履歴的な導入例で、セキュリティ修正版の案内ではありません。v1.3.0のpeer宣言より厳しい修正版SDK server `^2.3.1`を明示しています。新規導入では**v1.3.1のnpm公開確認後にv1.3.1を優先**し、実サーバーで`maxToolInputElements`とHTTP body上限を設定してください。SDK更新だけでは上限は有効になりません。
+
+未公開のrelease候補を検証する場合は、このリポジトリをビルドするか、GitHub Releaseに付属する検証済みtarballを使います。各Storeはサーバー側IAM・DO binding・認証・秘密情報を利用アプリが管理します。v1.2.0のnpm配布物にはv1.3.0のFlowStore exportはありません。
 
 ## プロバイダーを選んで実行
 
