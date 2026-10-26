@@ -202,7 +202,7 @@ jobs:
             mkdir -p "/tmp/muc-readmes/$name"
             tar -xzf "$tgz" -C "/tmp/muc-readmes/$name" package/README.md
           done
-          if rg -n 'Node\.js 20\+|mcp-usage-control-(0\.9\.0|cloudflare-0\.4\.0)\.tgz|\.\./\.\./docs/|Current distribution status:.*v[0-9]' /tmp/muc-readmes; then
+          if grep -En 'Node\.js 20\+|mcp-usage-control-(0\.9\.0|cloudflare-0\.4\.0)\.tgz|\.\./\.\./docs/|Current distribution status:.*v[0-9]' /tmp/muc-readmes; then
             echo 'Shipped README contains a stale runtime, fixed current-version label, tarball, or relative documentation link.' >&2
             exit 1
           fi
@@ -316,7 +316,7 @@ jobs:
             /tmp/muc-packs/mcp-usage-control-redis-${version}.tgz \
             /tmp/muc-packs/mcp-usage-control-cloudflare-${version}.tgz \
             /tmp/muc-packs/mcp-usage-control-firestore-${version}.tgz \
-            @modelcontextprotocol/server@2.0.0 \
+            @modelcontextprotocol/server@2.3.1 \
             redis@6.2.0 \
             --ignore-scripts
           node --input-type=module <<'NODE'
@@ -407,7 +407,7 @@ jobs:
           npm install --no-save --ignore-scripts \
             @modelcontextprotocol/client@2.3.1 \
             @modelcontextprotocol/server@2.3.1 \
-            redis@6.2.0 zod@^4.0.0
+            redis@6.2.0 zod@^4.6.7
           cp "$GITHUB_WORKSPACE/packages/redis/test/mcp-sdk-e2e.mjs" ./redis-sdk-e2e.mjs
           node redis-sdk-e2e.mjs
 
@@ -422,15 +422,15 @@ jobs:
           # All five packages above were installed from this exact commit's .tgz,
           # not from npm's last released baseline or pnpm workspace symlinks.
           npm install --no-save --ignore-scripts \
-            @modelcontextprotocol/client@2.0.0 \
-            @modelcontextprotocol/server@2.0.0 \
-            zod@^4.0.0
+            @modelcontextprotocol/client@2.3.1 \
+            @modelcontextprotocol/server@2.3.1 \
+            zod@^4.6.7
           node run.mjs
           node --test test.mjs
           npm install --no-save --ignore-scripts \
-            '@modelcontextprotocol/client@^2.0.0' \
-            '@modelcontextprotocol/server@^2.0.0' \
-            zod@^4.0.0
+            '@modelcontextprotocol/client@^2.3.1' \
+            '@modelcontextprotocol/server@^2.3.1' \
+            zod@^4.6.7
           node run.mjs
           node --test test.mjs
           # Same candidate packages must also preserve the private denial
@@ -595,8 +595,8 @@ jobs:
           set -euo pipefail
           if [[ "${{ matrix.peer }}" == "mcp" ]]; then
             package='@modelcontextprotocol/server'
-            minimum='2.0.0'
-            range='^2.0.0'
+            minimum='2.3.1'
+            range='^2.3.1'
           else
             package='redis'
             minimum='6.2.0'
@@ -654,7 +654,7 @@ jobs:
           cp /tmp/muc-mcp-package.json packages/mcp/package.json
           cp /tmp/muc-redis-package.json packages/redis/package.json
           cp /tmp/muc-pnpm-lock.yaml pnpm-lock.yaml
-          test "$(node -p "require('./packages/mcp/package.json').peerDependencies['@modelcontextprotocol/server']")" = '^2.0.0'
+          test "$(node -p "require('./packages/mcp/package.json').peerDependencies['@modelcontextprotocol/server']")" = '^2.3.1'
           test "$(node -p "require('./packages/redis/package.json').peerDependencies.redis")" = '^6.2.0'
           cmp -s /tmp/muc-mcp-package.json packages/mcp/package.json
           cmp -s /tmp/muc-redis-package.json packages/redis/package.json

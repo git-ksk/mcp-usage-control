@@ -1,4 +1,4 @@
-# Durable MCP multi-round execution — executable provider matrix (v1.3 candidate)
+# Durable MCP multi-round execution — executable provider matrix (v1.3.0 baseline)
 
 [日本語](README.ja.md) | [English](README.md)
 
@@ -19,10 +19,12 @@ On Node.js 22/24 with server-side ESM, after all five npm packages are available
 npm install mcp-usage-control@1.3.0 mcp-usage-control-mcp@1.3.0 \
   mcp-usage-control-redis@1.3.0 mcp-usage-control-firestore@1.3.0 \
   mcp-usage-control-cloudflare@1.3.0 \
-  @modelcontextprotocol/server@^2 @modelcontextprotocol/client@^2
+  @modelcontextprotocol/server@^2.3.1 @modelcontextprotocol/client@^2.3.1
 ```
 
-Before npm publication, use a local build or the exact validated tarball assets from GitHub Release. The application remains responsible for server identity, Firebase IAM, Durable Object bindings, secrets and SDK peer configuration. npm v1.2.0 does not contain these new FlowStore exports.
+**Security maintenance:** This installation is the historical published **v1.3.0** provider matrix, not the latest security patch. It explicitly selects the patched SDK server peer `^2.3.1`, regardless of the v1.3.0 adapter's more permissive peer declaration. For fresh deployments, prefer **v1.3.1 after npm publication is separately confirmed**; configure `maxToolInputElements` and HTTP body bounds in the actual server. Do not assume that an upgraded SDK applies the limits automatically.
+
+For an unpublished release candidate, use a local build or the exact validated tarball assets from GitHub Release. The application remains responsible for server identity, Firebase IAM, Durable Object bindings, secrets and SDK peer configuration. npm v1.2.0 does not contain these new FlowStore exports.
 
 ## Run a real provider
 

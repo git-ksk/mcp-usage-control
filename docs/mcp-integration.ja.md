@@ -23,8 +23,10 @@ MCPサーバ側で既存のhandlerを包むだけなので、usage controlのた
 Node.js 22以上を使用します。通常はnpmから導入してください。
 
 ```sh
-npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.0.0
+npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.3.1
 ```
+
+**HTTP SDKの安全設定：** 修正済みpeer版へ更新してもtool入力数の制限は自動では有効になりません。HTTP公開ではrequest/sessionごとに独立したserver/transportを作り、`new McpServer(...)`で`maxToolInputElements`を指定し、`createMcpHandler(..., { maxRequestBodySize: ... })`またはframework側body parserでサイズを制限してください。下記の128要素／64KiBはサンプル値です。[公式アドバイザリ](https://github.com/advisories/GHSA-46jr-4wx8-v453)。
 
 ローカル修正やリリースアーカイブを使う場合は [ソース・ローカルtarballのガイド](using-from-source.ja.md) を参照してください。
 
@@ -279,7 +281,7 @@ const protectedConfirm = protectMultiRoundTool(
 const handler = createMcpHandler(() => {
   const server = new McpServer(
     { name: 'example', version: '1.0.0' },
-    { requestState: { verify: stateCodec.verify } },
+    { requestState: { verify: stateCodec.verify }, maxToolInputElements: 128 },
   );
 
   server.registerTool(
@@ -289,7 +291,7 @@ const handler = createMcpHandler(() => {
   );
 
   return server;
-});
+}, { maxRequestBodySize: 64 * 1024 });
 ```
 
 検証済みのpayloadではなくraw stringが戻ってきた場合、adapterは `McpUsageResumeError` でfail-closeします。

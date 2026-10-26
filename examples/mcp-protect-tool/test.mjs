@@ -69,6 +69,31 @@ test('two concurrent SDK calls cannot both enter metered work with the last rese
   });
 });
 
+test('oversized tool input element count is rejected before metered handler entry', { timeout: 10000 }, () =>
+  withSdk({}, async (client, server) => {
+    const fields = Object.fromEntries(Array.from({ length: 160 }, (_, i) => [`field_${i}`, String(i)]));
+    const response = await invoke(client, action(), 'ok', fields);
+    assert.equal(response.isError, true);
+    assert.equal(server.metrics.handlerEntries, 0);
+    assert.equal(server.metrics.quotes, 0, 'input limit must reject before usage quote');
+  }));
+
+test('HTTP body above 64 KiB returns 413 without usage quote or handler entry', { timeout: 10000 }, async () => {
+  const server = await startExampleServer();
+  try {
+    const response = await fetch(server.url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: 'x'.repeat(64 * 1024 + 1),
+    });
+    assert.equal(response.status, 413);
+    assert.equal(server.metrics.quotes, 0);
+    assert.equal(server.metrics.handlerEntries, 0);
+  } finally {
+    await server.close();
+  }
+});
+
 test('caller-supplied principal and plan fields are not accepted as trusted identity', { timeout: 10000 }, () =>
   withSdk({}, async (client, server) => {
     const response = await invoke(client, action(), 'ok', { principalId: 'fake-admin', plan: 'unlimited' });

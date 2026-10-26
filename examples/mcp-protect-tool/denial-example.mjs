@@ -47,10 +47,17 @@ export async function runQuotaDenialSdkExample() {
     }
   };
   const handler = createMcpHandler(() => {
-    const server = new McpServer({ name: 'safe-quota-denial-example', version: '1.0.0' });
+    const server = new McpServer({ name: 'safe-quota-denial-example', version: '1.0.0' }, { maxToolInputElements: 128 });
     server.registerTool('demo-confirm', { description: 'Trusted quota projection example' }, safeHandler);
     return server;
-  });
+  }, { maxRequestBodySize: 64 * 1024 });
+  const oversized = await handler.fetch(new Request('http://test.local/mcp', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: 'x'.repeat(64 * 1024 + 1),
+  }));
+  assert.equal(oversized.status, 413, 'oversized denial-demo input must fail before tool dispatch');
+  assert.equal(handlerEntries, 0);
   const client = new Client({ name: 'safe-quota-client', version: '1.0.0' });
   try {
     await client.connect(new StreamableHTTPClientTransport(new URL('http://test.local/mcp'), {

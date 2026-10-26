@@ -60,11 +60,11 @@ function officialSdkHandler(env: Env, request: Request): Promise<Response> {
   return createMcpHandler(() => {
     const server = new McpServer(
       { name: 'mcp-cloudflare-sdk-v130', version: '1.0.0' },
-      { requestState: { verify: codec.verify } },
+      { requestState: { verify: codec.verify }, maxToolInputElements: 128 },
     );
     server.registerTool('confirm', { description: 'Cloudflare DO cross-request official SDK flow' }, handler);
     return server;
-  }).fetch(request);
+  }, { maxRequestBodySize: 64 * 1024 }).fetch(request);
 }
 
 export default {

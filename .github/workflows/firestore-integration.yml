@@ -111,7 +111,7 @@ jobs:
             @google-cloud/firestore@8.7.0 \
             @modelcontextprotocol/client@2.3.1 \
             @modelcontextprotocol/server@2.3.1 \
-            zod@^4.0.0
+            zod@^4.6.7
           cp "$GITHUB_WORKSPACE/packages/firestore/test/mcp-sdk-e2e.mjs" ./firestore-sdk-e2e.mjs
 
       - name: Run Firestore adapter against Local Emulator Suite

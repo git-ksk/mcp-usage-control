@@ -9,10 +9,12 @@
 Use Node.js 22+. Install from npm:
 
 ```sh
-npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.0.0
+npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.3.1
 ```
 
 For local patches or release archives, use [Source / local tarballs](using-from-source.md).
+
+**HTTP SDK security:** The patched server peer floor removes the known vulnerable SDK, but does not configure tool-input bounds automatically. When exposing HTTP MCP to clients, use a fresh server/transport per request or session, set `maxToolInputElements` on `new McpServer(...)`, and bound the HTTP request via `createMcpHandler(..., { maxRequestBodySize: ... })` or your framework body parser. Choose limits appropriate to real tools; the 128-element/64-KiB limits below are examples. See [upstream advisory](https://github.com/advisories/GHSA-46jr-4wx8-v453).
 
 The adapter does not authenticate callers or decide subscriptions. The application must derive a trusted `Principal` and a suitable logical `operationId`.
 
@@ -149,11 +151,11 @@ const protectedConfirm = protectMultiRoundTool(
 const handler = createMcpHandler(() => {
   const server = new McpServer(
     { name: 'example', version: '1.0.0' },
-    { requestState: { verify: stateCodec.verify } },
+    { requestState: { verify: stateCodec.verify }, maxToolInputElements: 128 },
   );
   server.registerTool('confirm-write', { description: 'Confirm then write' }, protectedConfirm);
   return server;
-});
+}, { maxRequestBodySize: 64 * 1024 });
 ```
 
 If `ctx.mcpReq.requestState()` is a raw string rather than a verified decoded payload, the wrapper fails closed with `McpUsageResumeError`. Do not disable verification and manually trust the client-echoed string.
@@ -307,7 +309,7 @@ CI tests the wrappers directly and through the official SDK v2 `Client + createM
 - modern protocol negotiation and a real `input_required` retry through `createRequestStateCodec` verification;
 - one quote/reservation across the fresh retry request and final settlement.
 
-The adapter targets the public `@modelcontextprotocol/server` v2 API and v0.1 CI currently resolves v2.0.0. Core does not import the MCP SDK.
+The adapter targets the public `@modelcontextprotocol/server` v2 API; the v1.3.1 CI tests secure SDK server 2.3.1 as the minimum peer and a current compatible v2 peer. Core does not import the MCP SDK.
 
 ## v1.3 cross-provider E2E progress (2026-10-19)
 

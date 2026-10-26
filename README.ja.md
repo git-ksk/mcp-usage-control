@@ -154,7 +154,7 @@ npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis
 
 ## プロジェクトの状態
 
-**v1.3.0** ではCloudflare Durable Objects / Firestoreの永続MCP複数ラウンドFlow Storeを追加し、Redisを含む公式SDK E2Eと配布候補の独立検証を強化しています。変更範囲は[変更履歴](CHANGELOG.ja.md)を参照。GitHub Releaseとnpmへの公開は別工程です。各公開の完了状態は[GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases)と[npm](https://www.npmjs.com/package/mcp-usage-control)で確認してください。前版v1.2.0は両方で公開済みで、tarball一致・provenance検証済みです。CIではNode.js 22/24、Redis、公式MCP SDK、ローカルworkerd、Firestore Emulator、クリーンな利用側を検証します。
+**v1.3.0** ではCloudflare Durable Objects / Firestoreの永続MCP複数ラウンドFlow Storeを追加し、Redisを含む公式SDK E2Eと配布候補の独立検証を強化しています。変更範囲は[変更履歴](CHANGELOG.ja.md)を参照。GitHub Releaseとnpmへの公開は別工程です。各公開の完了状態は[GitHub Releases](https://github.com/git-ksk/mcp-usage-control/releases)と[npm](https://www.npmjs.com/package/mcp-usage-control)で確認してください。v1.3.0はGitHub/npm両方で公開済みで、tarball一致・provenance検証済みです。v1.3.1は未マージのセキュリティ修正候補で、導入する際はSDK server 2.3.1以上に更新し、入力上限を明示設定してください。CIではNode.js 22/24、Redis、公式MCP SDK、ローカルworkerd、Firestore Emulator、クリーンな利用側を検証します。
 
 単一ラウンドと複数ラウンドのMCP利用量管理に対応しています。MCP Tasksの安定版専用アダプターは未提供です。定義済みの処理モデルは [Tasksの利用量管理](docs/mcp-tasks-accounting.ja.md) にまとめています。
 

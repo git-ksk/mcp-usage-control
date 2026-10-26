@@ -125,7 +125,7 @@ To **run a real protected MCP server and client**, follow the [official SDK loop
 For an MCP server backed by Redis:
 
 ```sh
-npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis @modelcontextprotocol/server@^2.0.0 redis@^6.2.0
+npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis @modelcontextprotocol/server@^2.3.1 redis@^6.2.0
 ```
 
 `mcp-usage-control-mcp` wraps handlers inside your server. It is not a separate gateway. [The integration guide](mcp-integration.md) covers `protectTool()`, tools without an input schema, and integrity-verified multi-round `input_required` flows.

@@ -77,7 +77,7 @@ Core + MCP adapter:
 npm install \
   "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-${version}.tgz" \
   "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-mcp-${version}.tgz" \
-  @modelcontextprotocol/server@2.0.0
+  @modelcontextprotocol/server@2.3.1
 ```
 
 Core + Redis adapter:
@@ -117,7 +117,7 @@ npm install \
   "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-redis-${version}.tgz" \
   "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-cloudflare-${version}.tgz" \
   "/absolute/path/to/mcp-usage-control/.packs/mcp-usage-control-firestore-${version}.tgz" \
-  @modelcontextprotocol/server@2.0.0 \
+  @modelcontextprotocol/server@2.3.1 \
   redis@6.2.0
 ```
 

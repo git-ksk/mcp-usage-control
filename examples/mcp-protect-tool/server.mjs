@@ -51,7 +51,7 @@ export async function startExampleServer({
   });
 
   const handler = createMcpHandler(() => {
-    const server = new McpServer({ name: 'usage-control-example', version: '1.0.0' });
+    const server = new McpServer({ name: 'usage-control-example', version: '1.0.0' }, { maxToolInputElements: 128 });
     server.registerTool(
       'demo-report',
       {

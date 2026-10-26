@@ -49,10 +49,10 @@ export default {
     return createMcpHandler(() => {
       const server = new McpServer(
         { name: 'candidate-packaged-cloudflare', version: '1.0.0' },
-        { requestState: { verify: codec.verify } },
+        { requestState: { verify: codec.verify }, maxToolInputElements: 128 },
       );
       server.registerTool('confirm', { description: 'Test exact candidate tarball imports and Durable Object SDK flow' }, protectedHandler);
       return server;
-    }).fetch(request);
+    }, { maxRequestBodySize: 64 * 1024 }).fetch(request);
   },
 };
