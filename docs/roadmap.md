@@ -12,7 +12,7 @@ The project should deepen correctness and production usability at that boundary 
 
 ## Current baseline
 
-**v1.2.0 is the previously verified GitHub/npm stable release (2026-10-10 JST); v1.3.0 is the new release line.** All five Node.js 22+ packages—Core, MCP, Redis, Cloudflare and Firestore—were published with independently authorized GitHub Release and npm Trusted Publishing, with SHA-256 byte-identical registry/Release tarballs, verified registry provenance/signatures, and a clean external consumer import check. [GitHub v1.2.0 Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0) · [npm Core](https://www.npmjs.com/package/mcp-usage-control) · [release issue #252](https://github.com/git-ksk/mcp-usage-control/issues/252). The first npm run encountered registry replication lag; its safe rerun passed without publishing duplicate versions. [#267](https://github.com/git-ksk/mcp-usage-control/issues/267) tracks future CI hardening, not an unresolved v1.2 publication.
+**v1.3.0 has shipped on GitHub and npm (2026-10-20); v1.3.1 is a scoped security patch candidate, not yet published.** The five Node.js 22+ packages preserve the protected transactional usage-enforcement and durable-flow contracts. v1.3.0 has independently authorized source/registry releases, with artifact-byte/provenance verification documented in [#268](https://github.com/git-ksk/mcp-usage-control/issues/268). The earlier v1.2.0 distribution evidence is recorded in [#252](https://github.com/git-ksk/mcp-usage-control/issues/252). See [v1.3.0](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.3.0); the new security maintenance plan is [#300](https://github.com/git-ksk/mcp-usage-control/issues/300).
 
 The first-publication gate #6 remains complete and closed. v1.1.0 used the same separately authorized manual Trusted Publishing path, with registry provenance and byte identity against GitHub Release assets independently verified. Future registry publications remain separately authorized operations; source-release progress never implies registry publication.
 
@@ -28,6 +28,7 @@ v0.6 progressive growth [RELEASED]
  -> v1.0 feature-free stable promotion [RELEASED]
  -> v1.1 post-v1 integration ergonomics [RELEASED]
  -> v1.2 runnable official-SDK MCP example / operator evidence [RELEASED]
+ -> v1.3 durable multi-round MCP provider parity [RELEASED]
 ```
 
 ## Safety boundary that must not regress
@@ -185,11 +186,11 @@ The v1.1.1 maintenance plan **shipped** under separately approved source/npm rel
 3. Portable conformance, provider-specific regression evidence, supported-runtime/peer matrix, and the protected aggregate release gate remain green, with bilingual docs and examples kept synchronized.
 4. No embedded authentication, subscription billing, pricing catalog, generic gateway/control plane, authoritative dashboard, or business-side-effect replay is added to the core.
 
-**Historical execution:** v1.1.1 and v1.2.0 security/implementation/audit work and separately approved GitHub/npm publishing are complete. Outstanding Dependabot/Actions proposals still require individual compatibility review. For next work see the live v1.3.0/v1.4.0 planning sections below.
+**Historical execution:** v1.1.1 and v1.2.0 security/implementation/audit work and separately approved GitHub/npm publishing are complete. Outstanding Dependabot/Actions proposals still require individual compatibility review. For next work see v1.3.1 security maintenance and the conditional v1.4.0 candidates below.
 
-## v1.3.0 plan — durable MCP multi-round provider parity
+## v1.3.0 — durable MCP multi-round provider parity (released 2026-10-20)
 
-**Status: scoped and tracked, not implemented, not tagged or released.** [Parent #268](https://github.com/git-ksk/mcp-usage-control/issues/268). A substantive **MCP-native integration** release focused on making the same safe `input_required` suspend/resume workflow practical beyond Redis. The accounting core and v1 Store schemas remain frozen. Exact dates and publication are not authorized by planning.
+**Status: implemented and released on GitHub/npm; parent issue closed on 2026-10-20. The delivery plan below is historical acceptance evidence.** [Parent #268](https://github.com/git-ksk/mcp-usage-control/issues/268). A substantive **MCP-native integration** release focused on making the same safe `input_required` suspend/resume workflow practical beyond Redis. The accounting core and v1 Store schemas remain frozen. Exact dates and publication are not authorized by planning.
 
 | Priority / order | Issue | Decision and release claim |
 | --- | --- | --- |
@@ -207,11 +208,21 @@ The v1.1.1 maintenance plan **shipped** under separately approved source/npm rel
 
 **Outside scope:** authentication/entitlements, billing ledgers, pricing catalog, gateway/router, task scheduling, business-result replay, globally eventually consistent overspend mode, and generic automatic retries of ambiguous writes. Authenticated principal, action identity, signed requestState, durable provider/accounting identity and business-side effects remain application-owned.
 
+## v1.3.1 — security maintenance patch candidate
+
+**Status: in progress, no GitHub Release or npm publication authorized.** [Release issue #300](https://github.com/git-ksk/mcp-usage-control/issues/300). The scheduled 2026-10-26 security audit found four High advisories: MCP SDK server (<2.3.0, cross-client message isolation and memory exhaustion), Zod (<4.6.6, validation memory exhaustion), and Vite (<=7.3.6, Windows-only dev-tool launch-editor path check).
+
+- Update the official SDK server minimum (including the published MCP adapter peer range), Zod and Vite; audit exactly the workspace lockfile and packaged consumer compatibility. [#278](https://github.com/git-ksk/mcp-usage-control/pull/278) is overlapping Dependabot input, not an automatic merge instruction.
+- Harden runnable HTTP MCP examples with finite body and tool-argument collection bounds, a fresh server/transport per request, and tests showing oversized input never enters a metered handler. Third-party consumers must set their own limits: an SDK upgrade alone does **not** enable `maxToolInputElements`.
+- Validate Node 22/24, provider E2E on Redis / Firestore Emulator / Cloudflare workerd, official SDK and clean tarball consumer tests, protected `test (22)`, plus zero unmitigated High/Critical advisories. Any skipped provider proof must remain an explicit release blocker.
+- Preserve frozen Core/Store/replay/settlement/flow semantics and bilingual user-facing compatibility notes. Raising the SDK peer minimum is an intentional security compatibility constraint; assess consumer impact before declaring this a patch-safe release.
+- GitHub/source release and npm Trusted Publishing are **separate, explicitly authorized** operations after final exact-SHA checks, not implied by a PR merge or version bump.
+
 ## v1.4.0 candidate — conditional protocol enhancements
 
 - [#275 Tasks receiver accounting adapter](https://github.com/git-ksk/mcp-usage-control/issues/275) **only if #272 confirms actual official 2026-07-28 Tasks *server-side receiver* interoperability** (not just a stable schema). The current official `@modelcontextprotocol/ext-tasks` release provides a stable schema snapshot, requester/client APIs, and legacy 2025-11-25 receiver support; it does **not** by itself prove stable 2026-07-28 server adapter availability. A blocked/deferred outcome is acceptable.
 - [#273 Cloudflare remote vector reserve reconciliation](https://github.com/git-ksk/mcp-usage-control/issues/273) **feasibility first**; the remote scalar read-only reconciliation path exists today, but remote **vector initial-reserve ACK** remains explicitly unsupported/fail-closed. Never claim vector parity without exact trusted binding, transaction/transport and rollback proof.
-- Neither conditional feature blocks v1.3.0. Version allocations are provisional until proven compatible; issue creation is not publication authorization.
+- Neither conditional feature blocks v1.3.1 security maintenance. Version allocations are provisional until proven compatible; issue creation is not publication authorization.
 
 ## v1 completion definition
 

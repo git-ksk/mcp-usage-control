@@ -162,7 +162,7 @@ jobs:
             "/tmp/muc-packs/mcp-usage-control-redis-${VERSION}.tgz" \
             "/tmp/muc-packs/mcp-usage-control-cloudflare-${VERSION}.tgz" \
             "/tmp/muc-packs/mcp-usage-control-firestore-${VERSION}.tgz" \
-            @modelcontextprotocol/server@2.0.0 redis@6.2.0 --ignore-scripts
+            @modelcontextprotocol/server@2.3.1 redis@6.2.0 --ignore-scripts
           node --input-type=module <<'NODE'
           import { MemoryUsageStore, UsageControl, createWindowedBudgetKey } from 'mcp-usage-control';
           import { projectScopedQuota, projectScopedQuotaWindow } from 'mcp-usage-control/operational';

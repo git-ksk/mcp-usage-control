@@ -12,7 +12,7 @@ generic gateway、billing ledger、governance system、workflow engineへ広げ�
 
 ## 現在のbaseline
 
-**v1.2.0はGitHub/npmで公開・検証済みの前版です（2026-10-10 JST）。v1.3.0が新しいリリース対象です。** Node.js 22+の5パッケージ（Core・MCP・Redis・Cloudflare・Firestore）を、GitHub Releaseとnpm Trusted Publishingを**それぞれ明示承認**して公開しました。レジストリtarballとGitHub assetのSHA-256完全一致、署名・provenance、クリーンな利用側importを確認済みです。[GitHub v1.2.0 Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.2.0) · [npm Core](https://www.npmjs.com/package/mcp-usage-control) · [完了Issue #252](https://github.com/git-ksk/mcp-usage-control/issues/252)。npmへの伝播遅延で最初の確認がタイムアウトしましたが、安全な再実行で重複publishなしにPASSしました。次回向けCI改善は[#267](https://github.com/git-ksk/mcp-usage-control/issues/267)で別管理します。
+**v1.3.0は2026-10-20にGitHub/npm公開・検証済み。v1.3.1は未公開のセキュリティ修正候補です。** Node.js 22+の5パッケージで既存のtransactional usage enforcementとdurable flowの契約を維持します。v1.3.0のGitHub Releaseとnpm Trusted Publishingは個別承認・成果物一致・provenance検証を完了（[#268](https://github.com/git-ksk/mcp-usage-control/issues/268)）。以前のv1.2.0検証は[#252](https://github.com/git-ksk/mcp-usage-control/issues/252)に記録済みです。[v1.3.0 Release](https://github.com/git-ksk/mcp-usage-control/releases/tag/v1.3.0) と新規保守計画 [#300](https://github.com/git-ksk/mcp-usage-control/issues/300) を参照してください。
 
 初回publication gate #6は完了・close済みです。v1.1.0もseparate authorizationされたmanual Trusted Publishing pathを使い、registry provenanceとGitHub Release assetとのbyte identityを独立verifyしました。今後のregistry publicationも引き続き独立authorize対象です。
 
@@ -28,6 +28,7 @@ v0.6 progressive growth [RELEASED]
  -> v1.0 feature-free stable promotion [RELEASED]
  -> v1.1 post-v1 integration ergonomics [RELEASED]
  -> v1.2 runnable official-SDK MCP example / operator evidence [RELEASED]
+ -> v1.3 durable multi-round MCP provider parity [RELEASED]
 ```
 
 ## 今後も崩さないsafety boundary
@@ -185,11 +186,11 @@ v1.1.1の保守計画（#246、#248）と、v1.2.0のDeveloper Experience改善�
 3. portable conformance、provider別の回帰証拠、対応runtime/peer matrix、protected aggregate release gateがgreenであり、英日docsと例が一致すること。
 4. 認証、サブスクリプション請求、価格表、汎用gateway/control plane、権威的なdashboard、業務副作用の再実行をcoreへ持ち込まないこと。
 
-**過去の実施:** v1.1.1とv1.2.0の実装・監査・個別承認されたGitHub/npm公開は完了しました。未マージのDependabot/Actions PRは引き続き別途互換性を審査します。次の実行計画は以下のv1.3.0/v1.4.0を参照してください。
+**過去の実施:** v1.1.1とv1.2.0の実装・監査・個別承認されたGitHub/npm公開は完了しました。未マージのDependabot/Actions PRは引き続き別途互換性を審査します。次の実行計画はv1.3.1保守と条件付きv1.4.0候補を参照してください。
 
-## v1.3.0計画 — MCP複数ラウンドのProvider対応強化
+## v1.3.0 — MCP複数ラウンドのProvider対応強化（2026-10-20公開済み）
 
-**状況：Issue整理済み・未実装・未リリース。** [親Issue #268](https://github.com/git-ksk/mcp-usage-control/issues/268)。Redis以外でも、`input_required`の一時停止・再開を安全に運用できるようにする、実質的な**MCPネイティブ機能強化**です。Core会計の契約とv1永続Store schemaは維持し、日時や公開の承認はここでは行いません。
+**状況：GitHub/npm公開・検証済み、2026-10-20に親Issueもclose済み。以下の計画は完了時点の受入証拠です。** [親Issue #268](https://github.com/git-ksk/mcp-usage-control/issues/268)。Redis以外でも、`input_required`の一時停止・再開を安全に運用できるようにする、実質的な**MCPネイティブ機能強化**です。Core会計の契約とv1永続Store schemaは維持し、日時や公開の承認はここでは行いません。
 
 | 優先度・順序 | Issue | 目標と明示する制約 |
 | --- | --- | --- |
@@ -207,11 +208,21 @@ v1.1.1の保守計画（#246、#248）と、v1.2.0のDeveloper Experience改善�
 
 **対象外：** 認証・entitlement、請求台帳、価格表、汎用gateway、Task scheduler、業務結果の再実行、結果整合性を犠牲にしたfail-openや曖昧なStore書込の自動retry。信頼できるprincipalと操作ID、署名requestState、業務冪等性はアプリケーション責務です。
 
+## v1.3.1 — セキュリティ保守パッチ候補
+
+**状況：対応中。GitHub Release・npm公開は未承認。** [親Issue #300](https://github.com/git-ksk/mcp-usage-control/issues/300)。2026-10-26の定期監査でHigh 4件を検出。MCP SDK server（<2.3.0、HTTP client間メッセージ混線・メモリ枯渇）、Zod（<4.6.6、検証時のメモリ枯渇）、Vite（<=7.3.6、Windowsの開発ツール経由のパス検証回避）。
+
+- MCP SDK serverの下限を公開MCP adapter peer含め更新し、Zod/Viteとlockfileを最小修正。[#278](https://github.com/git-ksk/mcp-usage-control/pull/278)は既存Dependabotの参照対象であり自動マージしない。
+- 実行可能なHTTP MCPサンプルはbodyサイズとtool inputの要素数に上限を設け、requestごとに新しいserver/transportを生成。過大入力で有料handlerへ到達しないことを検証。SDKのアップグレードだけでは`maxToolInputElements`は有効にならず、利用側でも明示設定が必要。
+- Node 22/24、Redis/Firestore Emulator/Cloudflare workerdのprovider E2E、公式SDK/packed consumer、protected `test (22)`、High/Critical監査ゼロを合格条件とする。未実施ゲートはrelease blockerとして記録。
+- Core/Store/replay/settlement/flowの既存契約は維持。peer下限の引き上げはセキュリティ上の明示的な互換性変更として利用側影響を評価し、patchとして許容できることを確認する。
+- GitHub/source Releaseとnpm Trusted Publishingは最終SHAの検証後も**個別明示承認**が必要で、PRマージ・version変更は公開承認ではない。
+
 ## v1.4.0候補 — 実証を条件とするProtocol機能
 
 - [#275 Tasks専用の会計アダプター](https://github.com/git-ksk/mcp-usage-control/issues/275)：**#272で公式2026-07-28 Tasksのサーバー受信側に実際の互換性があると証明した場合だけ**採用。公式拡張はstable schema snapshotとrequester/client APIを提供していますが、従来の2025-11-25受信側だけではmodern 2026-07-28のサーバー対応を意味しません。延期・ブロック判定も許容します。
 - [#273 Cloudflare remote Vector初回予約再照合](https://github.com/git-ksk/mcp-usage-control/issues/273)：**成立可能性の実証を先行**。現在remote scalarのread-only再照合は対応していますが、remote vectorのreserve ACK不明は未対応・fail-closedです。完全なbinding・認証・transaction・rollback証拠なしにVector対応済みとは宣言しません。
-- どちらもv1.3.0のリリースを妨げず、バージョン割当は互換性の証明に応じて再判断します。Issue化は公開承認を意味しません。
+- どちらもv1.3.1のセキュリティ保守を妨げず、バージョン割当は互換性の証明に応じて再判断します。Issue化は公開承認を意味しません。
 
 ## 「v1 complete」の定義
 

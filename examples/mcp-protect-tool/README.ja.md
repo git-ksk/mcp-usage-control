@@ -26,6 +26,12 @@ PASS: unknown post-dispatch cost does not silently refund; no business replay.
 - `unknown-cost`はHandler入場後の障害を模擬します。実際の使用量が不明なら、予約最大値5単位を保守的に精算し、次の5単位要求を拒否します。ゼロ精算には「コストが発生しなかった」確実な証拠が必要です。
 - 公式MCP SDKはサーバー側の生の**`Error.message`をツール結果へシリアライズする場合があります**。このサンプルは`protectTool()`の外側に**明示的なエラーサニタイズ境界**を設け、拒否・Store・分類・精算例外を固定の`isError`文面で返します。`onProtectedError`はローカル検証用のフックで、本番での診断はアクセス制御とサニタイズが必要です。クライアント側では内部例外クラスの到達を前提にしません。内部の秘密らしい文字列を注入した回帰テストでも応答へ漏洩しないことを確認します。
 
+### HTTP body／tool input制限（v1.3.1セキュリティ修正）
+
+サンプルはHTTP bodyを**64KiB**に制限（超過時413）し、`new McpServer(info, { maxToolInputElements: 128 })`を設定します。`createMcpHandler`では**各requestごとに新しいMcpServer**を作り、client間でserver/transportを共有しません。128要素はサンプル専用の値です。実運用ではtoolの最大入力に合わせて`maxToolInputElements`を設定し、`maxRequestBodySize`やWebフレームワークのbody parser側も制限してください。**SDK更新だけではmaxToolInputElementsは有効になりません**。[GHSA-46jr-4wx8-v453](https://github.com/advisories/GHSA-46jr-4wx8-v453) · [GHSA-jm63-cq47-j5jp](https://github.com/advisories/GHSA-jm63-cq47-j5jp)。
+
+`mcp-usage-control-mcp`はHTTP serverやtransportを生成しないため、制限設定は利用側の責務です。MCP server peer下限は既知の脆弱性を除外するため`2.3.1`へ変更しました。2.0.0〜2.2.xに固定した利用側は更新に加え、入力上限とclient間の分離を実装してから公開してください。
+
 ## セキュリティと本番適用
 
 `server.mjs`のPrincipalは**固定・全呼出共通のデモ用**です。ローカルloopback上の非破壊的な擬似処理に限り安全です。**このサーバーを公開したり、有料処理にそのまま流用しないでください。** 本番ではアプリケーション側で認証を行い、信頼できるサーバー情報から`tenantId`・Principal・Plan・budget scopeを導出します。業務操作IDのライフサイクル、結果の冪等性、プロバイダ費用の測定もアプリケーションの責務です。
