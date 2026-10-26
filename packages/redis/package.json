@@ -69,10 +69,10 @@
     "mcp-usage-control": "workspace:^"
   },
   "peerDependencies": {
-    "redis": "^6.2.0"
+    "redis": "^6.3.0"
   },
   "devDependencies": {
-    "redis": "^6.2.0",
+    "redis": "^6.3.0",
     "mcp-usage-control-mcp": "workspace:^",
     "@modelcontextprotocol/client": "2.3.1",
     "@modelcontextprotocol/server": "2.3.1"
