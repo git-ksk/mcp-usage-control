@@ -212,7 +212,7 @@ v1.1.1の保守計画（#246、#248）と、v1.2.0のDeveloper Experience改善�
 
 **状況：対応中。GitHub Release・npm公開は未承認。** [親Issue #300](https://github.com/git-ksk/mcp-usage-control/issues/300)。2026-10-26の定期監査でHigh 4件を検出。MCP SDK server（<2.3.0、HTTP client間メッセージ混線・メモリ枯渇）、Zod（<4.6.6、検証時のメモリ枯渇）、Vite（<=7.3.6、Windowsの開発ツール経由のパス検証回避）。
 
-- MCP SDK serverの下限を公開MCP adapter peer含め更新し、Zod/Viteとlockfileを最小修正。[#278](https://github.com/git-ksk/mcp-usage-control/pull/278)は既存Dependabotの参照対象であり自動マージしない。
+- MCP SDK serverの下限を公開MCP adapter peer含め更新し、Zod/Vite/Vitestとlockfileを最小修正。[#278](https://github.com/git-ksk/mcp-usage-control/pull/278)は既存Dependabotの参照対象であり自動マージしない。
 - 実行可能なHTTP MCPサンプルはbodyサイズとtool inputの要素数に上限を設け、requestごとに新しいserver/transportを生成。過大入力で有料handlerへ到達しないことを検証。SDKのアップグレードだけでは`maxToolInputElements`は有効にならず、利用側でも明示設定が必要。
 - Node 22/24、Redis/Firestore Emulator/Cloudflare workerdのprovider E2E、公式SDK/packed consumer、protected `test (22)`、High/Critical監査ゼロを合格条件とする。未実施ゲートはrelease blockerとして記録。
 - Core/Store/replay/settlement/flowの既存契約は維持。peer下限の引き上げはセキュリティ上の明示的な互換性変更として利用側影響を評価し、patchとして許容できることを確認する。

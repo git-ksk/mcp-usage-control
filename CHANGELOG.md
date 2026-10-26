@@ -12,7 +12,7 @@ No entries yet.
 
 Security maintenance and MCP HTTP example hardening (#300, PR #301).
 
-- Raise the published MCP adapter's official SDK server peer minimum to `^2.3.1`, eliminating the vulnerable 2.0.0–2.2.x range. Upgrade the example's SDK and Zod to patched versions, and pin development Vite 7.3.7. The workspace audit finds no High/Critical advisories.
+- Raise the published MCP adapter's official SDK server peer minimum to `^2.3.1`, eliminating the vulnerable 2.0.0–2.2.x range. Upgrade the example's SDK and Zod to patched versions, and pin development Vite 7.3.7 plus Vitest 4.1.12 (patched @vitest/mocker). The workspace audit reports **zero known advisories**.
 - Limit the runnable HTTP MCP example to 64 KiB request bodies and 128 aggregate tool-input elements. Preserve fresh per-request server factories; regression tests prove oversized requests do not enter metered work.
 - Update clean-consumer and minimum/current peer CI evidence to the secure SDK floor, and use the default GitHub runner's available `grep` rather than requiring `rg`.
 - Keep the Core accounting, replay/settlement and Redis/Cloudflare/Firestore persistence contracts unchanged. SDK consumers must choose explicit tool-element and HTTP body limits; the SDK does not enable these automatically.

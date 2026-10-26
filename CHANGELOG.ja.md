@@ -12,7 +12,7 @@
 
 セキュリティ保守とMCP HTTPサンプルの入力制限強化（#300、PR #301）。
 
-- 公開MCPアダプターの公式SDK server peer下限を`^2.3.1`へ引き上げ、脆弱な2.0.0〜2.2.xを除外。サンプルのSDK/Zodを修正版へ変更し、開発用Viteを7.3.7へ固定。workspace監査のHigh/Criticalはゼロ。
+- 公開MCPアダプターの公式SDK server peer下限を`^2.3.1`へ引き上げ、脆弱な2.0.0〜2.2.xを除外。サンプルのSDK/Zodを修正版へ変更し、開発用Viteを7.3.7へ固定し、Vitestを修正版4.1.12へ更新（@vitest/mocker含む）。workspace監査の既知脆弱性は**0件**。
 - 実行可能なHTTP MCPサンプルに64KiBのbody制限と128要素のtool入力制限を設定。requestごとに新しいserverを生成し、過大入力が有料handlerへ到達しない回帰テストを追加。
 - secure SDK下限に合わせたclean consumer・minimum/current peer CIを修正。GitHub runnerにない`rg`依存を標準の`grep`へ置換。
 - Coreの会計、replay/settlement、Redis/Cloudflare/Firestore永続Store契約は維持。利用側はSDK更新だけでなくtool要素数とHTTP body上限を明示設定する必要がある。
