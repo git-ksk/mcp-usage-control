@@ -134,7 +134,7 @@ jobs:
             /tmp/muc-cf-packs/mcp-usage-control-*.tgz \
             @modelcontextprotocol/client@2.3.1 \
             @modelcontextprotocol/server@2.3.1 \
-            zod@^4.0.0
+            zod@^4.6.7
           cp "$GITHUB_WORKSPACE/examples/mcp-durable-multi-round/packed-cloudflare-worker.mjs" ./packed-cloudflare-worker.mjs
           cp "$GITHUB_WORKSPACE/packages/cloudflare/test/mcp-sdk-e2e.mjs" ./cloudflare-sdk-e2e.mjs
           sed 's#"main": "./test/worker.ts"#"main": "./packed-cloudflare-worker.mjs"#' \

@@ -125,7 +125,7 @@ Core APIで長時間処理を行う場合は、処理が続く間リースを更
 Redisを使うMCPサーバーの例：
 
 ```sh
-npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis @modelcontextprotocol/server@^2.0.0 redis@^6.2.0
+npm install mcp-usage-control mcp-usage-control-mcp mcp-usage-control-redis @modelcontextprotocol/server@^2.3.1 redis@^6.2.0
 ```
 
 `mcp-usage-control-mcp` はサーバー内でハンドラーを包みます。別のゲートウェイを配置するものではありません。[MCP連携ガイド](mcp-integration.ja.md) では `protectTool()`、入力スキーマのないツール、改ざん検証を伴う複数ラウンドの `input_required` を扱います。

@@ -23,7 +23,7 @@ MCPサーバ側で既存のhandlerを包むだけなので、usage controlのた
 Node.js 22以上を使用します。通常はnpmから導入してください。
 
 ```sh
-npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.0.0
+npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.3.1
 ```
 
 ローカル修正やリリースアーカイブを使う場合は [ソース・ローカルtarballのガイド](using-from-source.ja.md) を参照してください。

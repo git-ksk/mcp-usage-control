@@ -6,9 +6,9 @@ This document records the protocol-level proof for the current MCP adapter bound
 
 ## Verified baseline
 
-The public MCP adapter declares a `@modelcontextprotocol/server` peer range of `^2.0.0`. Repository development ranges are `@modelcontextprotocol/client@^2.3.1` and `@modelcontextprotocol/server@^2.0.0`, currently resolved in `pnpm-lock.yaml` to client **2.3.1** and server **2.0.0** respectively. CI independently checks the minimum server peer **2.0.0**, a current compatible peer, and Node **22/24**; these are different evidence sets. The **MCP protocol revision** is not the SDK package version: the current conformance integration test explicitly pins revision `2026-07-28` instead of relying on legacy fallback.
+The public MCP adapter requires `@modelcontextprotocol/server@^2.3.1` to exclude known-vulnerable SDK servers. Workspace development dependencies are `@modelcontextprotocol/client@^2.3.1` and `@modelcontextprotocol/server@^2.3.1`; the current lockfile resolves both to **2.3.1**. CI verifies the minimum server peer **2.3.1**, a current compatible peer, and Node **22/24**. The **MCP protocol revision** is independent of the SDK package version; the current conformance test explicitly pins `2026-07-28`.
 
-The runnable server/client and **ten focused official-SDK E2E scenarios** are in [`examples/mcp-protect-tool/`](../examples/mcp-protect-tool/README.md); the CI clean consumer also installs exact source-candidate tarballs and runs these scenarios with minimum/current compatible MCP SDK peers. This is distinct from and does not replace the existing multi-round conformance proofs.
+The runnable server/client and **twelve focused official-SDK E2E scenarios** are in [`examples/mcp-protect-tool/`](../examples/mcp-protect-tool/README.md); the CI clean consumer also installs exact source-candidate tarballs and runs these scenarios with minimum/current compatible MCP SDK peers. This is distinct from and does not replace the existing multi-round conformance proofs.
 
 The proof uses the official SDK path:
 

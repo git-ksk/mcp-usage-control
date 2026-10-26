@@ -9,7 +9,7 @@
 Use Node.js 22+. Install from npm:
 
 ```sh
-npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.0.0
+npm install mcp-usage-control mcp-usage-control-mcp @modelcontextprotocol/server@^2.3.1
 ```
 
 For local patches or release archives, use [Source / local tarballs](using-from-source.md).
